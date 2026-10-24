@@ -53,7 +53,7 @@ public static class MarkdownLinks
         var document = Markdig.Markdown.Parse(content, Pipeline);
         var edits = new Dictionary<(int Start, int Length), string>();
 
-        foreach (var link in document.Descendants<LinkInline>())
+        foreach (var link in GetLinkInlines(document))
             AddEdit(link.UrlSpan, link.Url);
 
         foreach (var definition in document.GetLinkReferenceDefinitions(true).OfType<LinkReferenceDefinition>()
@@ -137,7 +137,7 @@ public static class MarkdownLinks
     {
         var document = Markdig.Markdown.Parse(content, Pipeline);
         var links = new List<LocalLink>();
-        foreach (var link in document.Descendants<LinkInline>())
+        foreach (var link in GetLinkInlines(document))
             Add(link.Line, link.Span, link.Url);
         foreach (var definition in document.GetLinkReferenceDefinitions(true).OfType<LinkReferenceDefinition>()
                      .Where(definition => definition is not FootnoteLinkReferenceDefinition))
@@ -165,6 +165,13 @@ public static class MarkdownLinks
             links.Add(new LocalLink(line + 1, markdown, targetPath));
         }
     }
+
+    private static IEnumerable<LinkInline> GetLinkInlines(Markdig.Syntax.MarkdownDocument document) =>
+        document.Descendants<LinkInline>()
+            .Concat(document.GetLinkReferenceDefinitions(true)
+                .OfType<FootnoteLinkReferenceDefinition>()
+                .SelectMany(definition => definition.Footnote.Descendants<LinkInline>()))
+            .Distinct();
 
     private static string? GetUpdatedDestination(
         string sourcePath,

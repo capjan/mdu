@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using System.Reflection;
 using Xunit;
@@ -35,6 +36,17 @@ public class UnitTestMarkdownDocument
         var links = MarkdownDocument.ReadLinks(simpleDocument).ToArray();
         Assert.NotEmpty(links);
         Assert.Equal("Project Website", links[0].Name);
+    }
+
+    [Fact]
+    public void ReadLinksIncludesLinksInUnusedAndDuplicateFootnotes()
+    {
+        const string markdown = "# Overview\n\nA note[^used].\n\n[^unused]: See [Guide](guide.md).\n\n[^duplicate]: See [First](first.md).\n\n[^duplicate]: See [Second](second.md).\n\n[^used]: See [Used](used.md).\n";
+
+        var links = MarkdownDocument.ReadLinks(markdown).ToArray();
+
+        Assert.Equal(new[] { "first.md", "guide.md", "second.md", "used.md" },
+            links.Select(link => link.Destination).OrderBy(destination => destination, StringComparer.Ordinal));
     }
 
     [Fact]

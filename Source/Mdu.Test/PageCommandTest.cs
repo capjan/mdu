@@ -43,6 +43,29 @@ public class PageCommandTest : IDisposable
     }
 
     [Fact]
+    public void PageLinkToolsFindAndRewriteLinksInsideUnusedAndDuplicateFootnotes()
+    {
+        const string content = "# Overview\n\nA note[^used].\n\n[^unused]: See [Guide](Guide.md).\n\n[^duplicate]: See [Guide](Guide.md).\n\n[^duplicate]: See [Guide](Guide.md).\n\n[^used]: See [Guide](Guide.md).\n";
+        Write("Overview.md", content);
+        Write("Guide.md", "# Guide\n");
+
+        var sourcePath = Path.Combine(_root, "Overview.md");
+        var newSourcePath = Path.Combine(_root, "Moved", "Overview.md");
+        var targetPath = Path.Combine(_root, "Guide.md");
+        var movedTargetPath = Path.Combine(_root, "MovedGuide.md");
+        var movedPaths = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [targetPath] = movedTargetPath
+        };
+
+        var rewritten = MarkdownLinks.Rewrite(content, sourcePath, newSourcePath, movedPaths, StringComparer.Ordinal, out var changedLinkCount);
+
+        Assert.Equal(4, changedLinkCount);
+        Assert.Equal(content.Replace("(Guide.md)", "(../MovedGuide.md)"), rewritten);
+        Assert.Equal(4, MarkdownLinks.Find(content, sourcePath).Count);
+    }
+
+    [Fact]
     public void MovesAPageAndRewritesLinksToItAndInsideIt()
     {
         var result = Move("Setup.md", "Start/Setup.md");

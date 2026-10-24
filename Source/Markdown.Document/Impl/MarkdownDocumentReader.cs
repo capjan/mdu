@@ -45,17 +45,23 @@ public class MarkdownDocumentReader : IMarkdownDocumentReader
     {
         var content = input.ReadAll();
         var document = Markdig.Parsers.MarkdownParser.Parse(content, LinkParsingPipeline);
-        var markdownLinks = document.Descendants<LinkInline>().Select(link =>
-        {
-            var url = link.Url ?? "";
-            var literals = link.Descendants<LiteralInline>().ToArray();
-            var text = literals.Length == 1 ? literals[0].ToString() : "";
-            var isImage = link.IsImage;
-            var lineNumber = link.Line + 1;
-            return new MarkdownLink(text, url, isImage, lineNumber);
-        });
+        var definitions = Markdig.Syntax.LinkReferenceDefinitionExtensions
+            .GetLinkReferenceDefinitions(document, addGroup: false);
+        var footnoteDefinitions = definitions?.OfType<FootnoteLinkReferenceDefinition>().ToArray() ?? [];
+        var markdownLinks = document.Descendants<LinkInline>()
+            .Concat(footnoteDefinitions.SelectMany(definition => definition.Footnote.Descendants<LinkInline>()))
+            .Distinct()
+            .Select(link =>
+            {
+                var url = link.Url ?? "";
+                var literals = link.Descendants<LiteralInline>().ToArray();
+                var text = literals.Length == 1 ? literals[0].ToString() : "";
+                var isImage = link.IsImage;
+                var lineNumber = link.Line + 1;
+                return new MarkdownLink(text, url, isImage, lineNumber);
+            });
         var diagramLinks = document.Descendants<FencedCodeBlock>().SelectMany(ReadDiagramLinks);
-        var footnotes = ReadFootnotes(document);
+        var footnotes = ReadFootnotes(document, definitions);
 
         return new MarkdownDocumentAnalysis(
             markdownLinks.Concat(diagramLinks).ToArray(),
@@ -64,10 +70,10 @@ public class MarkdownDocumentReader : IMarkdownDocumentReader
     }
 
     private static (IReadOnlyList<MarkdownFootnote> UnusedFootnotes, IReadOnlyList<MarkdownFootnote> DuplicateFootnotes)
-        ReadFootnotes(Markdig.Syntax.MarkdownDocument document)
+        ReadFootnotes(
+            Markdig.Syntax.MarkdownDocument document,
+            LinkReferenceDefinitionGroup? definitions)
     {
-        var definitions = Markdig.Syntax.LinkReferenceDefinitionExtensions
-            .GetLinkReferenceDefinitions(document, addGroup: false);
         if (definitions is null) return ([], []);
 
         var definitionNodes = definitions.OfType<FootnoteLinkReferenceDefinition>().ToArray();
