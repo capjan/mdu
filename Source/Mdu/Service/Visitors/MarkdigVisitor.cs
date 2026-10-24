@@ -100,7 +100,7 @@ public class MarkdigVisitor : BaseVisitor
             outputSiblings);
 
         _searchIndexBuilder.AddPage(
-            GetNavigationTitle(entity),
+            NavigationPage.GetTitle(entity),
             GetSiteRelativeUrl(outputFileName),
             markdown);
 
@@ -118,7 +118,7 @@ public class MarkdigVisitor : BaseVisitor
             using (var sw = new StreamWriter(fs))
                 _htmlFoundation.WriteHtml(
                     sw,
-                    RemoveIconShortcodes(entity.Title),
+                    NavigationPage.RemoveIconShortcodes(entity.Title),
                     entity.Description,
                     nestingDeep,
                     markdown,
@@ -159,7 +159,7 @@ public class MarkdigVisitor : BaseVisitor
         var parentFile = Path.GetFileName(outputFileName);
         var specBreadcrumbs = pageBreadcrumbs
             .Where(item => item.Url is not null)
-            .Append(new BreadcrumbItem(GetNavigationTitle(entity), parentFile))
+            .Append(new BreadcrumbItem(NavigationPage.GetTitle(entity), parentFile))
             .Append(new BreadcrumbItem("OpenAPI Specification", null))
             .ToArray();
 
@@ -294,28 +294,19 @@ public class MarkdigVisitor : BaseVisitor
             .ToArray();
     }
 
-    private static IEnumerable<MarkdownFile> OrderPages(IEnumerable<MarkdownFile> pages) => pages
-        .OrderBy(page => page.NavigationOrder.HasValue ? 0 : 1)
-        .ThenBy(page => page.NavigationOrder)
-        .ThenBy(GetNavigationTitle, StringComparer.OrdinalIgnoreCase);
-
     private IReadOnlyList<NavigationItem> BuildTopNavigation(MarkdownFile page, string currentOutputPath)
     {
         var currentPath = Path.GetFullPath(currentOutputPath);
         var currentDirectorySegments = GetSiteRelativeSegments(Path.GetDirectoryName(currentPath)!);
         var activeTab = _topNavigationItems.GetValueOrDefault(page);
-        return Flatten(_navigationRoots)
-            .Where(IsTopNavigationPage)
-            .OrderBy(candidate => candidate.NavigationOrder.HasValue ? 0 : 1)
-            .ThenBy(candidate => candidate.NavigationOrder)
-            .ThenBy(GetNavigationTitle, StringComparer.OrdinalIgnoreCase)
+        return NavigationPage.OrderPages(Flatten(_navigationRoots).Where(IsTopNavigationPage))
             .Select(candidate =>
             {
                 var candidatePath = GetOutputPagePath(GetRenderPath(candidate));
                 var isCurrentPage = string.Equals(candidatePath, currentPath, PathComparison);
                 return new NavigationItem
                 {
-                    Title = GetNavigationTitle(candidate),
+                    Title = NavigationPage.GetTitle(candidate),
                     Url = GetRelativeUrl(currentDirectorySegments, GetSiteRelativeSegments(candidatePath)),
                     IsCurrent = isCurrentPage,
                     IsCurrentSection = ReferenceEquals(candidate, activeTab)
@@ -332,12 +323,12 @@ public class MarkdigVisitor : BaseVisitor
 
         void AddPages(IEnumerable<MarkdownFile> pages, int depth)
         {
-            foreach (var page in OrderPages(pages))
+            foreach (var page in NavigationPage.OrderPages(pages))
             {
                 if (page.NavigationVisible)
                 {
                     var pagePath = GetOutputPagePath(GetRenderPath(page));
-                    entries.Add(new NavigationEntry(page, GetNavigationTitle(page), pagePath, GetSiteRelativeSegments(pagePath), depth,
+                    entries.Add(new NavigationEntry(page, NavigationPage.GetTitle(page), pagePath, GetSiteRelativeSegments(pagePath), depth,
                         page.NavigationExpanded == true));
                 }
 
@@ -420,12 +411,12 @@ public class MarkdigVisitor : BaseVisitor
         {
             var ancestorPath = GetRenderPath(ancestor);
             breadcrumbs.Add(new BreadcrumbItem(
-                GetNavigationTitle(ancestor),
+                NavigationPage.GetTitle(ancestor),
                 GetRelativeUrl(currentDirectory, GetOutputPagePath(ancestorPath))));
         }
 
         if (page.NavigationVisible)
-            breadcrumbs.Add(new BreadcrumbItem(GetNavigationTitle(page), null));
+            breadcrumbs.Add(new BreadcrumbItem(NavigationPage.GetTitle(page), null));
         return breadcrumbs;
     }
 
@@ -455,23 +446,10 @@ public class MarkdigVisitor : BaseVisitor
         return string.Join('/', relativePath.Split('/').Select(Uri.EscapeDataString));
     }
 
-    private static string GetNavigationTitle(MarkdownFile page)
-    {
-        if (!string.IsNullOrWhiteSpace(page.NavigationTitle)) return RemoveIconShortcodes(page.NavigationTitle).Trim();
-        if (!string.IsNullOrWhiteSpace(page.Title)) return RemoveIconShortcodes(page.Title).Trim();
-
-        return page.FileInfo.Name.Equals("README.md", StringComparison.OrdinalIgnoreCase)
-            ? page.FileInfo.Directory?.Name ?? "Documentation"
-            : Path.GetFileNameWithoutExtension(page.FileInfo.Name);
-    }
-
     private string GetEditPageLink(string relativePath)
     {
         var segments = relativePath.Replace('\\', '/').Split('/').Select(Uri.EscapeDataString);
         return $"{_editPageRoot.TrimEnd('/')}/{string.Join('/', segments)}";
     }
 
-    private static string RemoveIconShortcodes(string title) =>
-        System.Text.RegularExpressions.Regex.Replace(title,
-            @"(?::(?:material|simple|octicons|fontawesome|dashboard)-[\w-]+:\s*)+", string.Empty);
 }

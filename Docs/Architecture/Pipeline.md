@@ -110,6 +110,6 @@ When Markdown content changes, `serve` refreshes `documentation.pdf` if a PDF Li
 
 ## Linting and fixing
 
-`LinterVisitor` checks each page in the tree. It reads the page's links with `Markdown.Document` and runs the [validators](Components.md#markdown.linter) for titles, link casing, and link targets. It checks rules that depend on the tree itself, such as duplicate pages, section pages, and navigation placement. The results go to a receiver, which `LintResultRenderer` then prints in the chosen format.
+`LinterVisitor` checks each page in the tree. It reads the page's links with `Markdown.Document` and runs the [validators](Components.md#markdown.linter) for titles, link casing, and link targets. It checks rules that depend on the tree itself, such as duplicate pages, section pages, duplicate navigation titles, and navigation placement. The results go to a receiver, which `LintResultRenderer` then prints in the chosen format.
 
 `mdu fix` runs the same linter, then applies what it can fix: it converts MkDocs Material syntax, renames `index.md` pages, creates missing section pages, and moves pages flagged by `MDU006`. Whenever a page moves, `MarkdownLinks` rewrites the links to it and the relative links inside it.
