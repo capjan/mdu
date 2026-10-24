@@ -41,22 +41,53 @@ public class LinterVisitor: IVisitor<MarkdownFile>
         _rootPath = Path.GetFullPath(rootPath ?? graph.FirstOrDefault()?.FileInfo.DirectoryName ?? Directory.GetCurrentDirectory());
         var pages = new List<MarkdownFile>();
         var visited = new HashSet<string>(PathComparer);
-        Visit(graph);
+        Visit(graph, new NavigationTitleGroup());
         _allPages = pages;
         ReportMissingSectionReadmes(pages);
         ReportMkDocsPagesFiles(pages);
         return;
 
-        void Visit(IEnumerable<MarkdownFile> currentPages)
+        void Visit(IEnumerable<MarkdownFile> currentPages, NavigationTitleGroup siblingTitles)
         {
-            foreach (var page in currentPages)
+            foreach (var page in NavigationPage.OrderPages(currentPages))
             {
                 if (!visited.Add(Path.GetFullPath(page.FileInfo.FullName))) continue;
                 pages.Add(page);
-                Visit(page.Children);
+                if (page.NavigationVisible)
+                {
+                    var title = NavigationPage.GetTitle(page);
+                    if (siblingTitles.Titles.TryGetValue(title, out var existingPage))
+                    {
+                        var existingPath = GetNavigationEntryPath(existingPage);
+                        var message = string.IsNullOrEmpty(title)
+                            ? $"Navigation title has no visible text and matches sibling page '{existingPath}'. Add text to navigation.title."
+                            : $"Navigation title '{title}' duplicates sibling page '{existingPath}'. Set a unique navigation.title.";
+                        ErrorReceiver.Add(page.FileInfo.FullName, 1,
+                            $"{RuleCodes.DuplicateNavigationTitle}: {message}");
+                    }
+                    else
+                    {
+                        siblingTitles.Titles.Add(title, page);
+                    }
+
+                    Visit(page.Children, new NavigationTitleGroup());
+                }
+                else
+                {
+                    Visit(page.Children, siblingTitles);
+                }
             }
         }
     }
+
+    private sealed class NavigationTitleGroup
+    {
+        public Dictionary<string, MarkdownFile> Titles { get; } = new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private string GetNavigationEntryPath(MarkdownFile page) =>
+        (page.SiteRelativePath ?? Path.GetRelativePath(_rootPath, page.FileInfo.FullName))
+        .Replace(Path.DirectorySeparatorChar, '/');
 
     private void ReportMissingSectionReadmes(IReadOnlyCollection<MarkdownFile> pages)
     {

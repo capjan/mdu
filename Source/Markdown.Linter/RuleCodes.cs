@@ -21,6 +21,7 @@ public static class RuleCodes
     public const string InvalidNavigationPlacement = "MDU016";
     public const string NavigationPlacementLevel = "MDU017";
     public const string ExpandedTopNavigationRoot = "MDU018";
-    public const string UnusedFootnote = "MDU019";
-    public const string DuplicateFootnote = "MDU020";
+    public const string DuplicateNavigationTitle = "MDU019";
+    public const string UnusedFootnote = "MDU020";
+    public const string DuplicateFootnote = "MDU021";
 }

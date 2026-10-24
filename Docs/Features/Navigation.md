@@ -36,7 +36,7 @@ navigation:
 
 How tabs behave:
 
-- **Wide screens** show the tabs below the site header. The sidebar lists only the active tab's pages and is hidden when the tab has none.
+- **Wide screens** show the tabs below the site header. When a tab is active, the sidebar lists its child pages and pages elsewhere in the tree that are not assigned to a tab; it omits the root page above the tabs and is hidden when neither group has pages.
 - **Up to 1220 px** wide, the tabs fold into the full sidebar tree at their original place, and the selected section opens there. On narrow screens the sidebar becomes a drawer.
 - **Breadcrumbs** always keep the full path from the documentation root; selecting a tab does not change it.
 - The root `README.md` stays the landing page. Mark it `top` as well if it should also appear as a tab, such as *Dashboard*.

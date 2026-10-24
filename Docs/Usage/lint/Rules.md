@@ -29,8 +29,9 @@ navigation:
 | `MDU016` | `InvalidNavigationPlacement` | Error | `navigation` must be a mapping and `placement` must be `sidebar` or `top`. | — |
 | `MDU017` | `NavigationPlacementLevel` | Error | `placement: top` is only valid on first-level pages or section indexes. | — |
 | `MDU018` | `ExpandedTopNavigationRoot` | Error | A top navigation root is always expanded; remove its ineffective `navigation.expanded`. | — |
-| `MDU019` | `UnusedFootnote` | Warning | Every footnote definition is reachable from a reference in page text. | — |
-| `MDU020` | `DuplicateFootnote` | Warning | A footnote label is defined only once per page. | — |
+| `MDU019` | `DuplicateNavigationTitle` | Error | Visible sibling pages have unique navigation titles. | — |
+| `MDU020` | `UnusedFootnote` | Warning | Every footnote definition is reachable from a reference in page text. | — |
+| `MDU021` | `DuplicateFootnote` | Warning | A footnote label is defined only once per page. | — |
 
 ## MDU001: HeadingRequired
 
@@ -68,11 +69,15 @@ Rules `MDU007`–`MDU014` identify MkDocs-specific syntax and structure that nee
 
 `MDU015` rejects the retired `sidebar.*` fields. Rename them to `navigation.*` directly; `mdu fix` does not convert these fields. `MDU016` reports malformed navigation metadata or a `placement` value other than `sidebar` or `top`. `MDU017` requires `placement: top` to be set on a first-level Markdown page or the `README.md`/`index.md` of a first-level folder. `MDU018` rejects `navigation.expanded` on a top navigation root because that root is always open.
 
-## MDU019: UnusedFootnote
+## MDU019: DuplicateNavigationTitle
+
+Visible sibling pages must have unique navigation names, ignoring letter case. The name comes from `navigation.title` when set, or otherwise from the page title. Set a distinct `navigation.title` on one of the pages when two entries would otherwise look the same. Hidden pages are excluded, and their visible children are compared under the next visible parent.
+
+## MDU020: UnusedFootnote
 
 This warning points to each footnote definition that is not reachable from a reference in page text, directly or through another used footnote. A reference inside an unused footnote does not make its target used. Remove unused definitions or add a reference; warnings do not make `mdu lint` fail.
 
-## MDU020: DuplicateFootnote
+## MDU021: DuplicateFootnote
 
 This warning points to every later definition that repeats a footnote label. Markdig uses only the first definition, so remove the duplicate or give it a unique label.
 

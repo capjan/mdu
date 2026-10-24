@@ -79,6 +79,135 @@ public class LinterVisitorTest
     }
 
     [Fact]
+    public void DuplicateHeadingTitlesAtTheSameNavigationLevelAreRejected()
+    {
+        WithGraph(root =>
+        {
+            var first = CreateGraphPage(root, "TopicA.md", "Topic A");
+            var duplicate = CreateGraphPage(root, "TopicA-copy.md", "Topic A");
+
+            var error = Assert.Single(PrepareGraph(root, first, duplicate).Errors);
+
+            Assert.Equal(RuleCodes.DuplicateNavigationTitle, CodeOf(error));
+            Assert.Equal(duplicate.FileInfo.FullName, error.FilePath);
+            Assert.Contains("Topic A", error.Message);
+            Assert.Contains("TopicA.md", error.Message);
+        });
+    }
+
+    [Fact]
+    public void SameTitleUnderDifferentVisibleParentsPasses()
+    {
+        WithGraph(root =>
+        {
+            var guide = CreateGraphPage(root, Path.Combine("Guide", "README.md"), "Guide");
+            var guideOverview = CreateGraphPage(root, Path.Combine("Guide", "Overview.md"), "Overview");
+            var reference = CreateGraphPage(root, Path.Combine("Reference", "README.md"), "Reference");
+            var referenceOverview = CreateGraphPage(root, Path.Combine("Reference", "Overview.md"), "Overview");
+            guide.Children = [guideOverview];
+            guideOverview.Parent = guide;
+            reference.Children = [referenceOverview];
+            referenceOverview.Parent = reference;
+
+            var receiver = PrepareGraph(root, guide, reference);
+
+            Assert.Empty(receiver.Errors);
+        });
+    }
+
+    [Fact]
+    public void DuplicateTitleErrorFollowsNavigationOrder()
+    {
+        WithGraph(root =>
+        {
+            var first = CreateGraphPage(root, "Zulu.md", "Shared", navigationOrder: 1);
+            var duplicate = CreateGraphPage(root, "Alpha.md", "Shared", navigationOrder: 2);
+
+            var error = Assert.Single(PrepareGraph(root, duplicate, first).Errors);
+
+            Assert.Equal(duplicate.FileInfo.FullName, error.FilePath);
+        });
+    }
+
+    [Fact]
+    public void DuplicateNavigationTitlesAreRejectedEvenWhenHeadingsDiffer()
+    {
+        WithGraph(root =>
+        {
+            var first = CreateGraphPage(root, "First.md", "First heading", "Getting started");
+            var duplicate = CreateGraphPage(root, "Second.md", "Second heading", "GETTING STARTED");
+
+            var error = Assert.Single(PrepareGraph(root, first, duplicate).Errors);
+
+            Assert.Equal(RuleCodes.DuplicateNavigationTitle, CodeOf(error));
+        });
+    }
+
+    [Fact]
+    public void DuplicateIconOnlyNavigationTitlesHaveHelpfulMessage()
+    {
+        WithGraph(root =>
+        {
+            var first = CreateGraphPage(root, "First.md", "First", ":material-book:");
+            var duplicate = CreateGraphPage(root, "Second.md", "Second", ":fontawesome-book:");
+
+            var error = Assert.Single(PrepareGraph(root, first, duplicate).Errors);
+
+            Assert.Equal(RuleCodes.DuplicateNavigationTitle, CodeOf(error));
+            Assert.Contains("Navigation title has no visible text", error.Message);
+            Assert.Contains("Add text to navigation.title", error.Message);
+            Assert.DoesNotContain("''", error.Message);
+        });
+    }
+
+    [Fact]
+    public void SameNavigationTitleAtDifferentLevelsPasses()
+    {
+        WithGraph(root =>
+        {
+            var parent = CreateGraphPage(root, "Guide/README.md", "Guide");
+            var child = CreateGraphPage(root, Path.Combine("Guide", "Guide.md"), "Guide");
+            parent.Children = [child];
+            child.Parent = parent;
+
+            var receiver = PrepareGraph(root, parent);
+
+            Assert.Empty(receiver.Errors);
+        });
+    }
+
+    [Fact]
+    public void HiddenPagesAreExcludedFromDuplicateCheck()
+    {
+        WithGraph(root =>
+        {
+            var hiddenPage = CreateGraphPage(root, "HiddenTopic.md", "Topic", visible: false);
+            var visiblePage = CreateGraphPage(root, "Topic.md", "Topic");
+
+            var receiver = PrepareGraph(root, hiddenPage, visiblePage);
+
+            Assert.Empty(receiver.Errors);
+        });
+    }
+
+    [Fact]
+    public void HiddenParentsDoNotAddANavigationLevelForChildren()
+    {
+        WithGraph(root =>
+        {
+            var hiddenSection = CreateGraphPage(root, Path.Combine("Hidden", "README.md"), "Hidden", visible: false);
+            var promotedPage = CreateGraphPage(root, Path.Combine("Hidden", "Topic.md"), "Topic");
+            var visiblePage = CreateGraphPage(root, "Topic.md", "Topic");
+            hiddenSection.Children = [promotedPage];
+            promotedPage.Parent = hiddenSection;
+
+            var error = Assert.Single(PrepareGraph(root, hiddenSection, visiblePage).Errors);
+
+            Assert.Equal(RuleCodes.DuplicateNavigationTitle, CodeOf(error));
+        });
+    }
+
+    [Fact]
     public void MismatchedReadmeFolderHasStableDiagnosticCode()
     {
         WithPage(Path.Combine("wrong-folder", "README.md"), "# Installation", "Installation", 1, errors =>
@@ -222,6 +351,49 @@ public class LinterVisitorTest
 
     private static string CodeOf(ReceivedError error) =>
         error.Message.Split(':', 2)[0].Split(' ', 2)[0];
+
+    private static void WithGraph(Action<string> assert)
+    {
+        var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            assert(root);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static MarkdownFile CreateGraphPage(
+        string root,
+        string relativePath,
+        string title,
+        string navigationTitle = "",
+        bool visible = true,
+        int? navigationOrder = null)
+    {
+        var path = Path.Combine(root, relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, $"# {title}\n");
+        return new MarkdownFile(new FileInfo(path), null)
+        {
+            Title = title,
+            HeadingTitle = title,
+            NavigationTitle = navigationTitle,
+            NavigationVisible = visible,
+            NavigationOrder = navigationOrder,
+            SiteRelativePath = Path.GetRelativePath(root, path)
+        };
+    }
+
+    private static RecordingLintErrorReceiver PrepareGraph(string root, params MarkdownFile[] pages)
+    {
+        var receiver = new RecordingLintErrorReceiver();
+        new LinterVisitor(receiver).Prepare(pages, root);
+        return receiver;
+    }
 
     private static void WithPage(
         string relativePath,
