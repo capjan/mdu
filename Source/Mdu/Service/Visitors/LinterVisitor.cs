@@ -127,6 +127,8 @@ public class LinterVisitor: IVisitor<MarkdownFile>
         _pages.Add(entity);
         var markdownFilePath = entity.FileInfo.FullName;
         var markdownContent = entity.ReadMarkdown();
+        var markdownAnalysis = MarkdownDocument.ReadAnalysis(markdownContent);
+        ReportFootnotes(markdownFilePath, markdownAnalysis);
         ReportLegacySidebarMetadata(entity);
         ReportInvalidNavigationMetadata(entity);
         foreach (var issue in MarkdownCompatibility.FindIssues(markdownContent))
@@ -186,7 +188,7 @@ public class LinterVisitor: IVisitor<MarkdownFile>
         }
         
         // Rule 3: casing of links must match the casing on the current machine
-        var linksOfFile = MarkdownDocument.ReadLinks(markdownContent);
+        var linksOfFile = markdownAnalysis.Links;
         foreach (var link in linksOfFile)
         {
             if (entity.NavigationVisible && !link.IsImageLink && TryResolvePageLink(entity, link.Destination, out var targetPath))
@@ -204,6 +206,17 @@ public class LinterVisitor: IVisitor<MarkdownFile>
         }
         
         return true;
+    }
+
+    private void ReportFootnotes(string filePath, MarkdownDocumentAnalysis analysis)
+    {
+        foreach (var footnote in analysis.UnusedFootnotes)
+            ErrorReceiver.AddWarning(filePath, footnote.LineNumber,
+                $"{RuleCodes.UnusedFootnote}: Footnote '[{footnote.Label}]' is defined but never referenced.");
+
+        foreach (var footnote in analysis.DuplicateFootnotes)
+            ErrorReceiver.AddWarning(filePath, footnote.LineNumber,
+                $"{RuleCodes.DuplicateFootnote}: Footnote '[{footnote.Label}]' is defined more than once; only the first definition is used.");
     }
 
     private void ReportLegacySidebarMetadata(MarkdownFile page)

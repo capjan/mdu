@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Markdown.Renderer;
 using Markdig;
+using Markdig.Extensions.Footnotes;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
 using YamlDotNet.RepresentationModel;
@@ -18,7 +19,7 @@ public static class MarkdownLinks
         : StringComparer.Ordinal;
 
     private static readonly Regex Scheme = new(@"^[A-Za-z][A-Za-z0-9+.-]*:", RegexOptions.Compiled);
-    private static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder().UsePreciseSourceLocation().Build();
+    private static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder().UseFootnotes().UsePreciseSourceLocation().Build();
 
     public static bool IsMarkdownFile(string path) =>
         Path.GetExtension(path).Equals(".md", StringComparison.OrdinalIgnoreCase) ||
@@ -52,10 +53,11 @@ public static class MarkdownLinks
         var document = Markdig.Markdown.Parse(content, Pipeline);
         var edits = new Dictionary<(int Start, int Length), string>();
 
-        foreach (var link in document.Descendants<LinkInline>())
+        foreach (var link in GetLinkInlines(document))
             AddEdit(link.UrlSpan, link.Url);
 
-        foreach (var definition in document.GetLinkReferenceDefinitions(true).OfType<LinkReferenceDefinition>())
+        foreach (var definition in document.GetLinkReferenceDefinitions(true).OfType<LinkReferenceDefinition>()
+                     .Where(definition => definition is not FootnoteLinkReferenceDefinition))
             AddEdit(definition.UrlSpan, definition.Url);
 
         foreach (var openApiSpec in OpenApiMarkdownRenderer.FindSpecPathSpans(content))
@@ -135,9 +137,10 @@ public static class MarkdownLinks
     {
         var document = Markdig.Markdown.Parse(content, Pipeline);
         var links = new List<LocalLink>();
-        foreach (var link in document.Descendants<LinkInline>())
+        foreach (var link in GetLinkInlines(document))
             Add(link.Line, link.Span, link.Url);
-        foreach (var definition in document.GetLinkReferenceDefinitions(true).OfType<LinkReferenceDefinition>())
+        foreach (var definition in document.GetLinkReferenceDefinitions(true).OfType<LinkReferenceDefinition>()
+                     .Where(definition => definition is not FootnoteLinkReferenceDefinition))
             Add(definition.Line, definition.Span, definition.Url);
         foreach (var openApiSpec in OpenApiMarkdownRenderer.FindSpecPathSpans(content))
         {
@@ -162,6 +165,13 @@ public static class MarkdownLinks
             links.Add(new LocalLink(line + 1, markdown, targetPath));
         }
     }
+
+    private static IEnumerable<LinkInline> GetLinkInlines(Markdig.Syntax.MarkdownDocument document) =>
+        document.Descendants<LinkInline>()
+            .Concat(document.GetLinkReferenceDefinitions(true)
+                .OfType<FootnoteLinkReferenceDefinition>()
+                .SelectMany(definition => definition.Footnote.Descendants<LinkInline>()))
+            .Distinct();
 
     private static string? GetUpdatedDestination(
         string sourcePath,

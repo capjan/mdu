@@ -19,6 +19,11 @@ public interface IMarkdownDocumentReader
     /// <param name="input">input of the parser</param>
     /// <returns>Links that are found in the markdown file</returns>
     IEnumerable<IMarkdownLink> ReadLinks(IParserInput input);
+
+    /// <summary>
+    /// Reads links and footnote diagnostics from one parsed Markdown document.
+    /// </summary>
+    MarkdownDocumentAnalysis ReadAnalysis(IParserInput input);
 }
 
 public static class MarkdownDocumentReaderExtensions
@@ -33,5 +38,11 @@ public static class MarkdownDocumentReaderExtensions
     {
         var parserInput = ParserInput.CreateFromString(documentContent);
         return reader.ReadLinks(parserInput);
+    }
+
+    public static MarkdownDocumentAnalysis ReadAnalysis(this IMarkdownDocumentReader reader, string documentContent)
+    {
+        var parserInput = ParserInput.CreateFromString(documentContent);
+        return reader.ReadAnalysis(parserInput);
     }
 }

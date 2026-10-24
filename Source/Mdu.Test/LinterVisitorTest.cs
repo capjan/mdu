@@ -24,6 +24,61 @@ public class LinterVisitorTest
     }
 
     [Fact]
+    public void UnusedFootnoteHasStableWarningCodeAndSourceLine()
+    {
+        WithPage("Overview.md", "# Overview\n\n[^unused]: Not referenced.", "Overview", 0,
+            errors => Assert.Empty(errors),
+            assertWarnings: warnings =>
+            {
+                var warning = Assert.Single(warnings);
+                Assert.Equal(3, warning.LineNumber);
+                Assert.Equal(RuleCodes.UnusedFootnote, CodeOf(warning));
+                Assert.Contains("Footnote '[^unused]' is defined but never referenced.", warning.Message);
+            });
+    }
+
+    [Fact]
+    public void ReferencedFootnoteDoesNotWarn()
+    {
+        WithPage("Overview.md", "# Overview\n\nA note[^used].\n\n[^used]: Referenced.", "Overview", 0,
+            errors => Assert.Empty(errors), assertWarnings: Assert.Empty);
+    }
+
+    [Fact]
+    public void FootnotesReferencedOnlyByUnusedFootnotesAreUnused()
+    {
+        WithPage("Overview.md", "# Overview\n\n[^outer]: References [^inner].\n\n[^inner]: Inner note.", "Overview", 0,
+            errors => Assert.Empty(errors),
+            assertWarnings: warnings =>
+            {
+                Assert.Equal(2, warnings.Count);
+                Assert.All(warnings, warning => Assert.Equal(RuleCodes.UnusedFootnote, CodeOf(warning)));
+                Assert.Equal([3, 5], warnings.Select(warning => warning.LineNumber));
+            });
+    }
+
+    [Fact]
+    public void FootnotesReachableThroughUsedFootnotesDoNotWarn()
+    {
+        WithPage("Overview.md", "# Overview\n\nA note[^outer].\n\n[^outer]: References [^inner].\n\n[^inner]: Inner note.", "Overview", 0,
+            errors => Assert.Empty(errors), assertWarnings: Assert.Empty);
+    }
+
+    [Fact]
+    public void DuplicateFootnoteDefinitionHasStableWarningCodeAndSourceLine()
+    {
+        WithPage("Overview.md", "# Overview\n\nA note[^used].\n\n[^used]: Original.\n\n[^used]: Duplicate.", "Overview", 0,
+            errors => Assert.Empty(errors),
+            assertWarnings: warnings =>
+            {
+                var warning = Assert.Single(warnings);
+                Assert.Equal(7, warning.LineNumber);
+                Assert.Equal(RuleCodes.DuplicateFootnote, CodeOf(warning));
+                Assert.Contains("Footnote '[^used]' is defined more than once", warning.Message);
+            });
+    }
+
+    [Fact]
     public void DuplicateHeadingTitlesAtTheSameNavigationLevelAreRejected()
     {
         WithGraph(root =>
@@ -348,7 +403,8 @@ public class LinterVisitorTest
         Action<List<ReceivedError>> assert,
         Action<string>? setup = null,
         string frontMatter = "",
-        string? invalidNavigationPlacement = null)
+        string? invalidNavigationPlacement = null,
+        Action<List<ReceivedError>>? assertWarnings = null)
     {
         var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -369,6 +425,7 @@ public class LinterVisitorTest
             new LinterVisitor(receiver).Process(page, depth);
 
             assert(receiver.Errors);
+            assertWarnings?.Invoke(receiver.Warnings);
         }
         finally
         {

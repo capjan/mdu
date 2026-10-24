@@ -20,4 +20,9 @@ public static class MarkdownDocument
     {
         return Reader().ReadLinks(documentContent);
     }
+
+    public static MarkdownDocumentAnalysis ReadAnalysis(string documentContent)
+    {
+        return Reader().ReadAnalysis(documentContent);
+    }
 }
