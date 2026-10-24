@@ -203,6 +203,54 @@ public class MarkdigVisitorTest
     }
 
     [Fact]
+    public void TopNavigationKeepsPagesWithoutPlacementVisibleInTheSidebar()
+    {
+        var rootPath = Path.Combine(Path.GetTempPath(), $"mdu-render-test-{Guid.NewGuid():N}");
+        var docsPath = Path.Combine(rootPath, "Docs");
+        var outputPath = Path.Combine(rootPath, "site");
+        Directory.CreateDirectory(docsPath);
+        var homePath = Path.Combine(docsPath, "README.md");
+        var firstPagePath = Path.Combine(docsPath, "Seite1.md");
+        var secondPagePath = Path.Combine(docsPath, "Seite2.md");
+        var thirdPagePath = Path.Combine(docsPath, "Seite3.md");
+        File.WriteAllText(homePath, "# Dashboard\n");
+        File.WriteAllText(firstPagePath, "# Seite 1\n");
+        File.WriteAllText(secondPagePath, "# Seite 2\n");
+        File.WriteAllText(thirdPagePath, "# Seite 3\n");
+
+        try
+        {
+            var home = new MarkdownFile(new FileInfo(homePath), null) { Title = "Dashboard" };
+            var firstPage = new MarkdownFile(new FileInfo(firstPagePath), home)
+            {
+                Title = "Seite 1",
+                NavigationPlacement = NavigationPlacement.Top
+            };
+            var secondPage = new MarkdownFile(new FileInfo(secondPagePath), home) { Title = "Seite 2" };
+            var thirdPage = new MarkdownFile(new FileInfo(thirdPagePath), home) { Title = "Seite 3" };
+            home.Children = [firstPage, secondPage, thirdPage];
+
+            var renderer = new HtmlRenderer();
+            renderer.PrepareBasePath(outputPath);
+            var visitor = new MarkdigVisitor(docsPath, outputPath, renderer, string.Empty,
+                new SearchIndexBuilder(), [home]);
+
+            visitor.Process(firstPage, 1);
+
+            var html = File.ReadAllText(Path.Combine(outputPath, "Seite1.html"));
+            Assert.Contains("has-top-navigation has-current-top-section has-wide-sidebar", html);
+            var sidebarNavigation = html.Split("aria-label=\"Sitemap\"", 2)[1].Split("</aside>", 2)[0];
+            Assert.Contains("is-outside-top-navigation-section", NavigationItemClass(sidebarNavigation, "Seite 2"));
+            Assert.Contains("is-outside-top-navigation-section", NavigationItemClass(sidebarNavigation, "Seite 3"));
+            Assert.DoesNotContain("is-outside-top-navigation-section", NavigationItemClass(sidebarNavigation, "Seite 1"));
+        }
+        finally
+        {
+            if (Directory.Exists(rootPath)) Directory.Delete(rootPath, recursive: true);
+        }
+    }
+
+    [Fact]
     public void TopNavigationShowsRootPagesInTheDashboardSidebarWithoutSiblingSections()
     {
         var rootPath = Path.Combine(Path.GetTempPath(), $"mdu-render-test-{Guid.NewGuid():N}");

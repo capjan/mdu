@@ -217,9 +217,11 @@ public class HtmlRenderer
         var hasCurrentTopSection = model.NavigationItems.Any(item =>
             item.IsTopNavigationItem && item.IsInCurrentTopSection);
         var currentTopNavigationItem = model.TopNavigationItems.FirstOrDefault(item => item.IsCurrent || item.IsCurrentSection);
-        var hasWideSidebar = !hasTopNavigation || (hasCurrentTopSection
-            ? model.NavigationItems.Any(item => item.IsInCurrentTopSection && !item.IsTopNavigationItem)
-            : model.NavigationItems.Any(item => item.IsCurrent && item.Depth > 0));
+        var hasNavigationOutsideTopSections = model.NavigationItems.Any(item => !item.IsInTopNavigationSection);
+        var hasWideSidebar = !hasTopNavigation || hasNavigationOutsideTopSections ||
+                             (hasCurrentTopSection
+                                 ? model.NavigationItems.Any(item => item.IsInCurrentTopSection && !item.IsTopNavigationItem)
+                                 : model.NavigationItems.Any(item => item.IsCurrent && item.Depth > 0));
 
         var values = new Dictionary<string, string>
         {
@@ -400,6 +402,7 @@ public class HtmlRenderer
 
                 var itemClass = item.IsTopNavigationItem ? "site-nav-item top-navigation-entry" : "site-nav-item";
                 if (item.IsCurrentSection) itemClass += " is-current-section";
+                if (!item.IsInTopNavigationSection) itemClass += " is-outside-top-navigation-section";
                 if (item.IsInCurrentTopSection) itemClass += " is-in-current-top-section";
                 if (item.IsAncestorOfCurrentTopSection) itemClass += " is-top-navigation-ancestor";
                 output.Append(itemIndent).AppendLine($"<li class=\"{itemClass}\" style=\"--indent-depth: {indentDepth}; --wide-indent-depth: {Math.Max(0, item.TopNavigationDepth)}\">");

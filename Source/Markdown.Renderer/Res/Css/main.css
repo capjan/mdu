@@ -857,6 +857,10 @@ body {
         display: block;
     }
 
+    .site-layout.has-current-top-section.has-wide-sidebar .site-sidebar .site-nav-item.is-outside-top-navigation-section:not(.is-top-navigation-ancestor) {
+        display: block;
+    }
+
     .site-layout.has-current-top-section.has-wide-sidebar .site-sidebar .site-nav-item.is-top-navigation-ancestor > .site-nav-row,
     .site-layout.has-current-top-section.has-wide-sidebar .site-sidebar .site-nav-item.top-navigation-entry.is-current-section > .site-nav-row {
         display: none;
