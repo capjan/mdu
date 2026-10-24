@@ -283,6 +283,7 @@ public class MarkdigVisitor : BaseVisitor
                 IsCurrentSection = ReferenceEquals(page, entry.Page) || IsDescendant(page, entry.Page),
                 IsExpandedByDefault = entry.IsExpandedByDefault,
                 IsTopNavigationItem = IsTopNavigationPage(entry.Page),
+                IsOutsideTopNavigationSection = _topNavigationItems[entry.Page] is null,
                 IsInCurrentTopSection = activeTopNavigationItem is not null &&
                                         ReferenceEquals(_topNavigationItems[entry.Page], activeTopNavigationItem),
                 IsAncestorOfCurrentTopSection = activeTopNavigationItem is not null &&

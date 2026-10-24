@@ -9,6 +9,7 @@ public class NavigationItem
     public bool IsCurrentSection { get; set; }
     public bool IsExpandedByDefault { get; set; }
     public bool IsTopNavigationItem { get; set; }
+    public bool IsOutsideTopNavigationSection { get; set; }
     public bool IsInCurrentTopSection { get; set; }
     public bool IsAncestorOfCurrentTopSection { get; set; }
     public int TopNavigationDepth { get; set; }

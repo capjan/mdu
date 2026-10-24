@@ -223,6 +223,29 @@ public class RendererTest
     }
 
     [Fact]
+    public async Task UnclassifiedNavigationItemsDoNotExpandATopNavigationSidebar()
+    {
+        var sb = new StringBuilder();
+        using var sw = new StringWriter(sb);
+        await new HtmlRenderer().WriteHtml(sw, "test", "", 0, "# Page", "",
+            navigationItems:
+            [
+                new NavigationItem
+                {
+                    Title = "Page",
+                    Url = "page.html",
+                    IsTopNavigationItem = true,
+                    IsInCurrentTopSection = true
+                }
+            ],
+            topNavigationItems: [new NavigationItem { Title = "Page", Url = "page.html", IsCurrent = true }]);
+
+        var html = sb.ToString();
+        Assert.Contains("class=\"site-layout has-top-navigation no-wide-sidebar\"", html);
+        Assert.DoesNotContain("is-outside-top-navigation-section", html);
+    }
+
+    [Fact]
     public async Task AddsUnlistedTitleToFootnotes()
     {
         var sb = new StringBuilder();
