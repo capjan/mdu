@@ -12,7 +12,7 @@ namespace Markdown.Document.Impl;
 public class MarkdownDocumentReader : IMarkdownDocumentReader
 {
     private static readonly MarkdownPipeline LinkParsingPipeline =
-        new MarkdownPipelineBuilder().UsePreciseSourceLocation().Build();
+        new MarkdownPipelineBuilder().UseFootnotes().UsePreciseSourceLocation().Build();
     private static readonly Regex MermaidFlowchartHeaderRegex = new(
         @"^(?:flowchart|graph)(?:[ \t]+(?:TB|TD|BT|LR|RL))?[ \t]*(?:;.*)?$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);

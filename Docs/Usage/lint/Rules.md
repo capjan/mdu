@@ -29,6 +29,7 @@ navigation:
 | `MDU016` | `InvalidNavigationPlacement` | Error | `navigation` must be a mapping and `placement` must be `sidebar` or `top`. | — |
 | `MDU017` | `NavigationPlacementLevel` | Error | `placement: top` is only valid on first-level pages or section indexes. | — |
 | `MDU018` | `ExpandedTopNavigationRoot` | Error | A top navigation root is always expanded; remove its ineffective `navigation.expanded`. | — |
+| `MDU019` | `UnusedFootnote` | Warning | Every footnote definition is referenced at least once. | — |
 
 ## MDU001: HeadingRequired
 
@@ -65,6 +66,10 @@ Rules `MDU007`–`MDU014` identify MkDocs-specific syntax and structure that nee
 ## Navigation front matter
 
 `MDU015` rejects the retired `sidebar.*` fields. Rename them to `navigation.*` directly; `mdu fix` does not convert these fields. `MDU016` reports malformed navigation metadata or a `placement` value other than `sidebar` or `top`. `MDU017` requires `placement: top` to be set on a first-level Markdown page or the `README.md`/`index.md` of a first-level folder. `MDU018` rejects `navigation.expanded` on a top navigation root because that root is always open.
+
+## MDU019: UnusedFootnote
+
+This warning points to each footnote definition that has no reference in the page. Remove unused definitions or add a reference; warnings do not make `mdu lint` fail.
 
 ## Informational output
 
