@@ -36,4 +36,12 @@ public class UnitTestMarkdownDocument
         Assert.NotEmpty(links);
         Assert.Equal("Project Website", links[0].Name);
     }
+
+    [Fact]
+    public void ReadLinksDoesNotTreatFootnoteDefinitionsAsLinks()
+    {
+        const string markdown = "# Overview\n\n[^unused]: Not a link target.\n";
+
+        Assert.Empty(MarkdownDocument.ReadLinks(markdown));
+    }
 }

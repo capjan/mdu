@@ -24,6 +24,26 @@ public class LinterVisitorTest
     }
 
     [Fact]
+    public void UnusedFootnoteHasStableWarningCodeAndSourceLine()
+    {
+        WithPage("Overview.md", "# Overview\n\n[^unused]: Not referenced.", "Overview", 0,
+            errors => Assert.Empty(errors),
+            assertWarnings: warnings =>
+            {
+                var warning = Assert.Single(warnings);
+                Assert.Equal(3, warning.LineNumber);
+                Assert.Equal(RuleCodes.UnusedFootnote, CodeOf(warning));
+            });
+    }
+
+    [Fact]
+    public void ReferencedFootnoteDoesNotWarn()
+    {
+        WithPage("Overview.md", "# Overview\n\nA note[^used].\n\n[^used]: Referenced.", "Overview", 0,
+            errors => Assert.Empty(errors), assertWarnings: Assert.Empty);
+    }
+
+    [Fact]
     public void MismatchedReadmeFolderHasStableDiagnosticCode()
     {
         WithPage(Path.Combine("wrong-folder", "README.md"), "# Installation", "Installation", 1, errors =>
@@ -176,7 +196,8 @@ public class LinterVisitorTest
         Action<List<ReceivedError>> assert,
         Action<string>? setup = null,
         string frontMatter = "",
-        string? invalidNavigationPlacement = null)
+        string? invalidNavigationPlacement = null,
+        Action<List<ReceivedError>>? assertWarnings = null)
     {
         var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -197,6 +218,7 @@ public class LinterVisitorTest
             new LinterVisitor(receiver).Process(page, depth);
 
             assert(receiver.Errors);
+            assertWarnings?.Invoke(receiver.Warnings);
         }
         finally
         {

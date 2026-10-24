@@ -5,6 +5,8 @@ using Markdown.Linter;
 using Markdown.Linter.Rules.Rule2;
 using Markdown.Linter.Rules.Rule3;
 using Markdown.Linter.Rules.Rule4;
+using Markdig;
+using Markdig.Extensions.Footnotes;
 using Mdu.Model;
 using YamlDotNet.Core;
 using YamlDotNet.RepresentationModel;
@@ -13,6 +15,9 @@ namespace Mdu.Service.Visitors;
 
 public class LinterVisitor: IVisitor<MarkdownFile>
 {
+    private static readonly MarkdownPipeline FootnotePipeline =
+        new MarkdownPipelineBuilder().UseFootnotes().UsePreciseSourceLocation().Build();
+
     public readonly ILinterErrorReceiver ErrorReceiver;
     private readonly Rule2Validator _rule2Validator = new();
     private readonly Rule3Validator _rule3Validator = new();
@@ -96,6 +101,7 @@ public class LinterVisitor: IVisitor<MarkdownFile>
         _pages.Add(entity);
         var markdownFilePath = entity.FileInfo.FullName;
         var markdownContent = entity.ReadMarkdown();
+        ReportUnusedFootnotes(entity.FileInfo.FullName, markdownContent);
         ReportLegacySidebarMetadata(entity);
         ReportInvalidNavigationMetadata(entity);
         foreach (var issue in MarkdownCompatibility.FindIssues(markdownContent))
@@ -173,6 +179,23 @@ public class LinterVisitor: IVisitor<MarkdownFile>
         }
         
         return true;
+    }
+
+    private void ReportUnusedFootnotes(string filePath, string markdownContent)
+    {
+        var document = Markdig.Markdown.Parse(markdownContent, FootnotePipeline);
+        var definitions = Markdig.Syntax.LinkReferenceDefinitionExtensions
+            .GetLinkReferenceDefinitions(document, addGroup: false);
+        if (definitions is null) return;
+
+        foreach (var definition in definitions.Links.Values.OfType<FootnoteLinkReferenceDefinition>())
+        {
+            var footnote = definition.Footnote;
+            if (footnote.Links.Count > 0) continue;
+
+            ErrorReceiver.AddWarning(filePath, footnote.Line + 1,
+                $"{RuleCodes.UnusedFootnote}: Footnote '[^{footnote.Label}]' is defined but never referenced.");
+        }
     }
 
     private void ReportLegacySidebarMetadata(MarkdownFile page)
