@@ -265,6 +265,10 @@ public class RendererTest
     [InlineData("## Overview", "overview")]
     [InlineData("## app.Client", "app.client")]
     [InlineData("## 6. Security {#custom}", "custom")]
+    [InlineData("## 2FA Setup", "2fa-setup")]
+    [InlineData("## 3D View", "3d-view")]
+    [InlineData("## 1. 2FA Overview", "1-2fa-overview")]
+    [InlineData("3.1 Overview\n------------", "31-overview")]
     public void KeepsLeadingNumbersInHeadingIds(string heading, string expectedId)
     {
         var html = new HtmlRenderer().RenderMarkdownFragment(heading);
@@ -280,6 +284,15 @@ public class RendererTest
         Assert.Contains("id=\"1-setup\"", html);
         Assert.Contains("id=\"1-setup-1\"", html);
         Assert.Contains("id=\"setup\"", html);
+    }
+
+    [Fact]
+    public void DoesNotReuseExplicitIdsForHeadingsWithLeadingNumbers()
+    {
+        var html = new HtmlRenderer().RenderMarkdownFragment("## Custom {#6-security}\n\n## 6. Security");
+
+        Assert.Contains("id=\"6-security\"", html);
+        Assert.Contains("id=\"6-security-1\"", html);
     }
 
     [Fact]

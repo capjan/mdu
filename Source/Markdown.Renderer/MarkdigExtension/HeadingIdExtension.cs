@@ -20,10 +20,13 @@ public class HeadingIdExtension : IMarkdownExtension
 
     public void Setup(MarkdownPipelineBuilder pipeline)
     {
-        var headingBlockParser = pipeline.BlockParsers.Find<HeadingBlockParser>();
-        if (headingBlockParser is null) return;
-        headingBlockParser.Closed -= HeadingBlockParserClosed;
-        headingBlockParser.Closed += HeadingBlockParserClosed;
+        // Setext headings ("Title" underlined with "---") are closed by the paragraph parser, as in Markdig.
+        BlockParser?[] parsers = [pipeline.BlockParsers.Find<HeadingBlockParser>(), pipeline.BlockParsers.FindExact<ParagraphBlockParser>()];
+        foreach (var parser in parsers.OfType<BlockParser>())
+        {
+            parser.Closed -= HeadingBlockParserClosed;
+            parser.Closed += HeadingBlockParserClosed;
+        }
     }
 
     public void Setup(MarkdownPipeline pipeline, IMarkdownRenderer renderer)
@@ -40,20 +43,25 @@ public class HeadingIdExtension : IMarkdownExtension
     {
         var headingBlock = (HeadingBlock)processor.Block!;
         if (headingBlock.Inline is null) return;
-        var attributes = headingBlock.GetAttributes();
-        if (attributes.Id is not null) return;
-
-        var baseId = GetIdWithLeadingNumber(GetPlainText(headingBlock.Inline));
-        // Headings that start with a letter keep Markdig's id, which also handles duplicates among them.
-        if (baseId is null) return;
-
         if (processor.Document.GetData(IdentifiersKey) is not HashSet<string> identifiers)
         {
             identifiers = new HashSet<string>(StringComparer.Ordinal);
             processor.Document.SetData(IdentifiersKey, identifiers);
         }
 
-        // Markdig's ids never start with a digit, so only ids assigned here can collide.
+        var attributes = headingBlock.GetAttributes();
+        if (attributes.Id is not null)
+        {
+            // An explicit id such as {#6-security} must not be handed out again to a later heading.
+            identifiers.Add(attributes.Id);
+            return;
+        }
+
+        var baseId = GetIdWithLeadingNumber(GetPlainText(headingBlock.Inline));
+        // Headings that start with a letter keep Markdig's id, which also handles duplicates among them.
+        if (baseId is null) return;
+
+        // Markdig's ids never start with a digit, so only explicit ids and ids assigned here can collide.
         var id = baseId;
         for (var index = 1; !identifiers.Add(id); index++)
             id = $"{baseId}-{index}";
@@ -61,8 +69,8 @@ public class HeadingIdExtension : IMarkdownExtension
     }
 
     /// <summary>
-    /// Returns the id for a heading that starts with a number, or <c>null</c> otherwise. The number loses its dots,
-    /// as in MkDocs (<c>3.1 Overview</c> gets <c>31-overview</c>); the rest is Markdig's id.
+    /// Returns the id for a heading that starts with a number, or <c>null</c> otherwise. The number before the first
+    /// letter loses its dots, as in MkDocs (<c>3.1 Overview</c> gets <c>31-overview</c>, <c>2FA Setup</c> gets <c>2fa-setup</c>).
     /// </summary>
     internal static string? GetIdWithLeadingNumber(string headingText)
     {
@@ -71,10 +79,9 @@ public class HeadingIdExtension : IMarkdownExtension
         var leadingText = headingText[..letterIndex];
         if (!leadingText.Any(char.IsAsciiDigit)) return null;
 
-        var number = LinkHelper.Urilize(leadingText.Replace(".", string.Empty), allowOnlyAscii: true, keepOpeningDigits: true);
-        if (number.Length == 0 || !char.IsAsciiDigit(number[0])) return null;
-        var rest = LinkHelper.Urilize(headingText, allowOnlyAscii: true);
-        return rest.Length == 0 ? number : $"{number}-{rest}";
+        var id = LinkHelper.Urilize(leadingText.Replace(".", string.Empty) + headingText[letterIndex..],
+            allowOnlyAscii: true, keepOpeningDigits: true);
+        return id.Length > 0 && char.IsAsciiDigit(id[0]) ? id : null;
     }
 
     private static string GetPlainText(ContainerInline inline)
