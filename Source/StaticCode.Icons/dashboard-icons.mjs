@@ -50,18 +50,18 @@ for (const file of fs.readdirSync(svgDir).filter((file) => file.endsWith(".svg")
     if (viewBox.length !== 4 || viewBox.some(Number.isNaN) || viewBox[2] <= 0 || viewBox[3] <= 0) { skip("viewBox"); continue; }
     if (unsafeContent.test(root[2])) { skip("content"); continue; }
 
-    // Keep the root's presentation attributes on a group, and keep unfilled shapes black as in the original file
-    // instead of taking the text color.
+    // Keep the root's presentation attributes on a group. The monochrome Material Design logo has no theme
+    // variants, so let its unfilled shapes follow the text color; preserve other logos' original black default.
     const groupAttributes = Object.entries(attributes).filter(([attribute]) => presentationAttributes.test(attribute));
     if (!groupAttributes.some(([attribute, value]) => attribute === "fill" || (attribute === "style" && /fill\s*:/.test(value))))
-        groupAttributes.unshift(["fill", "#000"]);
+        groupAttributes.unshift(["fill", name === "material-design-icons" ? "currentColor" : "#000"]);
     const group = groupAttributes.map(([attribute, value]) => ` ${attribute}="${value}"`).join("");
     const [left, top, width, height] = viewBox;
     glyphs.set(name, { body: `<g${group}>${root[2]}</g>`, left, top, width, height });
 }
 
-// The metadata uses "light" and "dark" inconsistently, so the file names decide: "-light" files are drawn in light
-// colors for dark themes, and "-dark" files in dark colors for light themes.
+// Most "-light" files are drawn in light colors for dark themes, and "-dark" files in dark colors for light themes.
+// Mermaid instead names the background theme, so its pair is corrected below.
 const themedVariants = new Map();
 for (const [name, glyph] of glyphs) {
     if (/-(light|dark)$/.test(name)) continue;
@@ -75,6 +75,7 @@ for (const name of glyphs.keys()) {
     if (base && !glyphs.has(base) && glyphs.has(`${base}-light`))
         themedVariants.set(base, { light: glyphs.get(name), dark: glyphs.get(`${base}-light`) });
 }
+themedVariants.set("mermaid", { light: glyphs.get("mermaid-light"), dark: glyphs.get("mermaid-dark") });
 const isVariant = (name) => {
     const base = name.match(/^(.+)-(light|dark)$/)?.[1];
     return base !== undefined && themedVariants.has(base);
