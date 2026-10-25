@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Markdown.Renderer.Test;
 
@@ -64,17 +65,17 @@ public class DashboardTest
         Assert.Equal(2, CountOf(html, "<div class=\"dashboard-row\">"));
         Assert.Equal(2, CountOf(html, "<section class=\"dashboard-group\">"));
 
-        Assert.Contains("<ul class=\"dashboard-tiles has-descriptions\">", html);
+        Assert.Contains("<ul class=\"dashboard-tiles has-descriptions\" role=\"presentation\">", html);
         Assert.Contains("<a class=\"dashboard-link\" href=\"https://mail.google.com\" target=\"_blank\" rel=\"noopener noreferrer\"><span class=\"dashboard-icon\"><span class=\"icon\">", html);
         Assert.Contains("<span class=\"dashboard-name\">Mail</span><span class=\"dashboard-description\">Inbox &amp; calendar</span>", html);
         Assert.Contains("<a class=\"dashboard-link\" href=\"Guide/Handbook.html\">", html);
         Assert.Contains("<span class=\"dashboard-description\">Team <em>rules</em></span>", html);
 
-        Assert.Contains("<ul class=\"dashboard-tiles\">", html);
+        Assert.Contains("<ul class=\"dashboard-tiles\" role=\"presentation\">", html);
         Assert.Contains("<span class=\"dashboard-name\">GitHub</span><span class=\"dashboard-description\">github.com</span>", html);
         Assert.Contains("<span class=\"dashboard-name\">Christians GitLab</span><span class=\"dashboard-description\">gitlab.example.org</span>", html);
         Assert.Contains(">JD</span><span class=\"dashboard-text\"><span class=\"dashboard-name\">Jan@Dataport</span>", html);
-        Assert.Contains("<li class=\"dashboard-note\">Plain note without a link</li>", html);
+        Assert.Contains("<li class=\"dashboard-note\" role=\"row\"><div role=\"gridcell\">Plain note without a link</div></li>", html);
         Assert.Equal(4, CountOf(html, "<span class=\"dashboard-status\""));
 
         Assert.Contains("<style>/* Dashboard pages", html);
@@ -87,9 +88,54 @@ public class DashboardTest
         var html = await RenderPage("# Start\n\nOnly an introduction.\n", Options);
 
         Assert.Contains("<input id=\"dashboard-search-input\"", html);
-        Assert.Contains("<ul class=\"dashboard-pages-list\" id=\"dashboard-pages-list\"></ul>", html);
+        Assert.Contains("<ul class=\"dashboard-pages-list\" id=\"dashboard-pages-list\" role=\"presentation\"></ul>", html);
         Assert.Contains("<p class=\"dashboard-empty\" id=\"dashboard-empty\" hidden></p>", html);
         Assert.DoesNotContain("<div class=\"dashboard-row\">", html);
+    }
+
+    [Fact]
+    public async Task ConnectsTheFilterToTheResultsAndKeepsHintsOutOfTheLiveRegion()
+    {
+        var html = await RenderPage("# Start", Options);
+
+        Assert.Contains("<input id=\"dashboard-search-input\" type=\"search\" role=\"combobox\" aria-controls=\"dashboard-results\" aria-haspopup=\"grid\" aria-expanded=\"true\" aria-autocomplete=\"list\"", html);
+        Assert.Contains("<div id=\"dashboard-results\" role=\"grid\" aria-label=\"Links and pages\">", html);
+        Assert.Contains("<p class=\"dashboard-search-hint\" id=\"dashboard-search-hint\"></p>", html);
+        Assert.Contains("<p class=\"visually-hidden\" id=\"dashboard-search-status\" role=\"status\" aria-live=\"polite\" aria-atomic=\"true\"></p>", html);
+        Assert.DoesNotContain("aria-activedescendant=", html);
+    }
+
+    [Fact]
+    public async Task GivesTilesStableUniqueCellsAcrossListsAndGroupsWhileKeepingLinks()
+    {
+        const string markdown = """
+            # Start
+
+            ## Work
+
+            - [Mail & calendar](https://mail.example.org)
+            - A note
+
+            Another list:
+
+            - [Mail & calendar](https://mail.example.org)
+
+            ---
+
+            ## More
+
+            - [Handbook](Guide/Handbook.md)
+            """;
+        var html = await RenderPage(markdown, Options);
+        var ids = Regex.Matches(html, "id=\"(dashboard-tile-[0-9]+)\"")
+            .Select(match => match.Groups[1].Value).ToArray();
+
+        Assert.Equal(new[] { "dashboard-tile-0", "dashboard-tile-1", "dashboard-tile-2" }, ids);
+        Assert.Equal(html, await RenderPage(markdown, Options));
+        Assert.Equal(3, CountOf(html, "<li class=\"dashboard-tile\" role=\"row\"><div class=\"dashboard-cell\""));
+        Assert.Equal(3, CountOf(html, "role=\"gridcell\" aria-selected=\"false\""));
+        Assert.Contains("aria-label=\"Mail &amp; calendar\"><a class=\"dashboard-link\" href=\"https://mail.example.org\" target=\"_blank\" rel=\"noopener noreferrer\">", html);
+        Assert.Contains("aria-label=\"Handbook\"><a class=\"dashboard-link\" href=\"Guide/Handbook.html\">", html);
     }
 
     [Fact]

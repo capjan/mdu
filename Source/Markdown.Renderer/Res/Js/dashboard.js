@@ -4,6 +4,7 @@
     if (!dashboard || !input) return;
 
     const hint = document.getElementById("dashboard-search-hint");
+    const status = document.getElementById("dashboard-search-status");
     const clearButton = document.getElementById("dashboard-search-clear");
     const pagesSection = document.getElementById("dashboard-pages");
     const pagesList = document.getElementById("dashboard-pages-list");
@@ -146,9 +147,19 @@
     };
 
     const select = (link, reveal = false) => {
-        if (selected !== link) selected?.classList.remove("is-selected");
+        if (selected !== link && selected) {
+            selected.classList.remove("is-selected");
+            selected.closest('[role="gridcell"]').setAttribute("aria-selected", "false");
+        }
         selected = link;
         link?.classList.add("is-selected");
+        if (link) {
+            const cell = link.closest('[role="gridcell"]');
+            cell.setAttribute("aria-selected", "true");
+            input.setAttribute("aria-activedescendant", cell.id);
+        } else {
+            input.removeAttribute("aria-activedescendant");
+        }
         if (link && reveal) link.scrollIntoView({ block: "nearest", inline: "nearest", behavior: prefersReducedMotion.matches ? "auto" : "smooth" });
         renderHints();
     };
@@ -195,6 +206,7 @@
 
     const documentIcon = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 1.5h5.5L13 5v9.5H4z"></path><path d="M9.5 1.5V5H13"></path></svg>';
     const arrowIcon = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h9.5M8.5 4l4 4-4 4"></path></svg>';
+    const pageIds = new Map();
     let shownPages = new Set();
 
     const renderPages = (results, terms) => {
@@ -207,6 +219,15 @@
         const indexUrl = new URL(indexPath, window.location.href);
         results.forEach(({ entry, matches }, index) => {
             const item = document.createElement("li");
+            item.setAttribute("role", "row");
+            const cell = document.createElement("div");
+            const page = pageOf(entry);
+            if (!pageIds.has(page)) pageIds.set(page, `dashboard-page-${pageIds.size}`);
+            cell.id = pageIds.get(page);
+            cell.setAttribute("role", "gridcell");
+            cell.setAttribute("aria-selected", "false");
+            cell.setAttribute("aria-label", entry.section && entry.section !== entry.title
+                ? `${entry.title}: ${entry.section}` : entry.title);
             const link = document.createElement("a");
             link.className = "dashboard-page";
             // Only sheets that were not shown before slide in, so typing does not replay the animation.
@@ -249,7 +270,8 @@
             footer.insertAdjacentHTML("beforeend", arrowIcon);
 
             link.append(text, footer);
-            item.append(link);
+            cell.append(link);
+            item.append(cell);
             pagesList.append(item);
         });
     };
@@ -271,9 +293,17 @@
         for (const row of rows) row.hidden = !row.querySelector(".dashboard-group:not([hidden])") && terms.length > 0;
 
         const pages = rankPages(terms);
+        // Clear the reference before replacing page cells, including when the new result has the same ID.
+        select(null);
         renderPages(pages, terms);
 
         select(terms.length === 0 ? null : first?.link ?? pagesList.querySelector("a.dashboard-page"));
+
+        const count = selectable().length;
+        const message = query
+            ? `${count} ${count === 1 ? "match" : "matches"} for “${query}”.`
+            : `${count} ${count === 1 ? "link" : "links"}.`;
+        if (status.textContent !== message) status.textContent = message;
 
         empty.hidden = !(terms.length > 0 && !first && pages.length === 0);
         empty.textContent = searchUrl

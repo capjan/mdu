@@ -225,8 +225,12 @@
     content: none;
 }
 
+.dashboard-cell {
+    height: 100%;
+}
+
 /* Further paragraphs or nested lists of a tile's list item. */
-.dashboard-tile:has(.dashboard-tile-more) > a.dashboard-link {
+.dashboard-tile:has(.dashboard-tile-more) a.dashboard-link {
     height: auto;
 }
 
