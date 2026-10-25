@@ -185,7 +185,10 @@
             sessionStorage.setItem(sidebarPreferenceKey, String(collapsed));
         } catch { }
     };
-    let isOpen = !breakpoint.matches && !isDesktopSidebarCollapsed();
+    // A dashboard uses the whole width; its navigation stays one click away.
+    const isDashboard = layout.classList.contains("is-dashboard");
+    const startsCollapsed = () => isDashboard || isDesktopSidebarCollapsed();
+    let isOpen = !breakpoint.matches && !startsCollapsed();
 
     const setOpen = (open) => {
         isOpen = open;
@@ -259,9 +262,9 @@
         if (breakpoint.matches && isOpen && event.key === "Escape") setOpen(false);
     });
     breakpoint.addEventListener("change", (event) =>
-        setOpen(!event.matches && !isDesktopSidebarCollapsed()));
+        setOpen(!event.matches && !startsCollapsed()));
     compactNavigation.addEventListener("change", (event) =>
-        setOpen(event.matches || !isDesktopSidebarCollapsed()));
+        setOpen((event.matches && !isDashboard) || !startsCollapsed()));
 })();
 </script>
 <script>
