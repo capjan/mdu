@@ -22,11 +22,7 @@ public sealed class ServeCommand
     private readonly HtmlRenderer _renderer;
     private readonly SearchIndexBuilder _searchIndexBuilder;
     private readonly PdfCommand _pdfCommand;
-    private readonly Dictionary<string, MarkdownFile> _pages = new(PathComparer);
-    private readonly Dictionary<string, HashSet<string>> _assetsByPage = new(PathComparer);
-    private readonly Dictionary<string, HashSet<string>> _pagesByAsset = new(PathComparer);
-    private readonly Dictionary<string, IReadOnlyList<string>> _openApiSpecsByPage = new(PathComparer);
-    private readonly Dictionary<string, IReadOnlyList<string>> _openApiSpecPagesByPage = new(PathComparer);
+    private DependencyIndex _dependencyIndex = DependencyIndex.CreateEmpty();
     private readonly HashSet<string> _generatedFiles = new(PathComparer);
     private readonly HashSet<string> _configurationAssets = new(PathComparer);
     private FileWatcherSet? _watchers;
@@ -38,6 +34,12 @@ public sealed class ServeCommand
     private string _outputPath = string.Empty;
     private string? _glossaryPath;
     private bool _hasPdfLink;
+
+    private Dictionary<string, MarkdownFile> _pages => _dependencyIndex.Pages;
+    private Dictionary<string, HashSet<string>> _assetsByPage => _dependencyIndex.AssetsByPage;
+    private Dictionary<string, HashSet<string>> _pagesByAsset => _dependencyIndex.PagesByAsset;
+    private Dictionary<string, IReadOnlyList<string>> _openApiSpecsByPage => _dependencyIndex.OpenApiSpecsByPage;
+    private Dictionary<string, IReadOnlyList<string>> _openApiSpecPagesByPage => _dependencyIndex.OpenApiSpecPagesByPage;
 
     public ServeCommand(
         GraphBuilder graphBuilder,
@@ -188,9 +190,9 @@ public sealed class ServeCommand
         }
         SearchClientAsset.WriteTo(_outputPath);
         _searchIndexBuilder.Clear();
-        graph.Visit(new LocalAssetsCopy(_rootPath, _outputPath));
         // Register external OpenAPI watchers before PDF generation and page rendering.
         RebuildDependencyIndex(graph);
+        graph.Visit(new LocalAssetsCopy(_rootPath, _outputPath));
         var pdfOutputPath = Path.Combine(_outputPath, "documentation.pdf");
         if (_pdfCommand.WriteSitePdfIfLinked(_rootPath, pdfOutputPath, graph) != 0)
             throw new InvalidOperationException("Could not render the documentation PDF.");
@@ -203,7 +205,16 @@ public sealed class ServeCommand
             _searchIndexBuilder,
             _navigationRoots);
         _siteMediaProviders = rendererVisitor.SiteMediaProviders;
-        graph.Visit(rendererVisitor);
+        try
+        {
+            graph.Visit(rendererVisitor);
+        }
+        finally
+        {
+            // Record the specification pages that were written, even when rendering stops early.
+            foreach (var (page, specPagePaths) in rendererVisitor.OpenApiSpecPagePaths)
+                _openApiSpecPagesByPage[GetPageKey(page)] = specPagePaths;
+        }
         _searchIndexBuilder.WriteIndex(_outputPath);
         ReconcileGeneratedFiles(previousFiles);
         Console.WriteLine("Site updated.");
@@ -211,22 +222,25 @@ public sealed class ServeCommand
 
     private void RebuildDependencyIndex(IEnumerable<MarkdownFile> graph)
     {
-        _pages.Clear();
-        _assetsByPage.Clear();
-        _pagesByAsset.Clear();
-        _openApiSpecsByPage.Clear();
-        _openApiSpecPagesByPage.Clear();
+        var index = DependencyIndex.CreateEmpty();
 
         foreach (var page in Flatten(graph))
         {
             var pagePath = GetPageKey(page);
-            _pages[pagePath] = page;
+            index.Pages[pagePath] = page;
         }
 
-        foreach (var (pagePath, page) in _pages)
-            UpdatePageAssets(pagePath, page);
+        foreach (var (pagePath, page) in index.Pages)
+        {
+            AddPageDependencies(index, pagePath, ReadPageDependencies(page));
+            // Keep the specification pages last written for a page until rendering records the new ones.
+            if (_openApiSpecPagesByPage.TryGetValue(pagePath, out var specPages))
+                index.OpenApiSpecPagesByPage[pagePath] = specPages;
+        }
 
-        _watchers?.UpdateExternalFiles(_openApiSpecsByPage.Values.SelectMany(paths => paths), _glossaryPath);
+        // Swap the index only after every page was read, so a failed read keeps the previous index intact.
+        _watchers?.UpdateExternalFiles(index.OpenApiSpecsByPage.Values.SelectMany(paths => paths), _glossaryPath);
+        _dependencyIndex = index;
     }
 
     private static IEnumerable<MarkdownFile> Flatten(IEnumerable<MarkdownFile> pages)
@@ -241,8 +255,13 @@ public sealed class ServeCommand
 
     private void UpdatePageAssets(string pagePath, MarkdownFile page)
     {
+        var dependencies = ReadPageDependencies(page);
         RemovePageAssets(pagePath);
+        AddPageDependencies(_dependencyIndex, pagePath, dependencies);
+    }
 
+    private PageDependencies ReadPageDependencies(MarkdownFile page)
+    {
         var pageAssets = new HashSet<string>(PathComparer);
         var markdown = page.ReadMarkdown();
         var assetRoot = page.SourceRootPath ?? _rootPath;
@@ -253,21 +272,8 @@ public sealed class ServeCommand
         {
             if (GetAssetOutputPath(page, assetPath) is null) continue;
             pageAssets.Add(assetPath);
-            if (!_pagesByAsset.TryGetValue(assetPath, out var dependentPages))
-            {
-                dependentPages = new HashSet<string>(PathComparer);
-                _pagesByAsset.Add(assetPath, dependentPages);
-            }
-
-            dependentPages.Add(pagePath);
         }
 
-        _assetsByPage[pagePath] = pageAssets;
-        UpdatePageOpenApiDependencies(pagePath, page, markdown);
-    }
-
-    private void UpdatePageOpenApiDependencies(string pagePath, MarkdownFile page, string markdown)
-    {
         var body = RemoveFrontMatter(markdown, page.FrontMatter);
         var referencedSpecs = OpenApiMarkdownRenderer.FindReferencedSpecPaths(body)
             .Select(specPath => OpenApiMarkdownRenderer.ResolveSpecPath(
@@ -275,22 +281,28 @@ public sealed class ServeCommand
                 specPath,
                 page.SourceRootPath))
             .ToArray();
-        _openApiSpecsByPage[pagePath] = referencedSpecs;
 
-        var pageOutputPath = GetPageOutputPath(page);
-        var outputDirectory = Path.GetDirectoryName(pageOutputPath)!;
-        var outputSiblings = MarkdigVisitor.GetOutputSiblings(
-            _pages.Values.Select(candidate => (Page: candidate, OutputPath: GetPageOutputPath(candidate))),
-            outputDirectory);
-        var specPages = OpenApiMarkdownRenderer.GetSpecificationPageFileNames(
-                body,
-                page.FileInfo.FullName,
-                page.SourceRootPath,
-                Path.GetFileName(pageOutputPath),
-                outputSiblings)
-            .Select(specFileName => Path.Combine(outputDirectory, specFileName))
-            .ToArray();
-        _openApiSpecPagesByPage[pagePath] = specPages;
+        return new PageDependencies(pageAssets, referencedSpecs);
+    }
+
+    private static void AddPageDependencies(
+        DependencyIndex index,
+        string pagePath,
+        PageDependencies dependencies)
+    {
+        index.AssetsByPage[pagePath] = dependencies.Assets;
+        foreach (var assetPath in dependencies.Assets)
+        {
+            if (!index.PagesByAsset.TryGetValue(assetPath, out var dependentPages))
+            {
+                dependentPages = new HashSet<string>(PathComparer);
+                index.PagesByAsset.Add(assetPath, dependentPages);
+            }
+
+            dependentPages.Add(pagePath);
+        }
+
+        index.OpenApiSpecsByPage[pagePath] = dependencies.OpenApiSpecs;
     }
 
     private void RemovePageAssets(string pagePath)
@@ -427,7 +439,6 @@ public sealed class ServeCommand
 
             var previousSpecPages = _openApiSpecPagesByPage.GetValueOrDefault(pagePath) ?? Array.Empty<string>();
             UpdatePageAssets(pagePath, page);
-            var specPagesChanged = !previousSpecPages.SequenceEqual(_openApiSpecPagesByPage[pagePath], PathComparer);
             _watchers?.UpdateExternalFiles(_openApiSpecsByPage.Values.SelectMany(paths => paths), _glossaryPath);
             new LocalAssetsCopy(_rootPath, _outputPath).Process(page, depth);
             var rendererVisitor = new MarkdigVisitor(
@@ -445,6 +456,9 @@ public sealed class ServeCommand
             }
 
             rendererVisitor.Process(page, depth);
+            var specPages = rendererVisitor.OpenApiSpecPagePaths.GetValueOrDefault(page) ?? Array.Empty<string>();
+            _openApiSpecPagesByPage[pagePath] = specPages;
+            var specPagesChanged = !previousSpecPages.SequenceEqual(specPages, PathComparer);
             affectedPageUrls.Add(PreviewServer.ToUrlPath(_outputPath, GetPageOutputPath(page)));
 
             if (specPagesChanged)
@@ -458,15 +472,17 @@ public sealed class ServeCommand
                     if (!PathComparer.Equals(Path.GetDirectoryName(siblingOutputPath), outputDirectory))
                         continue;
 
+                    // Only pages that wrote specification pages have names that can shift.
                     var previousSiblingSpecPages = _openApiSpecPagesByPage.GetValueOrDefault(siblingKey) ?? Array.Empty<string>();
+                    if (previousSiblingSpecPages.Count == 0) continue;
+
                     try
                     {
-                        UpdatePageOpenApiDependencies(siblingKey, siblingPage, siblingPage.ReadMarkdown());
-                        if (previousSiblingSpecPages.SequenceEqual(_openApiSpecPagesByPage[siblingKey], PathComparer))
-                            continue;
-
                         rendererVisitor.Process(siblingPage, siblingPage.CountDepth());
-                        affectedPageUrls.Add(PreviewServer.ToUrlPath(_outputPath, siblingOutputPath));
+                        var siblingSpecPages = rendererVisitor.OpenApiSpecPagePaths.GetValueOrDefault(siblingPage) ?? Array.Empty<string>();
+                        _openApiSpecPagesByPage[siblingKey] = siblingSpecPages;
+                        if (!previousSiblingSpecPages.SequenceEqual(siblingSpecPages, PathComparer))
+                            affectedPageUrls.Add(PreviewServer.ToUrlPath(_outputPath, siblingOutputPath));
                     }
                     catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or YamlDotNet.Core.YamlException)
                     {
@@ -699,6 +715,25 @@ public sealed class ServeCommand
         !string.IsNullOrEmpty(frontMatter) && markdown.StartsWith(frontMatter, StringComparison.Ordinal)
             ? markdown[frontMatter.Length..].TrimStart('\r', '\n')
             : markdown;
+
+    private sealed record PageDependencies(
+        HashSet<string> Assets,
+        IReadOnlyList<string> OpenApiSpecs);
+
+    private sealed record DependencyIndex(
+        Dictionary<string, MarkdownFile> Pages,
+        Dictionary<string, HashSet<string>> AssetsByPage,
+        Dictionary<string, HashSet<string>> PagesByAsset,
+        Dictionary<string, IReadOnlyList<string>> OpenApiSpecsByPage,
+        Dictionary<string, IReadOnlyList<string>> OpenApiSpecPagesByPage)
+    {
+        public static DependencyIndex CreateEmpty() => new(
+            new Dictionary<string, MarkdownFile>(PathComparer),
+            new Dictionary<string, HashSet<string>>(PathComparer),
+            new Dictionary<string, HashSet<string>>(PathComparer),
+            new Dictionary<string, IReadOnlyList<string>>(PathComparer),
+            new Dictionary<string, IReadOnlyList<string>>(PathComparer));
+    }
 
     private sealed record FileChange(string Path, string? OldPath, FileChangeKind Kind);
 
