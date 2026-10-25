@@ -17,6 +17,7 @@ Write diagrams as text; MDU turns supported code blocks into static SVG in the r
 | [Class](#class-diagrams) | Types and relationships | `mermaid` | Mermaid, GitHub |
 | [Component](#component-diagrams) | Architecture building blocks | `plantuml` | PlantUML |
 | [Context](#context-diagrams) | A system in its environment | `context` | MDU only |
+| [Isometric](#isometric-diagrams) | Platforms and data flows in phases | `isometric` | MDU only |
 
 ## Flowcharts
 
@@ -299,6 +300,117 @@ Warehouse -. Handles shipments .-> Store
 | Comments | `%% comment` | Ignores the line |
 
 The center is the system every link touches. If more than one system qualifies, the first one in the source is the center. Other systems and actors are evenly spaced clockwise from the top in the order they first appear. Reorder their source lines to change their positions. Subgraphs are not supported.
+
+## Isometric diagrams
+
+Use an MDU `isometric` code block to show platforms, the systems on them, and how data flows between them. Phases reveal the links step by step; the rendered page has buttons to show each phase and to play them in order.
+
+~~~markdown title="Markdown"
+```isometric
+accTitle: Majordomo platform
+
+zone install "Installation" "Chauffeur · OpenTofu · Ansible" tone teal at 0,0
+  admin     "Admin"     icon material-account-cog
+  chauffeur "Chauffeur" icon material-bus
+end
+
+zone cloud "Cloud Data Plane" "Control Plane · Compute · protected derivatives" tone blue at 1,0 cols 3
+  majordomo "Majordomo"    icon material-bank shape large
+  ids       "Identities"   icon material-account-group
+  gpu       "GPU Worker"   icon material-chip
+  store     "Object Store" icon material-lock tone teal
+  vectors   "Vector Index" icon material-view-grid tone purple
+end
+
+zone onprem "Corporate Network" "Original sources stay authoritative" tone purple at 0,1
+  files      "Files"      icon material-folder
+  sql        "SQL"        icon material-database
+  gitlab     "GitLab"     icon material-gitlab
+  wiki       "Wiki"       icon material-book-open-variant
+  hr         "HR System"  icon material-account-tie
+  sharepoint "SharePoint" icon material-microsoft-sharepoint
+end
+
+gateway "Ingestion Gateway" icon material-filter tone teal at 1,1
+user    "User" icon material-chat shape disc tone blue at 2,1
+
+phase Installation
+  chauffeur ==> majordomo : Deployment
+phase Identities and compute
+  majordomo -.-> ids
+  majordomo --> gpu
+phase Connect sources
+  files, sql, gitlab, wiki, hr, sharepoint -.-> gateway
+phase Synchronization
+  gateway --> store : Diff synchronization
+  gateway --> vectors
+phase Query
+  user -.-> majordomo : mTLS + identity
+  gpu -.-> user : Answer
+```
+~~~
+
+```isometric
+accTitle: Majordomo platform
+
+zone install "Installation" "Chauffeur · OpenTofu · Ansible" tone teal at 0,0
+  admin     "Admin"     icon material-account-cog
+  chauffeur "Chauffeur" icon material-bus
+end
+
+zone cloud "Cloud Data Plane" "Control Plane · Compute · protected derivatives" tone blue at 1,0 cols 3
+  majordomo "Majordomo"    icon material-bank shape large
+  ids       "Identities"   icon material-account-group
+  gpu       "GPU Worker"   icon material-chip
+  store     "Object Store" icon material-lock tone teal
+  vectors   "Vector Index" icon material-view-grid tone purple
+end
+
+zone onprem "Corporate Network" "Original sources stay authoritative" tone purple at 0,1
+  files      "Files"      icon material-folder
+  sql        "SQL"        icon material-database
+  gitlab     "GitLab"     icon material-gitlab
+  wiki       "Wiki"       icon material-book-open-variant
+  hr         "HR System"  icon material-account-tie
+  sharepoint "SharePoint" icon material-microsoft-sharepoint
+end
+
+gateway "Ingestion Gateway" icon material-filter tone teal at 1,1
+user    "User" icon material-chat shape disc tone blue at 2,1
+
+phase Installation
+  chauffeur ==> majordomo : Deployment
+phase Identities and compute
+  majordomo -.-> ids
+  majordomo --> gpu
+phase Connect sources
+  files, sql, gitlab, wiki, hr, sharepoint -.-> gateway
+phase Synchronization
+  gateway --> store : Diff synchronization
+  gateway --> vectors
+phase Query
+  user -.-> majordomo : mTLS + identity
+  gpu -.-> user : Answer
+```
+
+### Isometric syntax
+
+| Element | Syntax | Meaning |
+| --- | --- | --- |
+| Zones | `zone id "Title" "Subtitle" … end` | Groups nodes on a platform; title and subtitle are optional |
+| Nodes | `id "Label"` | Adds a block; inside a zone it stands on the platform |
+| Node options | `icon material-database`, `tone blue`, `shape tall`, `at 1,0` | Icon shortcode on the top face, color, shape (`block`, `tall`, `large`, `disc`), and grid cell |
+| Zone options | `tone teal`, `at 0,1`, `cols 3` | Platform color, grid cell, and the number of node columns on the platform |
+| Links | `a --> b`, `a -.-> b`, `a ==> b`, `a, b --> c : Label` | Solid, dashed, and thick links; comma lists link every pair |
+| Phases | `phase Title` | Starts a phase; the links after it belong to it |
+| Titles | `accTitle: Platform overview` | Sets the accessible title |
+| Comments | `%% comment` | Ignores the line |
+
+Tones are `blue`, `teal`, `green`, `purple`, `orange`, `red`, and `gray`. A node takes the tone of its zone unless it sets its own, and a link takes the tone of the node it starts from.
+
+The diagram is a grid of columns and rows: columns run to the front right and rows to the front left. `at column,row` places a zone or a standalone node; inside a zone, it places a node on the platform. Items without `at` fill the free cells row by row.
+
+A node appears in the first phase that links to it, and a zone appears with its first node. Nodes without links appear in the first phase. The page opens on the last phase, so printed pages and pages without JavaScript show the complete diagram.
 
 ## Clickable nodes
 
