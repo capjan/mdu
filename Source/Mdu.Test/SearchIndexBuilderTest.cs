@@ -282,6 +282,54 @@ public class SearchIndexBuilderTest
         Assert.Contains(entries, entry => entry.GetProperty("section").GetString() == "Next steps");
     }
 
+    [Fact]
+    public void KeepsDescriptionHeadingsInTheOperationAndHeadingsAfterTheBlockSeparate()
+    {
+        const string markdown = """
+            # API guide
+
+            ```openapi
+            openapi: 3.1.0
+            info:
+              title: Inline API
+              version: 1.0.0
+            paths:
+              /widgets/{widget_id}:
+                get:
+                  summary: Read widget
+                  description: "### Notes\n\nImplementation details."
+                  parameters:
+                    - in: path
+                      name: widget_id
+                      required: true
+                      description: Widget reservation key.
+                      schema: { type: string }
+                  responses:
+                    '200':
+                      description: OK
+            ```
+
+            #### Troubleshooting
+
+            Check token-xyz.
+            """;
+
+        var expanded = OpenApiMarkdownRenderer.ExpandCodeBlocks(
+            markdown,
+            Path.Combine(Path.GetTempPath(), "search-openapi-boundaries.md"),
+            includeSpecificationPageLink: false);
+        var entries = BuildIndex(expanded);
+
+        var widget = Assert.Single(entries, entry => entry.GetProperty("section").GetString()!.StartsWith("GET /widgets/", StringComparison.Ordinal));
+        Assert.Contains("Implementation details.", widget.GetProperty("text").GetString());
+        Assert.Contains("Widget reservation key.", widget.GetProperty("text").GetString());
+        Assert.DoesNotContain(entries, entry => entry.GetProperty("section").GetString() is "Notes" or "Path Parameters");
+        var troubleshooting = Assert.Single(entries, entry => entry.GetProperty("section").GetString() == "Troubleshooting");
+        Assert.Equal("guide.html#troubleshooting", troubleshooting.GetProperty("url").GetString());
+        Assert.Contains("token-xyz", troubleshooting.GetProperty("text").GetString());
+        Assert.DoesNotContain("token-xyz", widget.GetProperty("text").GetString());
+    }
+
     private static JsonElement[] BuildIndex(string markdown)
     {
         var outputPath = Path.Combine(Path.GetTempPath(), $"mdu-search-test-{Guid.NewGuid():N}");

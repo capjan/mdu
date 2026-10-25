@@ -7,6 +7,7 @@ using Markdig;
 using Markdig.Renderers.Html;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
+using Markdown.Renderer;
 using Markdown.Renderer.MarkdigExtension;
 
 namespace Markdown.Search;
@@ -18,6 +19,8 @@ public sealed class SearchIndexBuilder
         RegexOptions.Compiled | RegexOptions.Singleline | RegexOptions.CultureInvariant);
     private static readonly Regex IdRegex = new("\\bid=\"(?<id>[^\"]+)\"", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex OperationClassRegex = new("\\bclass=\"(?:[^\"]*\\s)?openapi-operation(?:\\s[^\"]*)?\"", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    // Headings that start a new part of an API reference instead of continuing the current operation.
+    private static readonly Regex OpenApiSectionClassRegex = new("\\bclass=\"(?:[^\"]*\\s)?openapi-(?:operation|tag|overview)(?:\\s[^\"]*)?\"", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex ScriptAndStyleRegex = new("<(script|style)\\b[^>]*>.*?</\\1>", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
     private static readonly Regex HtmlTagRegex = new("<[^>]+>", RegexOptions.Compiled | RegexOptions.Singleline);
     private static readonly Regex WhitespaceRegex = new("\\s+", RegexOptions.Compiled);
@@ -79,17 +82,18 @@ public sealed class SearchIndexBuilder
         if (!string.IsNullOrWhiteSpace(introduction) || introductionCode is { Count: > 0 })
             AddEntry(title, string.Empty, url, introduction, introductionCode);
 
-        // Parameters, responses, examples and schemas of an API operation belong to the operation's entry,
-        // so a search finds the operation once instead of each of its sections.
-        var operationLevel = 0;
+        // Parameters, responses, examples, schemas and description headings of an API operation belong to the
+        // operation's entry, so a search finds the operation once instead of each of its sections.
+        var openApiBlocks = GetOpenApiBlockRanges(html, headings);
         var operationEntry = -1;
         for (var index = 0; index < headings.Length; index++)
         {
             var heading = headings[index];
-            var level = heading.Groups["level"].Value[0] - '0';
+            var attributes = heading.Groups["attributes"].Value;
             var contentStart = heading.Index + heading.Length;
             var contentEnd = index + 1 < headings.Length ? headings[index + 1].Index : html.Length;
-            if (operationEntry >= 0 && level > operationLevel)
+            var inOpenApiBlock = openApiBlocks.Any(block => heading.Index >= block.Start && heading.Index < block.End);
+            if (operationEntry >= 0 && inOpenApiBlock && !OpenApiSectionClassRegex.IsMatch(attributes))
             {
                 var sectionText = $"{ExtractText(heading.Groups["title"].Value)} {ExtractText(html[contentStart..contentEnd])}";
                 var subsectionId = IdRegex.Match(heading.Groups["attributes"].Value);
@@ -106,12 +110,32 @@ public sealed class SearchIndexBuilder
             var text = ExtractText(html[contentStart..contentEnd]);
             var sectionUrl = $"{url}#{Uri.EscapeDataString(idMatch.Groups["id"].Value)}";
             AddEntry(title, section, sectionUrl, text, codeBySection.GetValueOrDefault(idMatch.Groups["id"].Value));
-            if (OperationClassRegex.IsMatch(heading.Groups["attributes"].Value))
-            {
-                operationLevel = level;
+            if (inOpenApiBlock && OperationClassRegex.IsMatch(attributes))
                 operationEntry = _entries.Count - 1;
-            }
         }
+    }
+
+    /// <summary>
+    /// The ranges between the markers around each expanded <c>openapi</c> block. Markdown that contains operations
+    /// without markers, such as a specification page, counts as one block, as in the renderer.
+    /// </summary>
+    private static IReadOnlyList<(int Start, int End)> GetOpenApiBlockRanges(string html, IReadOnlyList<Match> headings)
+    {
+        var ranges = new List<(int Start, int End)>();
+        var position = 0;
+        while (true)
+        {
+            var start = html.IndexOf(OpenApiMarkdownRenderer.BlockStartMarker, position, StringComparison.Ordinal);
+            if (start < 0) break;
+            var end = html.IndexOf(OpenApiMarkdownRenderer.BlockEndMarker, start, StringComparison.Ordinal);
+            if (end < 0) break;
+            ranges.Add((start, end));
+            position = end + OpenApiMarkdownRenderer.BlockEndMarker.Length;
+        }
+
+        if (ranges.Count == 0 && headings.Any(heading => OperationClassRegex.IsMatch(heading.Groups["attributes"].Value)))
+            ranges.Add((0, html.Length));
+        return ranges;
     }
 
     private void AppendToEntry(int index, string text, List<string>? code)
