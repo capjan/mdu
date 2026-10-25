@@ -42,6 +42,16 @@ internal static partial class IsometricParser
         var phases = new List<string>();
         string? title = null;
         IsometricZone? zone = null;
+        var topLevelCount = 0;
+        var topLevelCells = new HashSet<GridCell>();
+        var zoneCells = new HashSet<GridCell>();
+
+        // Two items in the same cell would be drawn on top of each other.
+        void ReserveCell(HashSet<GridCell> cells, GridCell? cell, string id, int lineNumber)
+        {
+            if (cell is { } value && !cells.Add(value))
+                throw new DiagramSyntaxException($"'{id}' uses the cell {value.Column},{value.Row}, which is already taken.", lineNumber);
+        }
 
         var lines = source.Split('\n');
         for (var index = 0; index < lines.Length; index++)
@@ -63,6 +73,7 @@ internal static partial class IsometricParser
 
             if (EdgeRegex().Match(MaskQuotedText(line)) is { Success: true } edgeMatch)
             {
+                if (zone != null) throw new DiagramSyntaxException("Links cannot be inside a zone; put them after its 'end'.", lineNumber);
                 string Part(string name) => line.Substring(edgeMatch.Groups[name].Index, edgeMatch.Groups[name].Length);
                 var style = edgeMatch.Groups["arrow"].Value switch
                 {
@@ -95,6 +106,9 @@ internal static partial class IsometricParser
                 zone = ParseZone(tokens, lineNumber);
                 if (zones.Any(other => other.Id == zone.Id) || nodes.ContainsKey(zone.Id))
                     throw new DiagramSyntaxException($"'{zone.Id}' is declared twice.", lineNumber);
+                ReserveCell(topLevelCells, zone.Cell, zone.Id, lineNumber);
+                zoneCells.Clear();
+                zone.Order = topLevelCount++;
                 zones.Add(zone);
             }
             else if (!keyword.Quoted && keyword.Text == "phase")
@@ -109,6 +123,8 @@ internal static partial class IsometricParser
                 var node = ParseNode(tokens, zone, lineNumber);
                 if (nodes.ContainsKey(node.Id) || zones.Any(other => other.Id == node.Id))
                     throw new DiagramSyntaxException($"'{node.Id}' is declared twice.", lineNumber);
+                ReserveCell(zone == null ? topLevelCells : zoneCells, node.Cell, node.Id, lineNumber);
+                if (zone == null) node.Order = topLevelCount++;
                 nodes.Add(node.Id, node);
                 nodeOrder.Add(node);
                 zone?.Nodes.Add(node);
@@ -123,7 +139,7 @@ internal static partial class IsometricParser
         {
             if (nodes.ContainsKey(id)) continue;
             if (zones.Any(other => other.Id == id)) throw new DiagramSyntaxException($"Links connect nodes, not the zone '{id}'.", 1);
-            var node = new IsometricNode { Id = id, Label = id };
+            var node = new IsometricNode { Id = id, Label = id, Order = topLevelCount++ };
             nodes.Add(id, node);
             nodeOrder.Add(node);
         }

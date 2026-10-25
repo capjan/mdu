@@ -15,6 +15,9 @@ public static class DiagramRenderer
 {
     public const string IsometricLanguage = "isometric";
 
+    /// <summary>Appears in rendered HTML exactly when an isometric diagram has phase controls.</summary>
+    public const string IsometricPhaseControlsMarker = "class=\"iso-controls\"";
+
     /// <exception cref="DiagramSyntaxException">The source is not a supported context diagram.</exception>
     public static string RenderContextSvg(string source) => ContextSvgWriter.Write(ContextParser.Parse(source));
 

@@ -401,14 +401,14 @@ phase Query
 | Nodes | `id "Label"` | Adds a block; inside a zone it stands on the platform |
 | Node options | `icon material-database`, `tone blue`, `shape tall`, `at 1,0` | Icon shortcode on the top face, color, shape (`block`, `tall`, `large`, `disc`), and grid cell |
 | Zone options | `tone teal`, `at 0,1`, `cols 3` | Platform color, grid cell, and the number of node columns on the platform |
-| Links | `a --> b`, `a -.-> b`, `a ==> b`, `a, b --> c : Label` | Solid, dashed, and thick links; comma lists link every pair |
+| Links | `a --> b`, `a -.-> b`, `a ==> b`, `a, b --> c : Label` | Solid, dashed, and thick links outside zones; comma lists link every pair |
 | Phases | `phase Title` | Starts a phase; the links after it belong to it |
 | Titles | `accTitle: Platform overview` | Sets the accessible title |
 | Comments | `%% comment` | Ignores the line |
 
 Tones are `blue`, `teal`, `green`, `purple`, `orange`, `red`, and `gray`. A node takes the tone of its zone unless it sets its own, and a link takes the tone of the node it starts from.
 
-The diagram is a grid of columns and rows: columns run to the front right and rows to the front left. `at column,row` places a zone or a standalone node; inside a zone, it places a node on the platform. Items without `at` fill the free cells row by row. Columns and rows run from 0 to 99, and `cols` takes 1 to 100.
+The diagram is a grid of columns and rows: columns run to the front right and rows to the front left. `at column,row` places a zone or a standalone node; inside a zone, it places a node on the platform. Items without `at` fill the free cells row by row. Each cell holds one item. Columns and rows run from 0 to 99, and `cols` takes 1 to 100.
 
 A node appears in the first phase that links to it, and a zone appears with its first node. Nodes without links appear in the first phase. The page opens on the last phase, so printed pages and pages without JavaScript show the complete diagram.
 
