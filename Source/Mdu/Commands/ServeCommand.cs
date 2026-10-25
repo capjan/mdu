@@ -95,12 +95,16 @@ public sealed class ServeCommand
             EditPageRoot = settings.EditPageRoot
         };
 
+        var changes = Channel.CreateUnbounded<FileChange>();
+        using var watcher = new FileWatcherSet(_rootPath, changes.Writer);
+        _watchers = watcher;
         try
         {
             RebuildSite();
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or YamlDotNet.Core.YamlException)
         {
+            _watchers = null;
             Console.Error.WriteLine($"Could not render the site: {exception.Message}");
             return 1;
         }
@@ -112,16 +116,13 @@ public sealed class ServeCommand
         }
         catch (HttpListenerException exception)
         {
+            _watchers = null;
             Console.Error.WriteLine($"Could not start the preview server on port {port}: {exception.Message}");
             return 1;
         }
 
         var url = server.BaseUrl;
         Console.WriteLine($"Serving {_rootPath} at {url} (press Ctrl+C to stop)");
-        var changes = Channel.CreateUnbounded<FileChange>();
-        using var watcher = new FileWatcherSet(_rootPath, changes.Writer);
-        _watchers = watcher;
-        watcher.UpdateExternalFiles(_openApiSpecsByPage.Values.SelectMany(paths => paths), _glossaryPath);
         if (!noBrowser) OpenBrowser(url);
 
         using var cancellation = new CancellationTokenSource();
@@ -200,7 +201,7 @@ public sealed class ServeCommand
             _searchIndexBuilder,
             _navigationRoots);
         _siteMediaProviders = rendererVisitor.SiteMediaProviders;
-        // Index dependencies before serving rendered pages so file changes cannot race index construction.
+        // Register external OpenAPI watchers before rendering so startup changes are queued.
         RebuildDependencyIndex(graph);
         graph.Visit(rendererVisitor);
         _searchIndexBuilder.WriteIndex(_outputPath);
