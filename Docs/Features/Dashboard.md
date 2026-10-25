@@ -52,12 +52,12 @@ Groups with subtitles use large tiles; groups without them use compact rows. Gro
 MDU picks an icon for each tile on its own:
 
 1. An icon or emoji shortcode in front of the link, such as `- :dashboard-bookstack: [Wiki](https://wiki.example.org)`, always wins. An image works as well.
-2. Otherwise an exact match in MDU's small table of known hosts wins, for example `mail.google.com` → Gmail, `code.visualstudio.com` → Visual Studio Code, or `nuget.org` → NuGet. Host matching ignores case, a leading `www.`, and a trailing dot; unrelated subdomains do not inherit the mapping.
+2. Otherwise an exact match in MDU's small table of known hosts wins, for example `mail.google.com` → Gmail, `code.visualstudio.com` → Visual Studio Code, `nuget.org` → NuGet, `bitbucket.org` → Bitbucket, `codeberg.org` → Codeberg, or `gist.github.com` → GitHub. Host matching ignores case, a leading `www.`, and a trailing dot; unrelated subdomains do not inherit the mapping.
 3. Next it tries the complete tile name, including camel-case, hyphenated, and compact spellings, such as `Home Assistant` → `home-assistant`.
-4. Finally it tries individual words longer than three letters only when they also match a complete host label before the final dot. For example, `Christians GitLab` at `gitlab.example.org` can use GitLab, but `Apple Storage` at `storage.example.org` does not pick the Apple logo.
+4. Finally it tries individual words longer than three letters only when they also match a complete host label before the final dot, or the entire host when it has no dots. For example, `Christians GitLab` at `gitlab.example.org` can use GitLab, `Home Grafana` at `http://grafana:3000` can use Grafana, but `Apple Storage` at `storage.example.org` does not pick the Apple logo.
 5. Each candidate tries the colored [Dashboard Icons](Icons-and-Emojis.md) first, then monochrome Simple Icons, before moving to the next candidate. Without a match, the tile shows its initials on a colored background.
 
-Unknown domains and general words are not enough to identify a service. DevDocs and Artificial Analysis, for example, currently have no logo in the bundled sets and show initials. Use an explicit shortcode, emoji, or image to choose an icon yourself, especially for products sharing one host:
+The ambiguous icon names `code`, `files`, `music`, and `vault` are excluded from both full-name and individual-word matching. Even `Password Vault` at `vault.example.org` or `Files` at `files.example.org` shows initials; use an explicit shortcode such as `:dashboard-vault:` to select that product logo. A known host still takes precedence, so `Files` at `drive.google.com` uses Google Drive. DevDocs and Artificial Analysis, for example, currently have no logo in the bundled sets and show initials. Use an explicit shortcode, emoji, or image to choose an icon yourself, especially for products sharing one host:
 
 ```markdown title="Explicit icons"
 - :simple-rider: [JetBrains Rider](https://www.jetbrains.com/rider/)

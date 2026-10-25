@@ -229,6 +229,11 @@ public class DashboardTest
     [InlineData("Visual Studio Code", "code.visualstudio.com", "dashboard-visual-studio-code")]
     [InlineData("Docker", "www.docker.com", "dashboard-docker")]
     [InlineData("Repository", "gitlab.com", "dashboard-gitlab")]
+    [InlineData("Repositories", "bitbucket.org", "dashboard-bitbucket")]
+    [InlineData("Repositories", "codeberg.org", "dashboard-codeberg")]
+    [InlineData("Snippets", "gist.github.com", "dashboard-github")]
+    [InlineData("Home Grafana", "grafana", "dashboard-grafana")]
+    [InlineData("Home Grafana", "GRAFANA.", "dashboard-grafana")]
     [InlineData("Inbox", "gmail.com", "dashboard-gmail")]
     [InlineData("Christians GitLab", "gitlab.example.org", "dashboard-gitlab")]
     [InlineData("Xq Zw", "github.com", "dashboard-github")]
@@ -279,6 +284,21 @@ public class DashboardTest
 
     [Theory]
     [InlineData("Apple Storage", "storage.example.org", "AS")]
+    [InlineData("Password Vault", "vault.example.org", "PV")]
+    [InlineData("Shared Files", "files.example.org", "SF")]
+    [InlineData("My Music", "music.example.org", "MM")]
+    [InlineData("Team Code", "code.example.org", "TC")]
+    [InlineData("Files", "files.example.org", "Fi")]
+    [InlineData("Files", "example.org", "Fi")]
+    [InlineData("Code", "example.org", "Co")]
+    [InlineData("Music", "example.org", "Mu")]
+    [InlineData("Vault", "example.org", "Va")]
+    [InlineData("Password VAULT", "VAULT.example.org", "PV")]
+    [InlineData("Home Files", "files", "HF")]
+    [InlineData("Home Grafana", "localhost", "HG")]
+    [InlineData("Inbox", "www.www.gmail.com", "In")]
+    [InlineData("Repositories", "bitbucket.org.example.org", "Re")]
+    [InlineData("Repositories", "team.codeberg.org", "Re")]
     [InlineData("Amazon Home", "home.example.org", "AH")]
     [InlineData("My GitHub", "example.org", "MG")]
     [InlineData("My GitHub", "github-mirror.example.org", "MG")]
@@ -307,7 +327,38 @@ public class DashboardTest
 
         Assert.True(StaticCode.Icons.IconCatalog.TryGetIcon("simple-rider", out var icon));
         Assert.Contains($"<span class=\"dashboard-icon\"><span class=\"icon\">{icon.ToSvg()}", html);
-        Assert.DoesNotContain("class=\"dashboard-icon dashboard-monogram\"", html);
+    }
+
+    [Fact]
+    public async Task RendersAnIconForASingleLabelHostWithAPort()
+    {
+        var html = await RenderPage("## Tools\n\n- [Home Grafana](http://grafana:3000)\n", Options);
+
+        Assert.True(StaticCode.Icons.IconCatalog.TryGetIcon("dashboard-grafana", out var icon));
+        Assert.Contains($"<span class=\"dashboard-icon\"><span class=\"icon\">{icon.ToSvg()}", html);
+        Assert.Contains("href=\"http://grafana:3000\"", html);
+    }
+
+    [Fact]
+    public async Task NormalizesTheHostOnceForIconsAndSubtitles()
+    {
+        var html = await RenderPage("## Tools\n\n- [Inbox](https://www.www.gmail.com)\n", Options);
+
+        Assert.Contains("class=\"dashboard-icon dashboard-monogram\"", html);
+        Assert.Contains("<span class=\"dashboard-description\">www.gmail.com</span>", html);
+    }
+
+    [Theory]
+    [InlineData("code")]
+    [InlineData("files")]
+    [InlineData("music")]
+    [InlineData("vault")]
+    public async Task ExplicitIconsCanStillSelectAmbiguousNames(string name)
+    {
+        var html = await RenderPage($"## Tools\n\n- :dashboard-{name}: [{name}](https://example.org)\n", Options);
+
+        Assert.True(StaticCode.Icons.IconCatalog.TryGetIcon("dashboard-" + name, out var icon));
+        Assert.Contains($"<span class=\"dashboard-icon\"><span class=\"icon\">{icon.ToSvg()}", html);
     }
 
     [Fact]

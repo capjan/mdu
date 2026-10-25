@@ -37,6 +37,9 @@ public static class Dashboard
     private static readonly Dictionary<string, string> HostIcons = new(StringComparer.OrdinalIgnoreCase)
     {
         ["github.com"] = "github",
+        ["gist.github.com"] = "github",
+        ["bitbucket.org"] = "bitbucket",
+        ["codeberg.org"] = "codeberg",
         ["gitlab.com"] = "gitlab",
         ["nuget.org"] = "nuget",
         ["docker.com"] = "docker",
@@ -51,6 +54,11 @@ public static class Dashboard
         ["gemini.google.com"] = "google-gemini",
         ["open.spotify.com"] = "spotify",
         ["claude.ai"] = "claude-ai"
+    };
+    // These icon names also describe general service categories, even on matching self-hosted subdomains.
+    private static readonly HashSet<string> AmbiguousIconNames = new(StringComparer.Ordinal)
+    {
+        "code", "files", "music", "vault"
     };
     private static readonly Regex CamelCaseBoundaryRegex = new("(?<=[a-z0-9])(?=[A-Z])", RegexOptions.Compiled);
     private static readonly Regex NonSlugCharactersRegex = new("[^a-z0-9]+", RegexOptions.Compiled);
@@ -229,10 +237,10 @@ public static class Dashboard
             }
 
             var external = Uri.TryCreate(tile.Url, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https";
-            var host = external ? uri!.Host.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? uri.Host[4..] : uri.Host : string.Empty;
+            var host = external ? uri!.Host : string.Empty;
             var subtitle = tile.Description.Length > 0
                 ? tile.Description
-                : HtmlEncoder.Default.Encode(host);
+                : HtmlEncoder.Default.Encode(NormalizeHost(host));
 
             string id;
             do id = $"dashboard-tile-{tileIndex++}";
@@ -357,12 +365,11 @@ public static class Dashboard
         void Add(string value)
         {
             var slug = NonSlugCharactersRegex.Replace(value.ToLowerInvariant(), "-").Trim('-');
-            if (slug.Length > 0 && !candidates.Contains(slug)) candidates.Add(slug);
+            if (slug.Length > 0 && !AmbiguousIconNames.Contains(slug) && !candidates.Contains(slug)) candidates.Add(slug);
         }
 
-        host = host.TrimEnd('.');
-        if (host.StartsWith("www.", StringComparison.OrdinalIgnoreCase)) host = host[4..];
-        if (HostIcons.TryGetValue(host, out var hostIcon)) Add(hostIcon);
+        host = NormalizeHost(host);
+        if (HostIcons.TryGetValue(host, out var hostIcon)) candidates.Add(hostIcon);
 
         Add(name.Replace("+", " plus", StringComparison.Ordinal));
         Add(CamelCaseBoundaryRegex.Replace(name, "-"));
@@ -370,11 +377,18 @@ public static class Dashboard
 
         // A host label corroborates a word such as GitLab in "Christians GitLab". Do not guess from an
         // arbitrary word or the penultimate domain label (which may be a public suffix or shared host).
-        var labels = host.Split('.', StringSplitOptions.RemoveEmptyEntries).SkipLast(1).ToArray();
+        var labels = host.Split('.', StringSplitOptions.RemoveEmptyEntries);
+        if (labels.Length > 1) labels = labels[..^1];
         foreach (var word in name.Split(WordSeparators, StringSplitOptions.RemoveEmptyEntries).OrderByDescending(word => word.Length))
             if (word.Length > 3 && labels.Contains(word, StringComparer.OrdinalIgnoreCase)) Add(word);
 
         return candidates;
+    }
+
+    private static string NormalizeHost(string host)
+    {
+        host = host.TrimEnd('.');
+        return host.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? host[4..] : host;
     }
 
     private static string RenderBlock(Block block, MarkdownPipeline pipeline) =>
