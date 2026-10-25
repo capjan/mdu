@@ -8,6 +8,7 @@
     const clearButton = document.getElementById("dashboard-search-clear");
     const pagesSection = document.getElementById("dashboard-pages");
     const pagesList = document.getElementById("dashboard-pages-list");
+    const resultsGrid = document.getElementById("dashboard-results");
     const empty = document.getElementById("dashboard-empty");
     const clock = document.getElementById("dashboard-clock");
     const searchUrl = dashboard.dataset.dashboardSearch;
@@ -16,6 +17,16 @@
     const groups = [...dashboard.querySelectorAll(".dashboard-group")];
     const rows = [...dashboard.querySelectorAll(".dashboard-row")];
     const opensNewTab = (link) => link.target === "_blank";
+
+    // Markdown headings can claim the same generated IDs, so keep the referenced cells unique in the final page.
+    for (const [index, tile] of tiles.entries()) {
+        const cell = tile.querySelector('[role="gridcell"]');
+        if (document.getElementById(cell.id) !== cell || document.querySelectorAll(`[id="${CSS.escape(cell.id)}"]`).length > 1) {
+            let suffix = index;
+            while (document.getElementById(`dashboard-result-tile-${suffix}`)) suffix++;
+            cell.id = `dashboard-result-tile-${suffix}`;
+        }
+    }
 
     const fold = (text) => text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/ß/g, "ss");
     const tokenize = (text) => fold(text).match(/[\p{L}\p{N}_]+/gu) || [];
@@ -40,12 +51,16 @@
         indexRequest ??= fetch(indexPath, { cache: "no-cache" })
             .then(response => response.ok ? response.json() : [])
             .then(entries => {
-                const pagePath = (url) => url.pathname.replace(/(?:index|README)\.html$/i, "");
+                const pagePath = url => url.pathname.replace(/(?:index|README)\.html$/i, "");
                 const currentPage = pagePath(new URL(window.location.href));
                 const indexUrl = new URL(indexPath, window.location.href);
                 pageEntries = entries.filter(entry => pagePath(new URL(pageOf(entry), indexUrl)) !== currentPage);
+            if (input.value.trim()) update();
             })
-            .catch(() => { pageEntries = []; });
+            .catch(() => {
+                pageEntries = [];
+                if (input.value.trim()) update();
+            });
         return indexRequest;
     };
 
@@ -135,18 +150,18 @@
     const selectable = () => [...dashboard.querySelectorAll(".dashboard-tile:not([hidden]) a.dashboard-link, a.dashboard-page")];
 
     // The hints name actions, not results, so the row keeps its width while the arrow keys move the selection.
-    const renderHints = () => {
+    const renderHints = (items = selectable()) => {
         const query = input.value.trim();
         const hints = [];
         if (selected) hints.push([[["enter"]], "open"]);
         else if (query && searchUrl) hints.push([[["enter"]], "search the web"]);
-        if (selected && selectable().length > 1) hints.push([[["arrow-up"], ["arrow-down"]], "select"]);
+        if (selected && items.length > 1) hints.push([[["arrow-up"], ["arrow-down"]], "select"]);
         if (selected && query && searchUrl) hints.push([[[webSearchModifier, "enter"]], "search the web"]);
         if (query) hints.push([[["escape"]], "clear"]);
         setHints(...hints);
     };
 
-    const select = (link, reveal = false) => {
+    const select = (link, reveal = false, items) => {
         if (selected !== link && selected) {
             selected.classList.remove("is-selected");
             selected.closest('[role="gridcell"]').setAttribute("aria-selected", "false");
@@ -161,7 +176,7 @@
             input.removeAttribute("aria-activedescendant");
         }
         if (link && reveal) link.scrollIntoView({ block: "nearest", inline: "nearest", behavior: prefersReducedMotion.matches ? "auto" : "smooth" });
-        renderHints();
+        renderHints(items);
     };
 
     // Starts the excerpt shortly before the first match so that the sheet shows why the page matched.
@@ -207,6 +222,16 @@
     const documentIcon = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 1.5h5.5L13 5v9.5H4z"></path><path d="M9.5 1.5V5H13"></path></svg>';
     const arrowIcon = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h9.5M8.5 4l4 4-4 4"></path></svg>';
     const pageIds = new Map();
+    const pageId = (page) => {
+        if (!pageIds.has(page)) {
+            const suffix = pageIds.size;
+            let id = `dashboard-page-${suffix}`;
+            let attempt = 0;
+            while (document.getElementById(id)) id = `dashboard-page-${suffix}-${++attempt}`;
+            pageIds.set(page, id);
+        }
+        return pageIds.get(page);
+    };
     let shownPages = new Set();
 
     const renderPages = (results, terms) => {
@@ -222,8 +247,7 @@
             item.setAttribute("role", "row");
             const cell = document.createElement("div");
             const page = pageOf(entry);
-            if (!pageIds.has(page)) pageIds.set(page, `dashboard-page-${pageIds.size}`);
-            cell.id = pageIds.get(page);
+            cell.id = pageId(page);
             cell.setAttribute("role", "gridcell");
             cell.setAttribute("aria-selected", "false");
             cell.setAttribute("aria-label", entry.section && entry.section !== entry.title
@@ -294,16 +318,31 @@
 
         const pages = rankPages(terms);
         // Clear the reference before replacing page cells, including when the new result has the same ID.
-        select(null);
+        if (selected?.classList.contains("dashboard-page")) {
+            selected.classList.remove("is-selected");
+            selected.closest('[role="gridcell"]')?.setAttribute("aria-selected", "false");
+            selected = null;
+            input.removeAttribute("aria-activedescendant");
+        }
         renderPages(pages, terms);
 
-        select(terms.length === 0 ? null : first?.link ?? pagesList.querySelector("a.dashboard-page"));
+        const items = selectable();
+        select(terms.length === 0 ? null : first?.link ?? pagesList.querySelector("a.dashboard-page"), false, items);
+        resultsGrid.hidden = !resultsGrid.querySelector('[role="rowgroup"]:not([hidden])');
+        input.setAttribute("aria-expanded", String(!resultsGrid.hidden));
 
-        const count = selectable().length;
-        const message = query
-            ? `${count} ${count === 1 ? "match" : "matches"} for “${query}”.`
-            : `${count} ${count === 1 ? "link" : "links"}.`;
-        if (status.textContent !== message) status.textContent = message;
+        const count = items.length;
+        const waitingForIndex = terms.length > 0 && !!indexPath && !pageEntries;
+        const message = terms.length === 0
+            ? `${count} ${count === 1 ? "link" : "links"}.`
+            : count === 0
+                ? searchUrl
+                    ? `No links or pages match “${query}”. Press Enter to search the web.`
+                    : `No links or pages match “${query}”.`
+                : `${count} ${count === 1 ? "match" : "matches"} for “${query}”.`;
+        status.setAttribute("aria-busy", String(waitingForIndex));
+        if (waitingForIndex) status.textContent = "";
+        else if (status.textContent !== message) status.textContent = message;
 
         empty.hidden = !(terms.length > 0 && !first && pages.length === 0);
         empty.textContent = searchUrl
@@ -346,7 +385,7 @@
     input.addEventListener("focus", () => loadIndex(), { once: true });
     input.addEventListener("input", () => {
         update();
-        if (input.value.trim() && !pageEntries) loadIndex().then(update);
+        if (input.value.trim() && !pageEntries) loadIndex();
     });
 
     input.addEventListener("keydown", event => {
@@ -368,7 +407,7 @@
             const next = index < 0
                 ? step > 0 ? 0 : items.length - 1
                 : (index + step + items.length) % items.length;
-            select(items[next], true);
+            select(items[next], true, items);
             return;
         }
 

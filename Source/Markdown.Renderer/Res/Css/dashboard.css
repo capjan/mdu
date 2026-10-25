@@ -200,7 +200,7 @@
     display: none;
 }
 
-.dashboard-group > p {
+.dashboard-group > [role="row"] > [role="gridcell"] > p {
     margin: -0.4rem 0 0.75rem;
     color: var(--text-secondary);
     font-size: 0.875rem;

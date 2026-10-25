@@ -62,8 +62,8 @@ public class DashboardTest
         Assert.Contains("<p>Everything in one place.</p>", html);
         Assert.Contains("<input id=\"dashboard-search-input\"", html);
         Assert.Contains("<time class=\"dashboard-clock\"", html);
-        Assert.Equal(2, CountOf(html, "<div class=\"dashboard-row\">"));
-        Assert.Equal(2, CountOf(html, "<section class=\"dashboard-group\">"));
+        Assert.Equal(2, CountOf(html, "<div class=\"dashboard-row\" role=\"presentation\">"));
+        Assert.Equal(2, CountOf(html, "<section class=\"dashboard-group\" role=\"rowgroup\">"));
 
         Assert.Contains("<ul class=\"dashboard-tiles has-descriptions\" role=\"presentation\">", html);
         Assert.Contains("<a class=\"dashboard-link\" href=\"https://mail.google.com\" target=\"_blank\" rel=\"noopener noreferrer\"><span class=\"dashboard-icon\"><span class=\"icon\">", html);
@@ -98,10 +98,12 @@ public class DashboardTest
     {
         var html = await RenderPage("# Start", Options);
 
-        Assert.Contains("<input id=\"dashboard-search-input\" type=\"search\" role=\"combobox\" aria-controls=\"dashboard-results\" aria-haspopup=\"grid\" aria-expanded=\"true\" aria-autocomplete=\"list\"", html);
-        Assert.Contains("<div id=\"dashboard-results\" role=\"grid\" aria-label=\"Links and pages\">", html);
+        Assert.Contains("<input id=\"dashboard-search-input\" type=\"search\" role=\"combobox\" aria-controls=\"dashboard-results\" aria-haspopup=\"grid\" aria-expanded=\"false\" aria-autocomplete=\"list\"", html);
+        Assert.Contains("<div id=\"dashboard-results\" role=\"grid\" aria-label=\"Links and pages\" aria-readonly=\"true\" hidden>", html);
         Assert.Contains("<p class=\"dashboard-search-hint\" id=\"dashboard-search-hint\"></p>", html);
         Assert.Contains("<p class=\"visually-hidden\" id=\"dashboard-search-status\" role=\"status\" aria-live=\"polite\" aria-atomic=\"true\"></p>", html);
+        Assert.Contains("<div class=\"dashboard-pages\" id=\"dashboard-pages\" role=\"rowgroup\" aria-label=\"Pages\" hidden>", html);
+        Assert.DoesNotContain("id=\"dashboard-pages\" aria-labelledby", html);
         Assert.DoesNotContain("aria-activedescendant=", html);
     }
 
@@ -134,8 +136,34 @@ public class DashboardTest
         Assert.Equal(html, await RenderPage(markdown, Options));
         Assert.Equal(3, CountOf(html, "<li class=\"dashboard-tile\" role=\"row\"><div class=\"dashboard-cell\""));
         Assert.Equal(3, CountOf(html, "role=\"gridcell\" aria-selected=\"false\""));
-        Assert.Contains("aria-label=\"Mail &amp; calendar\"><a class=\"dashboard-link\" href=\"https://mail.example.org\" target=\"_blank\" rel=\"noopener noreferrer\">", html);
-        Assert.Contains("aria-label=\"Handbook\"><a class=\"dashboard-link\" href=\"Guide/Handbook.html\">", html);
+        Assert.Contains("<div class=\"dashboard-cell\" id=\"dashboard-tile-0\" role=\"gridcell\" aria-selected=\"false\"><a class=\"dashboard-link\" href=\"https://mail.example.org\" target=\"_blank\" rel=\"noopener noreferrer\">", html);
+        Assert.Contains("<span class=\"dashboard-name\">Mail &amp; calendar</span><span class=\"dashboard-description\">mail.example.org</span>", html);
+        Assert.Contains("<div class=\"dashboard-cell\" id=\"dashboard-tile-2\" role=\"gridcell\" aria-selected=\"false\"><a class=\"dashboard-link\" href=\"Guide/Handbook.html\">", html);
+    }
+
+    [Fact]
+    public async Task KeepsTheDashboardGridRowsInsideRowGroups()
+    {
+        var html = await RenderPage("""
+            # Start
+
+            ## Work
+
+            A group description.
+
+            - [Mail](https://mail.example.org) — Inbox
+
+            ## Reference
+
+            - A note
+            """, new DashboardOptions(null, false, true, true));
+
+        Assert.Contains("<section class=\"dashboard-group\" role=\"rowgroup\">\n<div role=\"row\"><div role=\"gridcell\">\n<h2", html);
+        Assert.Contains("<div role=\"row\"><div role=\"gridcell\"><ul>\n<li>A note</li>", html);
+        Assert.Contains("<span class=\"dashboard-status\" role=\"img\" aria-label=\"Status unknown\"></span>", html);
+        Assert.Contains("class=\"dashboard-description\">Inbox</span>", html);
+        Assert.DoesNotContain("role=\"region\"", html);
+        Assert.DoesNotContain("role=\"grid\" aria-label=\"Links and pages\" aria-readonly=\"true\">\n<section", html);
     }
 
     [Fact]
