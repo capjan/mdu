@@ -28,12 +28,23 @@ public class IsometricDiagramPageTest
         Assert.Equal(2, names.Count);
     }
 
-    [Fact]
-    public async Task LeavesThePlaybackScriptOutOfOtherPages()
+    [Theory]
+    [InlineData("```mermaid\nflowchart LR\nA --> B\n```\n")]
+    [InlineData("```isometric\na --> b\n```\n")]
+    [InlineData("```isometric\nphase One\na --> a\n```\n")]
+    public async Task LeavesThePlaybackScriptOutOfPagesWithoutPhaseControls(string block)
     {
-        var page = await RenderPage("# Home\n\n```mermaid\nflowchart LR\nA --> B\n```\n");
+        var page = await RenderPage($"# Home\n\n{block}");
 
         Assert.DoesNotContain("document.querySelectorAll(\".iso\")", page);
+    }
+
+    [Fact]
+    public async Task AddsThePlaybackScriptRegardlessOfTheLanguageCase()
+    {
+        var page = await RenderPage("# Home\n\n```Isometric\nphase One\na --> b\n```\n");
+
+        Assert.Contains("document.querySelectorAll(\".iso\")", page);
     }
 
     private static async Task<string> RenderPage(string markdown)

@@ -83,6 +83,11 @@ public class IsometricDiagramTest
     [InlineData("a \"A\" icon")]
     [InlineData("a\na")]
     [InlineData("zone z\nphase One\nend")]
+    [InlineData("zone z\n  a --> b\nend")]
+    [InlineData("zone z\n  a \"A\"\n  a --> b\nend")]
+    [InlineData("a at 0,0\nb at 0,0")]
+    [InlineData("zone z at 1,1\nend\nn at 1,1")]
+    [InlineData("zone z\n  a at 0,0\n  b at 0,0\nend")]
     [InlineData("zone z\nend\nz --> b")]
     [InlineData("a \"unterminated")]
     [InlineData("a --> b : \"unfinished")]
@@ -157,6 +162,25 @@ public class IsometricDiagramTest
     {
         Assert.Throws<DiagramSyntaxException>(() => IsometricParser.Parse(source));
         Assert.False(DiagramRenderer.TryRenderHtml("isometric", source, 0, out _));
+    }
+
+    [Fact]
+    public void AllowsTheSameCellInDifferentZonesAndOutsideThem()
+    {
+        var diagram = IsometricParser.Parse("zone y\n  a at 0,0\nend\nzone z\n  b at 0,0\nend\nc at 2,2");
+
+        Assert.Equal(new[] { new GridCell(0, 0), new GridCell(0, 0), new GridCell(2, 2) }, diagram.Nodes.Select(node => node.Cell!.Value));
+    }
+
+    [Fact]
+    public void KeepsZonesAndStandaloneNodesInDeclarationOrder()
+    {
+        var diagram = IsometricParser.Parse("first \"First\"\nzone empty \"Empty\"\nend\nzone full\n  inside\nend\nlast --> first");
+
+        Assert.Equal(new[] { 1, 2 }, diagram.Zones.Select(zone => zone.Order));
+        var standalone = diagram.Nodes.Where(node => node.Zone == null).ToDictionary(node => node.Id, node => node.Order);
+        Assert.Equal(0, standalone["first"]);
+        Assert.Equal(3, standalone["last"]);
     }
 
     [Fact]

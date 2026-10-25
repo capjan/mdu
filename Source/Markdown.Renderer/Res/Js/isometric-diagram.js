@@ -10,9 +10,9 @@
         const text = button.querySelector(".iso-play-text");
         let timer = null;
 
+        // The label names the next action, so the button has no pressed state that would contradict it.
         const setPlaying = (playing) => {
             button.classList.toggle("is-playing", playing);
-            button.setAttribute("aria-pressed", String(playing));
             text.textContent = playing ? "Pause" : "Play";
         };
 

@@ -70,8 +70,7 @@ internal static class IsometricSvgWriter
             items.Add(new Item { Node = node, Width = Pitch, Depth = Pitch });
 
         // Zones and standalone nodes keep their declaration order, so a standalone node after a zone stays after it.
-        var order = diagram.Nodes.Select(node => node.Zone as object ?? node).Distinct().ToList();
-        items = items.OrderBy(item => order.IndexOf(item.Zone as object ?? item.Node!)).ToList();
+        items = items.OrderBy(item => item.Zone?.Order ?? item.Node!.Order).ToList();
         PlaceItems(items);
 
         var placed = new List<PlacedNode>();
@@ -213,7 +212,7 @@ internal static class IsometricSvgWriter
             baseline += size + 3;
             labels.Append($"<text class=\"{cssClass}\" x=\"{F(TitleInset)}\" y=\"{F(baseline)}\">{Escape(text)}</text>");
             var length = TextMetrics.Width(text) * size / TextMetrics.FontSize * 1.08;
-            bounds.Include(corner + direction * (TitleInset + length) + new Point(0, baseline), 0, 0);
+            bounds.Include(corner + direction * (TitleInset + length) + new Point(0, baseline + 4), 0, 0);
 
             // Link labels avoid the slanted lettering, which a row of small boxes approximates.
             for (var offset = 0.0; offset < length; offset += 20)
@@ -406,7 +405,7 @@ internal static class IsometricSvgWriter
     private static void WriteControls(StringBuilder html, IsometricDiagram diagram, string groupName)
     {
         var name = Escape(groupName);
-        html.Append("<div class=\"iso-controls\" role=\"group\" aria-label=\"Phases\">\n")
+        html.Append($"<div {DiagramRenderer.IsometricPhaseControlsMarker} role=\"group\" aria-label=\"Phases\">\n")
             .Append("<button type=\"button\" class=\"iso-play\" hidden=\"\"><span class=\"iso-play-icon\" aria-hidden=\"true\"></span><span class=\"iso-play-text\">Play</span></button>\n");
         for (var index = 0; index < diagram.Phases.Count; index++)
         {

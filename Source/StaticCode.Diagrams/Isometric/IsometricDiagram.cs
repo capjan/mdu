@@ -30,6 +30,9 @@ internal sealed class IsometricNode
 
     /// <summary>The first phase with a link to this node; nodes without links appear in the first phase.</summary>
     public int Phase { get; set; } = int.MaxValue;
+
+    /// <summary>The position of a node outside zones among the zones and such nodes, in declaration order.</summary>
+    public int Order { get; set; }
 }
 
 internal sealed class IsometricZone
@@ -42,6 +45,9 @@ internal sealed class IsometricZone
     public int? Columns { get; set; }
     public List<IsometricNode> Nodes { get; } = new();
     public int Phase => Nodes.Count == 0 ? 1 : Nodes.Min(node => node.Phase);
+
+    /// <summary>The position among the zones and the nodes outside zones, in declaration order.</summary>
+    public int Order { get; set; }
 }
 
 internal sealed record IsometricEdge(string From, string To, IsometricEdgeStyle Style, string? Label, int Phase);

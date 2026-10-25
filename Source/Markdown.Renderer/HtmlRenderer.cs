@@ -176,9 +176,9 @@ public class HtmlRenderer
         if (hasIconSearch) EnsureIconSearchAssets();
         var hasHero = document.Descendants<FencedCodeBlock>()
             .Any(block => block.Info == Hero.CodeBlockLanguage);
-        var hasIsometricDiagram = document.Descendants<FencedCodeBlock>()
-            .Any(block => string.Equals(block.Info, DiagramRenderer.IsometricLanguage, StringComparison.OrdinalIgnoreCase));
         var renderedMarkdown = dashboard is null ? document.ToHtml(_pipeline) : Dashboard.Render(document, _pipeline, dashboard);
+        // Only rendered phase controls need the playback script, not diagrams without phases or invalid ones.
+        var hasIsometricDiagram = renderedMarkdown.Contains(DiagramRenderer.IsometricPhaseControlsMarker, StringComparison.Ordinal);
         renderedMarkdown = MediaLinkEmbedder.ReplaceStandaloneLinks(renderedMarkdown, out var mediaProviders);
         var pageHero = hasHero ? Hero.ExtractFullWidth(ref renderedMarkdown) : string.Empty;
         renderedMarkdown = InsertFootnotesTitle(renderedMarkdown);
