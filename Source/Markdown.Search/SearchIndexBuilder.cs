@@ -4,6 +4,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Markdig;
+using Markdig.Syntax;
+using Markdig.Syntax.Inlines;
 using Markdown.Renderer.MarkdigExtension;
 
 namespace Markdown.Search;
@@ -36,7 +38,20 @@ public sealed class SearchIndexBuilder
     {
         _entries.RemoveAll(entry => entry.PageUrl.Equals(url, StringComparison.Ordinal));
 
-        var html = Markdig.Markdown.ToHtml(markdown, _pipeline);
+        var document = Markdig.Markdown.Parse(markdown, _pipeline);
+        foreach (var block in document.Descendants<CodeBlock>().ToArray())
+            block.Parent!.Remove(block);
+
+        // Documentation also shows Markdown links inside inline code spans.
+        // Keep ordinary inline code literal, but index those examples by their labels.
+        foreach (var code in document.Descendants<CodeInline>())
+        {
+            if (code.Content.Contains('[') &&
+                Markdig.Markdown.Parse(code.Content).Descendants<LinkInline>().Any())
+                code.Content = Markdig.Markdown.ToPlainText(code.Content).Trim();
+        }
+
+        var html = document.ToHtml(_pipeline);
         var headings = HeadingRegex.Matches(html).Cast<Match>().ToArray();
 
         if (headings.Length == 0)
