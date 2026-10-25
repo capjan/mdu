@@ -117,6 +117,8 @@ public class DashboardTest
 
             ### Dashboard Tile 0
 
+            > ### Dashboard Tile 1
+
             - [Mail & calendar](https://mail.example.org)
             - A note
 
@@ -134,18 +136,20 @@ public class DashboardTest
         var ids = Regex.Matches(html, "<div class=\"dashboard-cell\" id=\"(dashboard-tile-[0-9]+)\"")
             .Select(match => match.Groups[1].Value).ToArray();
 
-        Assert.Equal(new[] { "dashboard-tile-1", "dashboard-tile-2", "dashboard-tile-3" }, ids);
+        Assert.Equal(new[] { "dashboard-tile-2", "dashboard-tile-3", "dashboard-tile-4" }, ids);
         Assert.Contains("<h3 id=\"dashboard-tile-0\"", html);
         Assert.Equal(1, CountOf(html, "id=\"dashboard-tile-0\""));
+        Assert.Contains("<blockquote>\n<h3 id=\"dashboard-tile-1\"", html);
+        Assert.Equal(1, CountOf(html, "id=\"dashboard-tile-1\""));
         var allIds = Regex.Matches(html, "\\bid=\"([^\"]+)\"")
             .Select(match => match.Groups[1].Value).ToArray();
         Assert.Equal(allIds.Length, allIds.Distinct(StringComparer.Ordinal).Count());
         Assert.Equal(html, await RenderPage(markdown, Options));
         Assert.Equal(3, CountOf(html, "<li class=\"dashboard-tile\" role=\"row\"><div class=\"dashboard-cell\""));
         Assert.Equal(3, CountOf(html, "role=\"gridcell\" aria-selected=\"false\""));
-        Assert.Contains("<div class=\"dashboard-cell\" id=\"dashboard-tile-1\" role=\"gridcell\" aria-selected=\"false\"><a class=\"dashboard-link\" href=\"https://mail.example.org\" target=\"_blank\" rel=\"noopener noreferrer\">", html);
+        Assert.Contains("<div class=\"dashboard-cell\" id=\"dashboard-tile-2\" role=\"gridcell\" aria-selected=\"false\"><a class=\"dashboard-link\" href=\"https://mail.example.org\" target=\"_blank\" rel=\"noopener noreferrer\">", html);
         Assert.Contains("<span class=\"dashboard-name\">Mail &amp; calendar</span><span class=\"dashboard-description\">mail.example.org</span>", html);
-        Assert.Contains("<div class=\"dashboard-cell\" id=\"dashboard-tile-3\" role=\"gridcell\" aria-selected=\"false\"><a class=\"dashboard-link\" href=\"Guide/Handbook.html\">", html);
+        Assert.Contains("<div class=\"dashboard-cell\" id=\"dashboard-tile-4\" role=\"gridcell\" aria-selected=\"false\"><a class=\"dashboard-link\" href=\"Guide/Handbook.html\">", html);
     }
 
     [Fact]

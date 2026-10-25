@@ -87,7 +87,7 @@ public static class Dashboard
 
         var blocks = document.ToList();
         var firstGroup = blocks.FindIndex(block => block is HeadingBlock { Level: 2 });
-        var usedIds = ReadHeadingIds(blocks.OfType<HeadingBlock>(), pipeline);
+        var usedIds = ReadHeadingIds(FindHeadingBlocks(blocks), pipeline);
         var introduction = firstGroup < 0 ? blocks : blocks.Take(firstGroup).ToList();
         foreach (var block in introduction) html.Append(RenderBlock(block, pipeline));
         html.AppendLine(RenderToolbar(options, firstGroup >= 0));
@@ -160,6 +160,16 @@ public static class Dashboard
             foreach (var heading in headings) renderer.Render(heading);
         }, pipeline);
         return HeadingIdRegex.Matches(rendered).Select(match => match.Groups["id"].Value).ToHashSet(StringComparer.Ordinal);
+    }
+
+    private static IEnumerable<HeadingBlock> FindHeadingBlocks(IEnumerable<Block> blocks)
+    {
+        foreach (var block in blocks)
+        {
+            if (block is HeadingBlock heading) yield return heading;
+            if (block is ContainerBlock container)
+                foreach (var nestedHeading in FindHeadingBlocks(container)) yield return nestedHeading;
+        }
     }
 
     private static string RenderToolbar(DashboardOptions options, bool hasGroups)
