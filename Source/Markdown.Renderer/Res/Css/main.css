@@ -2737,19 +2737,13 @@ th, td {
     border-top: 1px solid var(--border-subtle);
 }
 
+/* Page-wide credit in the bottom-left corner, aligned with the header brand. */
 .made-with-mdu {
-    margin-top: 3rem;
-    padding-top: 1.5rem;
+    padding: 0.75rem calc(var(--page-inset) + 1.5rem);
     border-top: 1px solid var(--border-subtle);
     color: var(--text-secondary);
     font-size: 0.8rem;
-}
-
-/* The page footer already draws the separator above the credit. */
-.page-footer + .made-with-mdu {
-    margin-top: 1.5rem;
-    padding-top: 0;
-    border-top: none;
+    text-align: start;
 }
 
 .made-with-mdu a {
