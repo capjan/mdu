@@ -96,7 +96,7 @@ public sealed class ServeCommand
         };
 
         var changes = Channel.CreateUnbounded<FileChange>();
-        using var watcher = new FileWatcherSet(_rootPath, changes.Writer);
+        using var watcher = new FileWatcherSet(_rootPath, _outputPath, changes.Writer);
         _watchers = watcher;
         try
         {
@@ -189,6 +189,8 @@ public sealed class ServeCommand
         SearchClientAsset.WriteTo(_outputPath);
         _searchIndexBuilder.Clear();
         graph.Visit(new LocalAssetsCopy(_rootPath, _outputPath));
+        // Register external OpenAPI watchers before PDF generation and page rendering.
+        RebuildDependencyIndex(graph);
         var pdfOutputPath = Path.Combine(_outputPath, "documentation.pdf");
         if (_pdfCommand.WriteSitePdfIfLinked(_rootPath, pdfOutputPath, graph) != 0)
             throw new InvalidOperationException("Could not render the documentation PDF.");
@@ -201,8 +203,6 @@ public sealed class ServeCommand
             _searchIndexBuilder,
             _navigationRoots);
         _siteMediaProviders = rendererVisitor.SiteMediaProviders;
-        // Register external OpenAPI watchers before rendering so startup changes are queued.
-        RebuildDependencyIndex(graph);
         graph.Visit(rendererVisitor);
         _searchIndexBuilder.WriteIndex(_outputPath);
         ReconcileGeneratedFiles(previousFiles);
@@ -714,15 +714,17 @@ public sealed class ServeCommand
     private sealed class FileWatcherSet : IDisposable
     {
         private readonly string _rootPath;
+        private readonly string _outputPath;
         private readonly ChannelWriter<FileChange> _writer;
         private readonly FileSystemWatcher _rootWatcher;
         private readonly Dictionary<string, FileSystemWatcher> _externalWatchers = new(PathComparer);
 
-        public FileWatcherSet(string rootPath, ChannelWriter<FileChange> writer)
+        public FileWatcherSet(string rootPath, string outputPath, ChannelWriter<FileChange> writer)
         {
             _rootPath = rootPath;
+            _outputPath = outputPath;
             _writer = writer;
-            _rootWatcher = Create(_rootPath, includeSubdirectories: true);
+            _rootWatcher = Create(_rootPath, includeSubdirectories: true, internalBufferSize: 64 * 1024);
         }
 
         public void UpdateExternalFiles(IEnumerable<string> specPaths, string? glossaryPath)
@@ -768,7 +770,7 @@ public sealed class ServeCommand
             _externalWatchers.Clear();
         }
 
-        private FileSystemWatcher Create(string path, bool includeSubdirectories)
+        private FileSystemWatcher Create(string path, bool includeSubdirectories, int? internalBufferSize = null)
         {
             var watcher = new FileSystemWatcher(path)
             {
@@ -777,14 +779,24 @@ public sealed class ServeCommand
                                NotifyFilters.LastWrite | NotifyFilters.Size,
                 EnableRaisingEvents = false
             };
+            if (internalBufferSize.HasValue) watcher.InternalBufferSize = internalBufferSize.Value;
 
-            watcher.Changed += (_, eventArgs) => _writer.TryWrite(new(eventArgs.FullPath, null, FileChangeKind.Changed));
-            watcher.Created += (_, eventArgs) => _writer.TryWrite(new(eventArgs.FullPath, null, FileChangeKind.Created));
-            watcher.Deleted += (_, eventArgs) => _writer.TryWrite(new(eventArgs.FullPath, null, FileChangeKind.Deleted));
-            watcher.Renamed += (_, eventArgs) => _writer.TryWrite(new(eventArgs.FullPath, eventArgs.OldFullPath, FileChangeKind.Renamed));
+            watcher.Changed += (_, eventArgs) => WriteChange(new(eventArgs.FullPath, null, FileChangeKind.Changed));
+            watcher.Created += (_, eventArgs) => WriteChange(new(eventArgs.FullPath, null, FileChangeKind.Created));
+            watcher.Deleted += (_, eventArgs) => WriteChange(new(eventArgs.FullPath, null, FileChangeKind.Deleted));
+            watcher.Renamed += (_, eventArgs) => WriteChange(new(eventArgs.FullPath, eventArgs.OldFullPath, FileChangeKind.Renamed));
             watcher.Error += (_, _) => _writer.TryWrite(new(_rootPath, null, FileChangeKind.Rescan));
             watcher.EnableRaisingEvents = true;
             return watcher;
+        }
+
+        private void WriteChange(FileChange change)
+        {
+            if (IsInsideDirectory(_rootPath, _outputPath) &&
+                (IsInsideDirectory(_outputPath, change.Path) ||
+                 change.OldPath is not null && IsInsideDirectory(_outputPath, change.OldPath))) return;
+
+            _writer.TryWrite(change);
         }
 
     }
