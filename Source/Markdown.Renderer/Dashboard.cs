@@ -36,6 +36,7 @@ public static class Dashboard
     private static readonly Regex CamelCaseBoundaryRegex = new("(?<=[a-z0-9])(?=[A-Z])", RegexOptions.Compiled);
     private static readonly Regex NonSlugCharactersRegex = new("[^a-z0-9]+", RegexOptions.Compiled);
     private static readonly Regex LeadingSeparatorRegex = new(@"\A\s*(?:[—–:|·-]\s*)?", RegexOptions.Compiled);
+    private static readonly Regex AnchorTagRegex = new("</?a\\b[^>]*>", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly char[] WordSeparators = [' ', '@', '-', '_', '.', '/', '&', '+'];
 
     public static string Styles => Resources.DashboardCssContent();
@@ -88,15 +89,24 @@ public static class Dashboard
         var introduction = firstGroup < 0 ? blocks : blocks.Take(firstGroup).ToList();
         foreach (var block in introduction) html.Append(RenderBlock(block, pipeline));
         html.AppendLine(RenderToolbar(options));
-        if (firstGroup < 0)
-        {
-            html.AppendLine("</div>");
-            return html.ToString();
-        }
+        if (firstGroup >= 0) html.Append(RenderGroups(blocks.Skip(firstGroup), pipeline, options));
 
+        // The filter script fills these containers, so they exist even on a dashboard without groups.
+        html.AppendLine("<section class=\"dashboard-pages\" id=\"dashboard-pages\" aria-labelledby=\"dashboard-pages-title\" hidden>");
+        html.AppendLine("<p class=\"dashboard-pages-title\" id=\"dashboard-pages-title\">Pages</p>");
+        html.AppendLine("<ul class=\"dashboard-pages-list\" id=\"dashboard-pages-list\"></ul>");
+        html.AppendLine("</section>");
+        html.AppendLine("<p class=\"dashboard-empty\" id=\"dashboard-empty\" hidden></p>");
+        html.AppendLine("</div>");
+        return html.ToString();
+    }
+
+    private static string RenderGroups(IEnumerable<Block> blocks, MarkdownPipeline pipeline, DashboardOptions options)
+    {
+        var html = new StringBuilder();
         html.AppendLine("<div class=\"dashboard-row\">");
         var groupOpen = false;
-        foreach (var block in blocks.Skip(firstGroup))
+        foreach (var block in blocks)
         {
             switch (block)
             {
@@ -122,12 +132,6 @@ public static class Dashboard
         }
 
         if (groupOpen) html.AppendLine("</section>");
-        html.AppendLine("</div>");
-        html.AppendLine("<section class=\"dashboard-pages\" id=\"dashboard-pages\" aria-labelledby=\"dashboard-pages-title\" hidden>");
-        html.AppendLine("<p class=\"dashboard-pages-title\" id=\"dashboard-pages-title\">Pages</p>");
-        html.AppendLine("<ul class=\"dashboard-pages-list\" id=\"dashboard-pages-list\"></ul>");
-        html.AppendLine("</section>");
-        html.AppendLine("<p class=\"dashboard-empty\" id=\"dashboard-empty\" hidden></p>");
         html.AppendLine("</div>");
         return html.ToString();
     }
@@ -184,7 +188,10 @@ public static class Dashboard
             if (subtitle.Length > 0) html.Append($"<span class=\"dashboard-description\">{subtitle}</span>");
             html.Append("</span>");
             if (options.Status && external) html.Append("<span class=\"dashboard-status\" role=\"img\" aria-label=\"Status unknown\"></span>");
-            html.AppendLine("</a></li>");
+            html.Append("</a>");
+            // Further paragraphs or nested lists of the item stay below the tile, outside its link.
+            if (tile.MoreHtml.Length > 0) html.Append($"<div class=\"dashboard-tile-more\">{tile.MoreHtml}</div>");
+            html.AppendLine("</li>");
         }
 
         html.AppendLine("</ul>");
@@ -196,7 +203,8 @@ public static class Dashboard
         if (item.FirstOrDefault() is not ParagraphBlock { Inline: { } inlines }) return null;
 
         var parts = inlines.ToList();
-        if (ReadTaskListLink(parts) is { } taskListTile) return taskListTile;
+        var more = string.Concat(item.Skip(1).Select(block => RenderBlock(block, pipeline)));
+        if (ReadTaskListLink(parts, pipeline) is { } taskListTile) return taskListTile with { MoreHtml = more };
         var linkIndex = parts.FindIndex(inline => inline is LinkInline { IsImage: false });
         if (linkIndex < 0) return null;
         var link = (LinkInline)parts[linkIndex];
@@ -208,28 +216,42 @@ public static class Dashboard
         var iconParts = before.Where(IsIcon).Concat(linkIcons).Take(1).ToList();
         var nameParts = linkChildren.Except(linkIcons).ToList();
 
-        var descriptionHtml = LeadingSeparatorRegex.Replace(RenderInlines(parts.Skip(linkIndex + 1), pipeline), string.Empty, 1).Trim();
         var plainName = PlainText(nameParts).Trim();
         return new DashboardTile(
             link.Url,
             link.Title,
             RenderInlines(nameParts, pipeline).Trim(),
             plainName,
-            descriptionHtml,
-            iconParts.Count == 0 ? null : $"<span class=\"dashboard-icon\">{RenderInlines(iconParts, pipeline).Trim()}</span>");
+            RenderDescription(string.Empty, parts.Skip(linkIndex + 1), pipeline),
+            iconParts.Count == 0 ? null : $"<span class=\"dashboard-icon\">{RenderInlines(iconParts, pipeline).Trim()}</span>",
+            more);
+    }
+
+    /// <summary>
+    /// Renders the subtitle after a tile's link. A link cannot contain another link, so links in the subtitle keep only
+    /// their text.
+    /// </summary>
+    private static string RenderDescription(string leadingText, IEnumerable<Inline> inlines, MarkdownPipeline pipeline)
+    {
+        // Escapes like Markdig does, so a leading dash stays a character that the separator pattern recognizes.
+        var html = leadingText.Replace("&", "&amp;", StringComparison.Ordinal).Replace("<", "&lt;", StringComparison.Ordinal)
+                       .Replace(">", "&gt;", StringComparison.Ordinal).Replace("\"", "&quot;", StringComparison.Ordinal)
+                   + RenderInlines(inlines, pipeline);
+        return LeadingSeparatorRegex.Replace(AnchorTagRegex.Replace(html, string.Empty), string.Empty, 1).Trim();
     }
 
     /// <summary>
     /// Reads <c>- [X](https://x.com)</c>, which Markdown parses as a checked task followed by an automatic link.
     /// </summary>
-    private static DashboardTile? ReadTaskListLink(IReadOnlyList<Inline> parts)
+    private static DashboardTile? ReadTaskListLink(IReadOnlyList<Inline> parts, MarkdownPipeline pipeline)
     {
         if (parts is not [TaskList task, LiteralInline open, LinkInline { IsAutoLink: true } link, LiteralInline close, ..] ||
             open.Content.ToString() != "(" || !close.Content.ToString().StartsWith(')') || string.IsNullOrWhiteSpace(link.Url))
             return null;
 
         var name = task.Checked ? "X" : " ";
-        return new DashboardTile(link.Url, null, name, name, string.Empty, null);
+        var description = RenderDescription(close.Content.ToString()[1..], parts.Skip(4), pipeline);
+        return new DashboardTile(link.Url, null, name, name, description, null, string.Empty);
     }
 
     private static bool IsIcon(Inline inline) =>
@@ -371,5 +393,6 @@ public static class Dashboard
         string NameHtml,
         string PlainName,
         string Description,
-        string? IconHtml);
+        string? IconHtml,
+        string MoreHtml);
 }

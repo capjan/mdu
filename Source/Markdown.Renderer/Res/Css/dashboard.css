@@ -225,6 +225,22 @@
     content: none;
 }
 
+/* Further paragraphs or nested lists of a tile's list item. */
+.dashboard-tile:has(.dashboard-tile-more) > a.dashboard-link {
+    height: auto;
+}
+
+.dashboard-tile-more {
+    margin: 0.35rem 0.4rem 0;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    line-height: 1.45;
+}
+
+.markdown-content .dashboard-tile-more > :is(p, ul, ol) {
+    margin: 0.2rem 0;
+}
+
 .dashboard-note {
     padding: 0.5rem 0.25rem;
     color: var(--text-secondary);

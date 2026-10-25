@@ -81,6 +81,55 @@ public class DashboardTest
         Assert.DoesNotContain("class=\"on-this-page\"", html);
     }
 
+    [Fact]
+    public async Task RendersTheResultContainersWithoutGroups()
+    {
+        var html = await RenderPage("# Start\n\nOnly an introduction.\n", Options);
+
+        Assert.Contains("<input id=\"dashboard-search-input\"", html);
+        Assert.Contains("<ul class=\"dashboard-pages-list\" id=\"dashboard-pages-list\"></ul>", html);
+        Assert.Contains("<p class=\"dashboard-empty\" id=\"dashboard-empty\" hidden></p>", html);
+        Assert.DoesNotContain("<div class=\"dashboard-row\">", html);
+    }
+
+    [Fact]
+    public async Task KeepsOnlyTheTextOfLinksInASubtitle()
+    {
+        var html = await RenderPage(
+            "# Start\n\n## Work\n\n- [Portal](https://portal.example.org) — [Help](https://help.example.org) and *more*\n",
+            Options);
+
+        Assert.Contains("<span class=\"dashboard-description\">Help and <em>more</em></span>", html);
+        Assert.DoesNotContain("help.example.org", html);
+    }
+
+    [Fact]
+    public async Task KeepsFurtherBlocksOfATileBelowItsLink()
+    {
+        var html = await RenderPage("""
+            # Start
+
+            ## Work
+
+            - [Portal](https://portal.example.org) — Intranet
+
+              Opens with the company account.
+
+              - [Status](https://status.example.org)
+            """, Options);
+
+        Assert.Contains("</a><div class=\"dashboard-tile-more\"><p>Opens with the company account.</p>", html);
+        Assert.Contains("<a href=\"https://status.example.org\">Status</a>", html);
+    }
+
+    [Fact]
+    public async Task KeepsTheSubtitleOfAnXTile()
+    {
+        var html = await RenderPage("# Start\n\n## Social\n\n- [X](https://x.com) — Social media\n", Options);
+
+        Assert.Contains("<span class=\"dashboard-name\">X</span><span class=\"dashboard-description\">Social media</span>", html);
+    }
+
     [Theory]
     [InlineData("GitHub", "github.com", "dashboard-github")]
     [InlineData("Christians GitLab", "gitlab.example.org", "dashboard-gitlab")]
@@ -109,6 +158,8 @@ public class DashboardTest
         Assert.DoesNotContain(" is-dashboard\"", html);
         Assert.Contains("<li><a href=\"https://mail.google.com\">Mail</a></li>", html);
     }
+
+    private static readonly DashboardOptions Options = new("https://duckduckgo.com/?q={query}", true, false, true);
 
     private static async Task<string> RenderPage(string markdown, DashboardOptions? dashboard)
     {
