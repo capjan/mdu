@@ -200,7 +200,7 @@
     display: none;
 }
 
-.dashboard-group > p {
+.dashboard-group > [role="row"] > [role="gridcell"] > p {
     margin: -0.4rem 0 0.75rem;
     color: var(--text-secondary);
     font-size: 0.875rem;
@@ -225,8 +225,12 @@
     content: none;
 }
 
+.dashboard-cell {
+    height: 100%;
+}
+
 /* Further paragraphs or nested lists of a tile's list item. */
-.dashboard-tile:has(.dashboard-tile-more) > a.dashboard-link {
+.dashboard-tile:has(.dashboard-tile-more) a.dashboard-link {
     height: auto;
 }
 
