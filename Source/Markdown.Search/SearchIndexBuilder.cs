@@ -50,10 +50,20 @@ public sealed class SearchIndexBuilder
         var document = Markdig.Markdown.Parse(markdown, _pipeline);
         var codeBySection = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         var sectionId = string.Empty;
+        var sectionIdBeforeOpenApiBlock = string.Empty;
         foreach (var item in document.Descendants().ToArray())
         {
             if (item is HeadingBlock heading)
                 sectionId = heading.GetAttributes().Id ?? string.Empty;
+            else if (item is HtmlBlock htmlBlock)
+            {
+                // Code after an API reference belongs to the section that contains the reference, not to its last operation.
+                var blockHtml = htmlBlock.Lines.ToString();
+                if (blockHtml.Contains(OpenApiMarkdownRenderer.BlockStartMarker, StringComparison.Ordinal))
+                    sectionIdBeforeOpenApiBlock = sectionId;
+                if (blockHtml.Contains(OpenApiMarkdownRenderer.BlockEndMarker, StringComparison.Ordinal))
+                    sectionId = sectionIdBeforeOpenApiBlock;
+            }
 
             if (item is CodeInline inline)
             {
@@ -79,8 +89,12 @@ public sealed class SearchIndexBuilder
 
         var introduction = ExtractText(html[..headings[0].Index]);
         var introductionCode = codeBySection.GetValueOrDefault(string.Empty);
+        var entryOutsideOpenApi = -1;
         if (!string.IsNullOrWhiteSpace(introduction) || introductionCode is { Count: > 0 })
+        {
             AddEntry(title, string.Empty, url, introduction, introductionCode);
+            entryOutsideOpenApi = _entries.Count - 1;
+        }
 
         // Parameters, responses, examples, schemas and description headings of an API operation belong to the
         // operation's entry, so a search finds the operation once instead of each of its sections.
@@ -92,7 +106,17 @@ public sealed class SearchIndexBuilder
             var attributes = heading.Groups["attributes"].Value;
             var contentStart = heading.Index + heading.Length;
             var contentEnd = index + 1 < headings.Length ? headings[index + 1].Index : html.Length;
-            var inOpenApiBlock = openApiBlocks.Any(block => heading.Index >= block.Start && heading.Index < block.End);
+            var openApiBlock = openApiBlocks.FirstOrDefault(block => heading.Index >= block.Start && heading.Index < block.End);
+            var inOpenApiBlock = openApiBlock != default;
+            if (inOpenApiBlock && contentEnd > openApiBlock.End)
+            {
+                // Text after the reference and before the next heading belongs to the section that contains the reference.
+                var afterBlock = ExtractText(html[(openApiBlock.End + OpenApiMarkdownRenderer.BlockEndMarker.Length)..contentEnd]);
+                if (entryOutsideOpenApi >= 0) AppendToEntry(entryOutsideOpenApi, afterBlock, null);
+                else if (!string.IsNullOrWhiteSpace(afterBlock)) AddEntry(title, string.Empty, url, afterBlock, null);
+                contentEnd = openApiBlock.End;
+            }
+
             if (operationEntry >= 0 && inOpenApiBlock && !OpenApiSectionClassRegex.IsMatch(attributes))
             {
                 var sectionText = $"{ExtractText(heading.Groups["title"].Value)} {ExtractText(html[contentStart..contentEnd])}";
@@ -112,6 +136,8 @@ public sealed class SearchIndexBuilder
             AddEntry(title, section, sectionUrl, text, codeBySection.GetValueOrDefault(idMatch.Groups["id"].Value));
             if (inOpenApiBlock && OperationClassRegex.IsMatch(attributes))
                 operationEntry = _entries.Count - 1;
+            else if (!inOpenApiBlock)
+                entryOutsideOpenApi = _entries.Count - 1;
         }
     }
 

@@ -330,6 +330,94 @@ public class SearchIndexBuilderTest
         Assert.DoesNotContain("token-xyz", widget.GetProperty("text").GetString());
     }
 
+    [Fact]
+    public void KeepsProseAfterAnOpenApiBlockInTheSectionAroundTheBlock()
+    {
+        const string markdown = """
+            # API guide
+
+            Intro.
+
+            ```openapi
+            openapi: 3.1.0
+            info:
+              title: Inline API
+              version: 1.0.0
+            paths:
+              /gadgets:
+                get:
+                  summary: List gadgets
+                  responses:
+                    '200':
+                      description: Gadget list
+            ```
+
+            Post-block paragraph with `post-token`.
+
+            ## Next steps
+
+            Continue reading.
+            """;
+
+        var expanded = OpenApiMarkdownRenderer.ExpandCodeBlocks(
+            markdown,
+            Path.Combine(Path.GetTempPath(), "search-openapi-after-block.md"),
+            includeSpecificationPageLink: false);
+        var entries = BuildIndex(expanded);
+
+        var gadgets = Assert.Single(entries, entry => entry.GetProperty("section").GetString()!.StartsWith("GET /gadgets", StringComparison.Ordinal));
+        Assert.DoesNotContain("Post-block paragraph", gadgets.GetProperty("text").GetString());
+        Assert.DoesNotContain("post-token", gadgets.GetProperty("code").GetString());
+        var guide = Assert.Single(entries, entry => entry.GetProperty("url").GetString() == "guide.html#api-guide");
+        Assert.Contains("Post-block paragraph", guide.GetProperty("text").GetString());
+        Assert.Contains("post-token", guide.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public void KeepsTwoOpenApiBlocksOnOnePageApart()
+    {
+        const string markdown = """
+            # API guide
+
+            ```openapi
+            openapi: 3.1.0
+            info: { title: First API, version: 1.0.0 }
+            paths:
+              /v1/widgets:
+                get:
+                  summary: List widgets
+                  responses:
+                    '200': { description: Widget list }
+            ```
+
+            Between the references.
+
+            ```openapi
+            openapi: 3.1.0
+            info: { title: Second API, version: 1.0.0 }
+            paths:
+              /v2/gadgets:
+                get:
+                  summary: List gadgets
+                  responses:
+                    '200': { description: Gadget list }
+            ```
+            """;
+
+        var expanded = OpenApiMarkdownRenderer.ExpandCodeBlocks(
+            markdown,
+            Path.Combine(Path.GetTempPath(), "search-openapi-two-blocks.md"),
+            includeSpecificationPageLink: false);
+        var entries = BuildIndex(expanded);
+
+        var widgets = Assert.Single(entries, entry => entry.GetProperty("section").GetString()!.StartsWith("GET /v1/widgets", StringComparison.Ordinal));
+        var gadgets = Assert.Single(entries, entry => entry.GetProperty("section").GetString()!.StartsWith("GET /v2/gadgets", StringComparison.Ordinal));
+        Assert.DoesNotContain("Between the references", widgets.GetProperty("text").GetString());
+        Assert.DoesNotContain("Gadget list", widgets.GetProperty("text").GetString());
+        Assert.DoesNotContain("Widget list", gadgets.GetProperty("text").GetString());
+        Assert.Contains(entries, entry => entry.GetProperty("text").GetString()!.Contains("Between the references", StringComparison.Ordinal));
+    }
+
     private static JsonElement[] BuildIndex(string markdown)
     {
         var outputPath = Path.Combine(Path.GetTempPath(), $"mdu-search-test-{Guid.NewGuid():N}");
