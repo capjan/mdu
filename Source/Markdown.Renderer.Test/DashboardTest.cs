@@ -222,16 +222,46 @@ public class DashboardTest
 
     [Theory]
     [InlineData("GitHub", "github.com", "dashboard-github")]
+    [InlineData("NuGet", "www.nuget.org", "simple-nuget")]
+    [InlineData("Docker Hub", "hub.docker.com", "dashboard-docker")]
+    [InlineData("Markdig", "github.com", "dashboard-github")]
+    [InlineData("Mermaid", "mermaid.js.org", "dashboard-mermaid")]
+    [InlineData("Visual Studio Code", "code.visualstudio.com", "dashboard-visual-studio-code")]
+    [InlineData("Docker", "www.docker.com", "dashboard-docker")]
+    [InlineData("Repository", "gitlab.com", "dashboard-gitlab")]
+    [InlineData("Inbox", "gmail.com", "dashboard-gmail")]
     [InlineData("Christians GitLab", "gitlab.example.org", "dashboard-gitlab")]
     [InlineData("Xq Zw", "github.com", "dashboard-github")]
     [InlineData("Material Design Icons", "pictogrammers.com", "dashboard-material-design-icons")]
-    [InlineData("Mermaid", "mermaid.js.org", "dashboard-mermaid")]
     [InlineData("Anthropic", "anthropic.com", "dashboard-anthropic")]
     [InlineData("Astro", "astro.build", "dashboard-astro")]
     [InlineData("Framer", "framer.com", "dashboard-framer")]
     [InlineData("Railway", "railway.app", "dashboard-railway")]
-    [InlineData("Docker", "docker.com", "dashboard-docker")]
-    [InlineData("Visual Studio Code", "code.visualstudio.com", "dashboard-visual-studio-code")]
+    [InlineData("GitLab", "github.com", "dashboard-github")]
+    [InlineData("Inbox", "mail.google.com", "dashboard-gmail")]
+    [InlineData("Documents", "docs.google.com", "dashboard-google-docs")]
+    [InlineData("Files", "drive.google.com", "dashboard-google-drive")]
+    [InlineData("Schedule", "calendar.google.com", "dashboard-google-calendar")]
+    [InlineData("Assistant", "gemini.google.com", "dashboard-google-gemini")]
+    [InlineData("Packages", "www.nuget.org", "simple-nuget")]
+    [InlineData("Package Home", "nuget.org", "simple-nuget")]
+    [InlineData("Music", "open.spotify.com", "dashboard-spotify")]
+    [InlineData("GitHub Docs", "docs.github.com", "dashboard-github")]
+    [InlineData("Claude", "claude.ai", "dashboard-claude-ai")]
+    [InlineData("Home Assistant", "192.168.1.2", "dashboard-home-assistant")]
+    [InlineData("Nextcloud", "cloud.example.org", "dashboard-nextcloud")]
+    [InlineData("Grafana", "grafana.example.org", "dashboard-grafana")]
+    [InlineData("Portainer", "portainer.local", "dashboard-portainer")]
+    [InlineData("Proxmox", "192.168.1.3", "dashboard-proxmox")]
+    [InlineData("Jellyfin", "media.example.org", "dashboard-jellyfin")]
+    [InlineData("YouTube", "www.youtube.com", "dashboard-youtube")]
+    [InlineData("Perplexity", "perplexity.ai", "dashboard-perplexity")]
+    [InlineData("ChatGPT", "chatgpt.com", "dashboard-chatgpt")]
+    [InlineData("Stack Overflow", "stackoverflow.com", "simple-stackoverflow")]
+    [InlineData("Dashboard Icons", "dashboardicons.com", "dashboard-dashboard-icons")]
+    [InlineData("Simple Icons", "simpleicons.org", "simple-simpleicons")]
+    [InlineData("GitHub", "", "dashboard-github")]
+    [InlineData("Inbox", "MAIL.GOOGLE.COM.", "dashboard-gmail")]
     public void PicksADashboardIconFromTheNameOrHost(string name, string host, string shortcode)
     {
         var html = Dashboard.RenderAutomaticIcon(name, host);
@@ -245,6 +275,39 @@ public class DashboardTest
     {
         Assert.Contains(">QX</span>", Dashboard.RenderAutomaticIcon("Qwrt@Xyzzy", "xyzzy.invalid"));
         Assert.Contains(">Qz</span>", Dashboard.RenderAutomaticIcon("Qzxv", string.Empty));
+    }
+
+    [Theory]
+    [InlineData("Apple Storage", "storage.example.org", "AS")]
+    [InlineData("Amazon Home", "home.example.org", "AH")]
+    [InlineData("My GitHub", "example.org", "MG")]
+    [InlineData("My GitHub", "github-mirror.example.org", "MG")]
+    [InlineData("My GitHub", "", "MG")]
+    [InlineData("Inbox", "mail.google.com.example.org", "In")]
+    [InlineData("Portal", "team.github.io", "Po")]
+    [InlineData("Portal", "amazon.co.uk", "Po")]
+    [InlineData("DevDocs", "devdocs.io", "De")]
+    [InlineData("Artificial Analysis", "artificialanalysis.ai", "AA")]
+    [InlineData("CommonMark", "commonmark.org", "Co")]
+    [InlineData("Typora", "typora.io", "Ty")]
+    [InlineData("Octicons", "primer.style", "Oc")]
+    public void UsesInitialsInsteadOfGuessingAnUnrelatedLogo(string name, string host, string initials)
+    {
+        var html = Dashboard.RenderAutomaticIcon(name, host);
+
+        Assert.Contains("dashboard-monogram", html);
+        Assert.Contains($">{initials}</span>", html);
+        Assert.DoesNotContain("<svg", html);
+    }
+
+    [Fact]
+    public async Task ExplicitIconsOverrideKnownHosts()
+    {
+        var html = await RenderPage("## Tools\n\n- :simple-rider: [IDE](https://github.com)\n", Options);
+
+        Assert.True(StaticCode.Icons.IconCatalog.TryGetIcon("simple-rider", out var icon));
+        Assert.Contains($"<span class=\"dashboard-icon\"><span class=\"icon\">{icon.ToSvg()}", html);
+        Assert.DoesNotContain("class=\"dashboard-icon dashboard-monogram\"", html);
     }
 
     [Fact]

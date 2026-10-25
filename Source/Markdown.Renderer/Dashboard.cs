@@ -33,6 +33,25 @@ public static class Dashboard
         ["startpage"] = "https://www.startpage.com/do/search?q={query}",
         ["ecosia"] = "https://www.ecosia.org/search?q={query}"
     };
+    // Exact hosts only: shared hosting domains and unrelated subdomains must not inherit a service logo.
+    private static readonly Dictionary<string, string> HostIcons = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["github.com"] = "github",
+        ["gitlab.com"] = "gitlab",
+        ["nuget.org"] = "nuget",
+        ["docker.com"] = "docker",
+        ["hub.docker.com"] = "docker",
+        ["code.visualstudio.com"] = "visual-studio-code",
+        ["mermaid.js.org"] = "mermaid",
+        ["mail.google.com"] = "gmail",
+        ["gmail.com"] = "gmail",
+        ["docs.google.com"] = "google-docs",
+        ["drive.google.com"] = "google-drive",
+        ["calendar.google.com"] = "google-calendar",
+        ["gemini.google.com"] = "google-gemini",
+        ["open.spotify.com"] = "spotify",
+        ["claude.ai"] = "claude-ai"
+    };
     private static readonly Regex CamelCaseBoundaryRegex = new("(?<=[a-z0-9])(?=[A-Z])", RegexOptions.Compiled);
     private static readonly Regex NonSlugCharactersRegex = new("[^a-z0-9]+", RegexOptions.Compiled);
     private static readonly Regex LeadingSeparatorRegex = new(@"\A\s*(?:[—–:|·-]\s*)?", RegexOptions.Compiled);
@@ -301,15 +320,17 @@ public static class Dashboard
         inline is IconInline or EmojiShortcodeInline or LinkInline { IsImage: true };
 
     /// <summary>
-    /// Picks a Dashboard Icon from the tile name or the host name, for example <c>dashboard-github</c> for
-    /// <c>github.com</c>, and falls back to the initials of the name.
+    /// Picks an icon from a known host, the full tile name, or a name word confirmed by a host label,
+    /// and falls back to the initials of the name.
     /// </summary>
     internal static string RenderAutomaticIcon(string name, string host)
     {
-        // Colored Dashboard Icons come first; the monochrome Simple Icons cover many developer services they lack.
-        var candidates = IconCandidates(name, host).ToList();
-        var shortcodes = candidates.Select(candidate => "dashboard-" + candidate)
-            .Concat(candidates.Select(candidate => "simple-" + candidate.Replace("-", string.Empty, StringComparison.Ordinal)));
+        // Keep candidate priority across both sets: a weaker colored match must not beat a known host.
+        var shortcodes = IconCandidates(name, host).SelectMany(candidate => new[]
+        {
+            "dashboard-" + candidate,
+            "simple-" + candidate.Replace("-", string.Empty, StringComparison.Ordinal)
+        });
         foreach (var shortcode in shortcodes)
         {
             if (IconCatalog.TryGetIcon(shortcode, out var icon))
@@ -339,21 +360,19 @@ public static class Dashboard
             if (slug.Length > 0 && !candidates.Contains(slug)) candidates.Add(slug);
         }
 
+        host = host.TrimEnd('.');
+        if (host.StartsWith("www.", StringComparison.OrdinalIgnoreCase)) host = host[4..];
+        if (HostIcons.TryGetValue(host, out var hostIcon)) Add(hostIcon);
+
         Add(name.Replace("+", " plus", StringComparison.Ordinal));
         Add(CamelCaseBoundaryRegex.Replace(name, "-"));
         Add(name.Replace(" ", string.Empty, StringComparison.Ordinal));
-        if (!name.Contains(' ', StringComparison.Ordinal)) Add(name + "-ai");
 
-        var labels = host.Split('.', StringSplitOptions.RemoveEmptyEntries);
-        if (labels.Length >= 2)
-        {
-            var domain = labels[^2];
-            if (labels.Length >= 3) Add($"{domain}-{labels[^3]}");
-            Add(domain);
-        }
-
+        // A host label corroborates a word such as GitLab in "Christians GitLab". Do not guess from an
+        // arbitrary word or the penultimate domain label (which may be a public suffix or shared host).
+        var labels = host.Split('.', StringSplitOptions.RemoveEmptyEntries).SkipLast(1).ToArray();
         foreach (var word in name.Split(WordSeparators, StringSplitOptions.RemoveEmptyEntries).OrderByDescending(word => word.Length))
-            if (word.Length > 3) Add(word);
+            if (word.Length > 3 && labels.Contains(word, StringComparer.OrdinalIgnoreCase)) Add(word);
 
         return candidates;
     }

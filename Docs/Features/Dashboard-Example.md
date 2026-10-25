@@ -39,6 +39,6 @@ A start page written as a Markdown link list. Type to filter the tiles or to fin
 ## Tools
 
 - [Visual Studio Code](https://code.visualstudio.com)
-- [JetBrains Rider](https://www.jetbrains.com/rider/)
+- :simple-rider: [JetBrains Rider](https://www.jetbrains.com/rider/)
 - [Docker](https://www.docker.com)
 - [Typora](https://typora.io)
