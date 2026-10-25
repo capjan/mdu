@@ -200,10 +200,10 @@ public sealed class ServeCommand
             _searchIndexBuilder,
             _navigationRoots);
         _siteMediaProviders = rendererVisitor.SiteMediaProviders;
+        // Index dependencies before serving rendered pages so file changes cannot race index construction.
+        RebuildDependencyIndex(graph);
         graph.Visit(rendererVisitor);
         _searchIndexBuilder.WriteIndex(_outputPath);
-
-        RebuildDependencyIndex(graph);
         ReconcileGeneratedFiles(previousFiles);
         Console.WriteLine("Site updated.");
     }
