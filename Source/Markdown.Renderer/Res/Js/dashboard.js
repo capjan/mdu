@@ -17,6 +17,11 @@
     const groups = [...dashboard.querySelectorAll(".dashboard-group")];
     const rows = [...dashboard.querySelectorAll(".dashboard-row")];
     const opensNewTab = (link) => link.target === "_blank";
+    const isVisibleInResults = (element) => {
+        for (let current = element; current && current !== resultsGrid; current = current.parentElement)
+            if (current.hidden) return false;
+        return true;
+    };
 
     // Markdown headings can claim the same generated IDs, so keep the referenced cells unique in the final page.
     for (const [index, tile] of tiles.entries()) {
@@ -147,7 +152,8 @@
 
     // The selected tile or page is what Enter opens; the arrow keys move the selection.
     let selected = null;
-    const selectable = () => [...dashboard.querySelectorAll(".dashboard-tile:not([hidden]) a.dashboard-link, a.dashboard-page")];
+    const selectable = () => [...dashboard.querySelectorAll(".dashboard-tile:not([hidden]) a.dashboard-link, a.dashboard-page")]
+        .filter(isVisibleInResults);
 
     // The hints name actions, not results, so the row keeps its width while the arrow keys move the selection.
     const renderHints = (items = selectable()) => {
@@ -328,7 +334,7 @@
 
         const items = selectable();
         select(terms.length === 0 ? null : first?.link ?? pagesList.querySelector("a.dashboard-page"), false, items);
-        resultsGrid.hidden = !resultsGrid.querySelector('[role="rowgroup"]:not([hidden])');
+        resultsGrid.hidden = ![...resultsGrid.querySelectorAll('[role="rowgroup"]')].some(isVisibleInResults);
         input.setAttribute("aria-expanded", String(!resultsGrid.hidden));
 
         const count = items.length;

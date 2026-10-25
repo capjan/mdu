@@ -115,6 +115,8 @@ public class DashboardTest
 
             ## Work
 
+            ### Dashboard Tile 0
+
             - [Mail & calendar](https://mail.example.org)
             - A note
 
@@ -129,16 +131,21 @@ public class DashboardTest
             - [Handbook](Guide/Handbook.md)
             """;
         var html = await RenderPage(markdown, Options);
-        var ids = Regex.Matches(html, "id=\"(dashboard-tile-[0-9]+)\"")
+        var ids = Regex.Matches(html, "<div class=\"dashboard-cell\" id=\"(dashboard-tile-[0-9]+)\"")
             .Select(match => match.Groups[1].Value).ToArray();
 
-        Assert.Equal(new[] { "dashboard-tile-0", "dashboard-tile-1", "dashboard-tile-2" }, ids);
+        Assert.Equal(new[] { "dashboard-tile-1", "dashboard-tile-2", "dashboard-tile-3" }, ids);
+        Assert.Contains("<h3 id=\"dashboard-tile-0\"", html);
+        Assert.Equal(1, CountOf(html, "id=\"dashboard-tile-0\""));
+        var allIds = Regex.Matches(html, "\\bid=\"([^\"]+)\"")
+            .Select(match => match.Groups[1].Value).ToArray();
+        Assert.Equal(allIds.Length, allIds.Distinct(StringComparer.Ordinal).Count());
         Assert.Equal(html, await RenderPage(markdown, Options));
         Assert.Equal(3, CountOf(html, "<li class=\"dashboard-tile\" role=\"row\"><div class=\"dashboard-cell\""));
         Assert.Equal(3, CountOf(html, "role=\"gridcell\" aria-selected=\"false\""));
-        Assert.Contains("<div class=\"dashboard-cell\" id=\"dashboard-tile-0\" role=\"gridcell\" aria-selected=\"false\"><a class=\"dashboard-link\" href=\"https://mail.example.org\" target=\"_blank\" rel=\"noopener noreferrer\">", html);
+        Assert.Contains("<div class=\"dashboard-cell\" id=\"dashboard-tile-1\" role=\"gridcell\" aria-selected=\"false\"><a class=\"dashboard-link\" href=\"https://mail.example.org\" target=\"_blank\" rel=\"noopener noreferrer\">", html);
         Assert.Contains("<span class=\"dashboard-name\">Mail &amp; calendar</span><span class=\"dashboard-description\">mail.example.org</span>", html);
-        Assert.Contains("<div class=\"dashboard-cell\" id=\"dashboard-tile-2\" role=\"gridcell\" aria-selected=\"false\"><a class=\"dashboard-link\" href=\"Guide/Handbook.html\">", html);
+        Assert.Contains("<div class=\"dashboard-cell\" id=\"dashboard-tile-3\" role=\"gridcell\" aria-selected=\"false\"><a class=\"dashboard-link\" href=\"Guide/Handbook.html\">", html);
     }
 
     [Fact]
@@ -153,6 +160,10 @@ public class DashboardTest
 
             - [Mail](https://mail.example.org) — Inbox
 
+            ---
+
+            Content between rows.
+
             ## Reference
 
             - A note
@@ -160,6 +171,7 @@ public class DashboardTest
 
         Assert.Contains("<section class=\"dashboard-group\" role=\"rowgroup\">\n<div role=\"row\"><div role=\"gridcell\">\n<h2", html);
         Assert.Contains("<div role=\"row\"><div role=\"gridcell\"><ul>\n<li>A note</li>", html);
+        Assert.Contains("<div role=\"rowgroup\">\n<div role=\"row\"><div role=\"gridcell\">\n<p>Content between rows.</p>", html);
         Assert.Contains("<span class=\"dashboard-status\" role=\"img\" aria-label=\"Status unknown\"></span>", html);
         Assert.Contains("class=\"dashboard-description\">Inbox</span>", html);
         Assert.DoesNotContain("role=\"region\"", html);

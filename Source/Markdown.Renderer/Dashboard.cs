@@ -37,6 +37,7 @@ public static class Dashboard
     private static readonly Regex NonSlugCharactersRegex = new("[^a-z0-9]+", RegexOptions.Compiled);
     private static readonly Regex LeadingSeparatorRegex = new(@"\A\s*(?:[—–:|·-]\s*)?", RegexOptions.Compiled);
     private static readonly Regex AnchorTagRegex = new("</?a\\b[^>]*>", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex HeadingIdRegex = new("<h[1-6][^>]*\\bid=\"(?<id>[^\"]+)\"", RegexOptions.Compiled);
     private static readonly char[] WordSeparators = [' ', '@', '-', '_', '.', '/', '&', '+'];
 
     public static string Styles => Resources.DashboardCssContent();
@@ -86,11 +87,12 @@ public static class Dashboard
 
         var blocks = document.ToList();
         var firstGroup = blocks.FindIndex(block => block is HeadingBlock { Level: 2 });
+        var usedIds = ReadHeadingIds(blocks.OfType<HeadingBlock>(), pipeline);
         var introduction = firstGroup < 0 ? blocks : blocks.Take(firstGroup).ToList();
         foreach (var block in introduction) html.Append(RenderBlock(block, pipeline));
         html.AppendLine(RenderToolbar(options, firstGroup >= 0));
         html.AppendLine($"<div id=\"dashboard-results\" role=\"grid\" aria-label=\"Links and pages\" aria-readonly=\"true\"{(firstGroup < 0 ? " hidden" : string.Empty)}>");
-        if (firstGroup >= 0) html.Append(RenderGroups(blocks.Skip(firstGroup), pipeline, options));
+        if (firstGroup >= 0) html.Append(RenderGroups(blocks.Skip(firstGroup), pipeline, options, usedIds));
 
         // The filter script fills these containers, so they exist even on a dashboard without groups.
         html.AppendLine("<div class=\"dashboard-pages\" id=\"dashboard-pages\" role=\"rowgroup\" aria-label=\"Pages\" hidden>");
@@ -103,7 +105,7 @@ public static class Dashboard
         return html.ToString();
     }
 
-    private static string RenderGroups(IEnumerable<Block> blocks, MarkdownPipeline pipeline, DashboardOptions options)
+    private static string RenderGroups(IEnumerable<Block> blocks, MarkdownPipeline pipeline, DashboardOptions options, HashSet<string> usedIds)
     {
         var html = new StringBuilder();
         html.AppendLine("<div class=\"dashboard-row\" role=\"presentation\">");
@@ -128,11 +130,11 @@ public static class Dashboard
                     html.AppendLine("</div></div>");
                     break;
                 case ListBlock list:
-                    if (groupOpen) html.Append(RenderTiles(list, pipeline, options, ref tileIndex));
+                    if (groupOpen) html.Append(RenderTiles(list, pipeline, options, usedIds, ref tileIndex));
                     else
                     {
                         html.AppendLine("<div role=\"rowgroup\">");
-                        html.Append(RenderTiles(list, pipeline, options, ref tileIndex));
+                        html.Append(RenderTiles(list, pipeline, options, usedIds, ref tileIndex));
                         html.AppendLine("</div>");
                     }
                     break;
@@ -149,6 +151,15 @@ public static class Dashboard
         if (groupOpen) html.AppendLine("</section>");
         html.AppendLine("</div>");
         return html.ToString();
+    }
+
+    private static HashSet<string> ReadHeadingIds(IEnumerable<HeadingBlock> headings, MarkdownPipeline pipeline)
+    {
+        var rendered = Render(renderer =>
+        {
+            foreach (var heading in headings) renderer.Render(heading);
+        }, pipeline);
+        return HeadingIdRegex.Matches(rendered).Select(match => match.Groups["id"].Value).ToHashSet(StringComparer.Ordinal);
     }
 
     private static string RenderToolbar(DashboardOptions options, bool hasGroups)
@@ -170,7 +181,7 @@ public static class Dashboard
         return html.ToString();
     }
 
-    private static string RenderTiles(ListBlock list, MarkdownPipeline pipeline, DashboardOptions options, ref int tileIndex)
+    private static string RenderTiles(ListBlock list, MarkdownPipeline pipeline, DashboardOptions options, HashSet<string> usedIds, ref int tileIndex)
     {
         var tiles = list.OfType<ListItemBlock>().Select(item => ReadTile(item, pipeline)).ToList();
         if (tiles.Count == 0 || tiles.All(tile => tile is null))
@@ -194,8 +205,12 @@ public static class Dashboard
                 ? tile.Description
                 : HtmlEncoder.Default.Encode(host);
 
+            string id;
+            do id = $"dashboard-tile-{tileIndex++}";
+            while (!usedIds.Add(id));
+
             html.Append("<li class=\"dashboard-tile\" role=\"row\">");
-            html.Append($"<div class=\"dashboard-cell\" id=\"dashboard-tile-{tileIndex++}\" role=\"gridcell\" aria-selected=\"false\">");
+            html.Append($"<div class=\"dashboard-cell\" id=\"{id}\" role=\"gridcell\" aria-selected=\"false\">");
             html.Append($"<a class=\"dashboard-link\" href=\"{HtmlEncoder.Default.Encode(tile.Url)}\"");
             if (!string.IsNullOrEmpty(tile.Title)) html.Append($" title=\"{HtmlEncoder.Default.Encode(tile.Title)}\"");
             if (external && options.NewTab) html.Append(" target=\"_blank\" rel=\"noopener noreferrer\"");
