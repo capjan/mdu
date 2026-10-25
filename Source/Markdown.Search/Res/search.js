@@ -90,7 +90,8 @@
             const title = fold(entry.title);
             const section = fold(entry.section);
             const text = fold(entry.text);
-            const allText = `${title} ${section} ${text}`;
+            const code = fold(entry.code || "");
+            const allText = `${title} ${section} ${text} ${code}`;
             if (!terms.every(term => allText.includes(term))) return null;
 
             const score = terms.reduce((total, term) =>
