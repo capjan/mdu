@@ -30,6 +30,7 @@ flowchart LR
 | Extension | Adds |
 | --- | --- |
 | Markdig advanced extensions | Pipe and grid tables, footnotes, task lists, emphasis extras, heading IDs, automatic links, and attribute lists |
+| `HeadingIdExtension` | Keeps a leading number in heading IDs, as GitHub and MkDocs do: `## 3.1 Overview` gets `31-overview` |
 | `ScrollableTableExtension` | Wraps wide tables in a horizontally scrollable container |
 | `RenderedMathExtension` | [Math](../Features/Math.md) as inline SVG |
 | `GitHubAlertExtension` | [Callouts](../Features/Callouts.md) with GitHub's alert syntax |

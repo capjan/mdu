@@ -30,8 +30,8 @@ public sealed record OpenApiSiblingPage(
 public static class OpenApiMarkdownRenderer
 {
     public const string CodeBlockLanguage = "openapi";
-    internal const string BlockStartMarker = "<!--mdu-openapi-start-->";
-    internal const string BlockEndMarker = "<!--mdu-openapi-end-->";
+    public const string BlockStartMarker = "<!--mdu-openapi-start-->";
+    public const string BlockEndMarker = "<!--mdu-openapi-end-->";
 
     private static readonly HashSet<string> HttpMethods = new(StringComparer.OrdinalIgnoreCase)
     {

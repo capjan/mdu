@@ -48,6 +48,9 @@ public class HtmlRenderer
     private static readonly Regex OpenApiPermalinkRegex = new(
         @"<a\b[^>]*\bclass=""headerlink""[^>]*>.*?</a>",
         RegexOptions.Compiled | RegexOptions.Singleline);
+    private static readonly Regex OpenApiBadgeRegex = new(
+        @"<span\b[^>]*\bclass=""openapi-badge\b[^""]*""[^>]*>.*?</span>",
+        RegexOptions.Compiled | RegexOptions.Singleline);
     private static readonly Regex FootnoteReferenceRegex = new(
         @"<a\b[^>]*\bclass=""footnote-ref""[^>]*>.*?</a>",
         RegexOptions.Compiled | RegexOptions.Singleline);
@@ -70,7 +73,8 @@ public class HtmlRenderer
         pipelineBuilder
             .UseGridTables()
             .UsePipeTables()
-            .UseAdvancedExtensions();
+            .UseAdvancedExtensions()
+            .UseHeadingIds();
         if (sharedAbbreviations is not null) pipelineBuilder.Extensions.Add(sharedAbbreviations);
         return pipelineBuilder
             .UseScrollableTables()
@@ -471,7 +475,8 @@ public class HtmlRenderer
         {
             var inOpenApiBlock = isUnmarkedOpenApiPage ||
                                  openApiRanges.Any(range => match.Index >= range.Start && match.Index < range.End);
-            if (inOpenApiBlock && !HasClass(match, "openapi-tag")) continue;
+            // API references list their tags with the operations below them, so readers can jump to an endpoint.
+            if (inOpenApiBlock && !HasClass(match, "openapi-tag") && !HasClass(match, "openapi-operation")) continue;
             if (HasClass(match, "openapi-response") ||
                 HasClass(match, "openapi-media-type") ||
                 HasClass(match, "openapi-response-example") ||
@@ -484,7 +489,8 @@ public class HtmlRenderer
             var idMatch = HeadingIdRegex.Match(match.Groups["attributes"].Value);
             if (!idMatch.Success) continue;
 
-            var title = GetHeadingText(match.Groups["content"].Value);
+            // Badges such as "Deprecated" are styled labels next to an operation, not part of its name.
+            var title = GetHeadingText(OpenApiBadgeRegex.Replace(match.Groups["content"].Value, string.Empty));
             if (title.Length == 0) continue;
 
             headings.Add(new TocHeading(level, idMatch.Groups["id"].Value, title));

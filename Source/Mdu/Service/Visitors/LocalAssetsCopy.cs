@@ -27,7 +27,9 @@ public class LocalAssetsCopy : BaseVisitor
         if (assetPaths.Length > 0)
         {
             Console.WriteLine($"Found {assetPaths.Length} Assets in {io.InputFullFilePath}");
-            foreach (var fullPath in assetPaths)
+            var pending = new Queue<string>(assetPaths);
+            var visited = new HashSet<string>(assetPaths, StringComparer.Ordinal);
+            while (pending.TryDequeue(out var fullPath))
             {
                 var assetRootPath = entity.SourceRootPath ?? io.RootDirectoryPath;
                 if (!IsInsideDirectory(assetRootPath, fullPath)) continue;
@@ -56,9 +58,28 @@ public class LocalAssetsCopy : BaseVisitor
                     siteRelativePath: relativeOutputAssetPath);
                 assetIO.CopyFile();
                 Console.WriteLine($"Copied: {assetIO.InputRelativeFilePathToRootDirectory}");
+
+                // An embedded HTML page, such as an iframe demo, needs the scripts, styles and images it loads.
+                foreach (var referencedPath in GetHtmlAssetPaths(fileInfo))
+                {
+                    if (visited.Add(referencedPath)) pending.Enqueue(referencedPath);
+                }
             }
         }
         return true;
+    }
+
+    private static IEnumerable<string> GetHtmlAssetPaths(FileInfo fileInfo)
+    {
+        if (!fileInfo.Extension.Equals(".html", StringComparison.OrdinalIgnoreCase) &&
+            !fileInfo.Extension.Equals(".htm", StringComparison.OrdinalIgnoreCase))
+            return [];
+
+        return MarkdownDocument.ReadHtmlUrls(File.ReadAllText(fileInfo.FullName))
+            .Select(url => GetLocalAssetPath(url, fileInfo.DirectoryName!))
+            .OfType<string>()
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
     }
 
     private static string? GetLocalAssetPath(string destination, string inputDirectoryPath)

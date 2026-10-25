@@ -4609,7 +4609,8 @@ th, td {
 .markdown-content h3,
 .markdown-content h4,
 .markdown-content h5,
-.markdown-content h6 {
+.markdown-content h6,
+.markdown-content summary[id] {
     scroll-margin-top: 7rem;
 }
 

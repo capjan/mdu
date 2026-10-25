@@ -1,4 +1,5 @@
-﻿using System.Text.RegularExpressions;
+﻿using System.Net;
+using System.Text.RegularExpressions;
 using Core.Extensions.ParserRelated;
 using Core.Parser;
 using Markdig;
@@ -23,6 +24,10 @@ public class MarkdownDocumentReader : IMarkdownDocumentReader
     private static readonly Regex PlantUmlNodeLinkRegex = new(
         "^url[ \\t]+of[ \\t]+(?<id>[\\p{L}\\p{N}_.]+)[ \\t]+is[ \\t]+\\[\\[(?<url>[^\\]]+)\\]\\][ \\t]*$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex HtmlUrlAttributeRegex = new(
+        "(?<![\\w-])(?:src|href|poster)\\s*=\\s*(?:\"(?<double>[^\"]*)\"|'(?<single>[^']*)')",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+    private static readonly Regex HtmlCommentRegex = new("<!--.*?(?:-->|$)", RegexOptions.Compiled | RegexOptions.Singleline);
 
     public IMarkdownHeader ReadHeader(IParserInput input)
     {
@@ -61,10 +66,11 @@ public class MarkdownDocumentReader : IMarkdownDocumentReader
                 return new MarkdownLink(text, url, isImage, lineNumber);
             });
         var diagramLinks = document.Descendants<FencedCodeBlock>().SelectMany(ReadDiagramLinks);
+        var htmlLinks = ReadHtmlLinks(document);
         var footnotes = ReadFootnotes(document, definitions);
 
         return new MarkdownDocumentAnalysis(
-            markdownLinks.Concat(diagramLinks).ToArray(),
+            markdownLinks.Concat(diagramLinks).Concat(htmlLinks).ToArray(),
             footnotes.UnusedFootnotes,
             footnotes.DuplicateFootnotes);
     }
@@ -119,6 +125,44 @@ public class MarkdownDocumentReader : IMarkdownDocumentReader
         }
 
         return reachable;
+    }
+
+    /// <summary>
+    /// Reads <c>src</c>, <c>href</c> and <c>poster</c> attributes from raw HTML, such as
+    /// <c>&lt;iframe src="assets/demo/index.html"&gt;</c>, so their files are checked and copied like Markdown links.
+    /// </summary>
+    private static IEnumerable<IMarkdownLink> ReadHtmlLinks(Markdig.Syntax.MarkdownDocument document)
+    {
+        foreach (var block in document.Descendants<HtmlBlock>())
+        {
+            if (block.Lines.Lines == null) continue;
+            // The whole block is read at once so tags and comments may span lines.
+            var html = string.Join('\n', block.Lines.Lines.Take(block.Lines.Count).Select(line => line.Slice.ToString()));
+            foreach (var (destination, index) in ReadHtmlAttributeUrlsWithIndex(html))
+                yield return new MarkdownLink(string.Empty, destination, false, block.Line + html[..index].Count(c => c == '\n') + 1);
+        }
+
+        foreach (var inline in document.Descendants<HtmlInline>())
+        {
+            foreach (var (destination, _) in ReadHtmlAttributeUrlsWithIndex(inline.Tag))
+                yield return new MarkdownLink(string.Empty, destination, false, inline.Line + 1);
+        }
+    }
+
+    /// <summary>Reads the local and remote URLs in <c>src</c>, <c>href</c> and <c>poster</c> attributes, outside comments.</summary>
+    internal static IEnumerable<string> ReadHtmlAttributeUrls(string html) =>
+        ReadHtmlAttributeUrlsWithIndex(html).Select(url => url.Destination);
+
+    private static IEnumerable<(string Destination, int Index)> ReadHtmlAttributeUrlsWithIndex(string html)
+    {
+        // Comments are blanked out instead of removed so match positions still give the right line.
+        var withoutComments = HtmlCommentRegex.Replace(html, comment =>
+            new string(comment.Value.Select(c => c == '\n' ? '\n' : ' ').ToArray()));
+        return HtmlUrlAttributeRegex.Matches(withoutComments)
+            .Select(match => (Destination: WebUtility.HtmlDecode(match.Groups["double"].Success
+                ? match.Groups["double"].Value
+                : match.Groups["single"].Value), match.Index))
+            .Where(url => !string.IsNullOrWhiteSpace(url.Destination));
     }
 
     private static IEnumerable<IMarkdownLink> ReadDiagramLinks(FencedCodeBlock block)

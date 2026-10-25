@@ -323,6 +323,36 @@
         item.link.addEventListener("click", () => setActiveHeading(item, true));
     }
 
+    // A link target inside collapsed details, such as an API operation in a closed tag group, is opened first:
+    // its own details when the target is their summary, and every details around it.
+    const revealTarget = (id) => {
+        const target = id ? document.getElementById(id) : null;
+        if (!target) return null;
+        let details = target.tagName === "SUMMARY" ? target.parentElement : target.parentElement?.closest("details");
+        let opened = false;
+        for (; details; details = details.parentElement?.closest("details")) {
+            if (details.tagName !== "DETAILS" || details.open) continue;
+            details.open = true;
+            opened = true;
+        }
+        return opened ? target : null;
+    };
+    const decodeHash = (hash) => {
+        try { return decodeURIComponent(hash.slice(1)); } catch { return hash.slice(1); }
+    };
+    // Clicks open the details before the browser scrolls to the target. Search results use full URLs, so every
+    // link to this page counts, also one whose hash equals the current one and so fires no hashchange.
+    document.addEventListener("click", (event) => {
+        const link = event.target instanceof Element ? event.target.closest("a[href]") : null;
+        if (!link?.hash || link.origin !== location.origin || link.pathname !== location.pathname ||
+            link.search !== location.search) return;
+        revealTarget(decodeHash(link.hash));
+    });
+    // On load and on history navigation the browser has already tried to scroll to the hidden target.
+    const revealLocationHash = () => revealTarget(decodeHash(location.hash))?.scrollIntoView();
+    window.addEventListener("hashchange", revealLocationHash);
+    revealLocationHash();
+
     // The header bars turn transparent while a full-width hero lies under them, and the hero content is cut off
     // at their lower edge.
     const updateHeroUnderHeader = () => {
@@ -358,7 +388,9 @@
                 window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 1;
             const activeHeading = atScrollablePageEnd
                 ? headings[headings.length - 1]
-                : [...headings].reverse().find((item) => item.heading.getBoundingClientRect().top <= 150) ?? headings[0];
+                // Headings inside collapsed details have no box and would always count as passed.
+                : [...headings].reverse().find((item) =>
+                    item.heading.getClientRects().length > 0 && item.heading.getBoundingClientRect().top <= 150) ?? headings[0];
             setActiveHeading(activeHeading);
         }
         if (brandTitle && pageHeading) {

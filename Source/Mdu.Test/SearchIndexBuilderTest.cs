@@ -223,6 +223,201 @@ public class SearchIndexBuilderTest
         Assert.Contains("Inline API", apiEntry.GetProperty("text").GetString());
     }
 
+    [Fact]
+    public void IndexesEachOpenApiOperationOnceWithItsSections()
+    {
+        const string markdown = """
+            # API guide
+
+            ```openapi
+            openapi: 3.1.0
+            info:
+              title: Inline API
+              version: 1.0.0
+            paths:
+              /widgets/{widget_id}:
+                get:
+                  summary: Read widget
+                  parameters:
+                    - in: path
+                      name: widget_id
+                      required: true
+                      description: Widget reservation key.
+                      schema: { type: string }
+                  responses:
+                    '200':
+                      description: Widget details
+                      content:
+                        application/json:
+                          schema:
+                            type: object
+                            properties:
+                              name: { type: string }
+              /gadgets:
+                get:
+                  summary: List gadgets
+                  responses:
+                    '200':
+                      description: Gadget list
+            ```
+
+            ## Next steps
+
+            Continue reading.
+            """;
+
+        var expanded = OpenApiMarkdownRenderer.ExpandCodeBlocks(
+            markdown,
+            Path.Combine(Path.GetTempPath(), "search-openapi-sections.md"),
+            includeSpecificationPageLink: false);
+        var entries = BuildIndex(expanded);
+        var hits = entries.Where(entry => entry.GetProperty("text").GetString()!
+            .Contains("reservation key", StringComparison.Ordinal)).ToArray();
+
+        var widget = Assert.Single(hits);
+        Assert.StartsWith("GET /widgets/", widget.GetProperty("section").GetString());
+        Assert.Contains("Widget details", widget.GetProperty("text").GetString());
+        Assert.DoesNotContain(entries, entry => entry.GetProperty("section").GetString() is "Path Parameters" or "Schema" or "Example");
+        Assert.Contains(entries, entry => entry.GetProperty("section").GetString()!.StartsWith("GET /gadgets", StringComparison.Ordinal));
+        Assert.Contains(entries, entry => entry.GetProperty("section").GetString() == "Next steps");
+    }
+
+    [Fact]
+    public void KeepsDescriptionHeadingsInTheOperationAndHeadingsAfterTheBlockSeparate()
+    {
+        const string markdown = """
+            # API guide
+
+            ```openapi
+            openapi: 3.1.0
+            info:
+              title: Inline API
+              version: 1.0.0
+            paths:
+              /widgets/{widget_id}:
+                get:
+                  summary: Read widget
+                  description: "### Notes\n\nImplementation details."
+                  parameters:
+                    - in: path
+                      name: widget_id
+                      required: true
+                      description: Widget reservation key.
+                      schema: { type: string }
+                  responses:
+                    '200':
+                      description: OK
+            ```
+
+            #### Troubleshooting
+
+            Check token-xyz.
+            """;
+
+        var expanded = OpenApiMarkdownRenderer.ExpandCodeBlocks(
+            markdown,
+            Path.Combine(Path.GetTempPath(), "search-openapi-boundaries.md"),
+            includeSpecificationPageLink: false);
+        var entries = BuildIndex(expanded);
+
+        var widget = Assert.Single(entries, entry => entry.GetProperty("section").GetString()!.StartsWith("GET /widgets/", StringComparison.Ordinal));
+        Assert.Contains("Implementation details.", widget.GetProperty("text").GetString());
+        Assert.Contains("Widget reservation key.", widget.GetProperty("text").GetString());
+        Assert.DoesNotContain(entries, entry => entry.GetProperty("section").GetString() is "Notes" or "Path Parameters");
+        var troubleshooting = Assert.Single(entries, entry => entry.GetProperty("section").GetString() == "Troubleshooting");
+        Assert.Equal("guide.html#troubleshooting", troubleshooting.GetProperty("url").GetString());
+        Assert.Contains("token-xyz", troubleshooting.GetProperty("text").GetString());
+        Assert.DoesNotContain("token-xyz", widget.GetProperty("text").GetString());
+    }
+
+    [Fact]
+    public void KeepsProseAfterAnOpenApiBlockInTheSectionAroundTheBlock()
+    {
+        const string markdown = """
+            # API guide
+
+            Intro.
+
+            ```openapi
+            openapi: 3.1.0
+            info:
+              title: Inline API
+              version: 1.0.0
+            paths:
+              /gadgets:
+                get:
+                  summary: List gadgets
+                  responses:
+                    '200':
+                      description: Gadget list
+            ```
+
+            Post-block paragraph with `post-token`.
+
+            ## Next steps
+
+            Continue reading.
+            """;
+
+        var expanded = OpenApiMarkdownRenderer.ExpandCodeBlocks(
+            markdown,
+            Path.Combine(Path.GetTempPath(), "search-openapi-after-block.md"),
+            includeSpecificationPageLink: false);
+        var entries = BuildIndex(expanded);
+
+        var gadgets = Assert.Single(entries, entry => entry.GetProperty("section").GetString()!.StartsWith("GET /gadgets", StringComparison.Ordinal));
+        Assert.DoesNotContain("Post-block paragraph", gadgets.GetProperty("text").GetString());
+        Assert.DoesNotContain("post-token", gadgets.GetProperty("code").GetString());
+        var guide = Assert.Single(entries, entry => entry.GetProperty("url").GetString() == "guide.html#api-guide");
+        Assert.Contains("Post-block paragraph", guide.GetProperty("text").GetString());
+        Assert.Contains("post-token", guide.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public void KeepsTwoOpenApiBlocksOnOnePageApart()
+    {
+        const string markdown = """
+            # API guide
+
+            ```openapi
+            openapi: 3.1.0
+            info: { title: First API, version: 1.0.0 }
+            paths:
+              /v1/widgets:
+                get:
+                  summary: List widgets
+                  responses:
+                    '200': { description: Widget list }
+            ```
+
+            Between the references.
+
+            ```openapi
+            openapi: 3.1.0
+            info: { title: Second API, version: 1.0.0 }
+            paths:
+              /v2/gadgets:
+                get:
+                  summary: List gadgets
+                  responses:
+                    '200': { description: Gadget list }
+            ```
+            """;
+
+        var expanded = OpenApiMarkdownRenderer.ExpandCodeBlocks(
+            markdown,
+            Path.Combine(Path.GetTempPath(), "search-openapi-two-blocks.md"),
+            includeSpecificationPageLink: false);
+        var entries = BuildIndex(expanded);
+
+        var widgets = Assert.Single(entries, entry => entry.GetProperty("section").GetString()!.StartsWith("GET /v1/widgets", StringComparison.Ordinal));
+        var gadgets = Assert.Single(entries, entry => entry.GetProperty("section").GetString()!.StartsWith("GET /v2/gadgets", StringComparison.Ordinal));
+        Assert.DoesNotContain("Between the references", widgets.GetProperty("text").GetString());
+        Assert.DoesNotContain("Gadget list", widgets.GetProperty("text").GetString());
+        Assert.DoesNotContain("Widget list", gadgets.GetProperty("text").GetString());
+        Assert.Contains(entries, entry => entry.GetProperty("text").GetString()!.Contains("Between the references", StringComparison.Ordinal));
+    }
+
     private static JsonElement[] BuildIndex(string markdown)
     {
         var outputPath = Path.Combine(Path.GetTempPath(), $"mdu-search-test-{Guid.NewGuid():N}");

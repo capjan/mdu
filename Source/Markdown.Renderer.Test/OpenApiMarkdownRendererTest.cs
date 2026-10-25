@@ -59,6 +59,34 @@ public class OpenApiMarkdownRendererTest
     }
 
     [Fact]
+    public async Task ListsOperationsBelowTheirTagsInThePageContents()
+    {
+        var html = await RenderHtml("""
+            {
+              "openapi": "3.1.0",
+              "info": { "title": "Orders", "version": "1" },
+              "paths": {
+                "/orders": { "get": { "tags": ["Orders"], "summary": "List orders", "responses": { "200": { "description": "OK" } } } },
+                "/health": { "get": { "summary": "Health", "deprecated": true, "responses": { "200": { "description": "OK" } } } }
+              }
+            }
+            """);
+        var toc = html.Split("class=\"toc-list\"", 2)[1].Split("</ul>", 2)[0];
+        var entries = System.Text.RegularExpressions.Regex.Matches(toc,
+                "--toc-depth: (?<depth>\\d)\"><a class=\"toc-link\" href=\"#(?<id>[^\"]+)\">(?<title>[^<]*)</a>")
+            .Select(match => (Depth: match.Groups["depth"].Value, Id: match.Groups["id"].Value, Title: match.Groups["title"].Value))
+            .ToArray();
+
+        var orders = entries.Single(entry => entry.Title == "GET /orders");
+        var health = entries.Single(entry => entry.Title == "GET /health");
+        Assert.Equal("1", orders.Depth);
+        Assert.Equal("1", health.Depth);
+        Assert.Contains(entries, entry => entry is { Depth: "0", Title: "Orders" });
+        Assert.Contains($"<summary id=\"{orders.Id}\" class=\"openapi-operation\">", html);
+        Assert.Contains($"<summary id=\"{health.Id}\" class=\"openapi-operation\">", html);
+    }
+
+    [Fact]
     public async Task CollapsesEndpointsAndRendersResponseMediaTypesAndTabs()
     {
         var html = await RenderHtml("""

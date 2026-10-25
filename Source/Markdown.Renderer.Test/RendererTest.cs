@@ -257,4 +257,73 @@ public class RendererTest
         Assert.DoesNotContain(">Footnotes</a>", html.Split("class=\"toc-list\"", 2).ElementAtOrDefault(1) ?? string.Empty);
     }
 
+    [Theory]
+    [InlineData("## 6. Sicherheitsinvarianten", "6-sicherheitsinvarianten")]
+    [InlineData("## 3.1 Überblick", "31-uberblick")]
+    [InlineData("## 2024", "2024")]
+    [InlineData("## 10 `mdu render`", "10-mdu-render")]
+    [InlineData("## Overview", "overview")]
+    [InlineData("## app.Client", "app.client")]
+    [InlineData("## 6. Security {#custom}", "custom")]
+    [InlineData("## 2FA Setup", "2fa-setup")]
+    [InlineData("## 3D View", "3d-view")]
+    [InlineData("## 1. 2FA Overview", "1-2fa-overview")]
+    [InlineData("3.1 Overview\n------------", "31-overview")]
+    public void KeepsLeadingNumbersInHeadingIds(string heading, string expectedId)
+    {
+        var html = new HtmlRenderer().RenderMarkdownFragment(heading);
+
+        Assert.Contains($"id=\"{expectedId}\"", html);
+    }
+
+    [Fact]
+    public void NumbersDuplicateHeadingIdsWithLeadingNumbers()
+    {
+        var html = new HtmlRenderer().RenderMarkdownFragment("## 1. Setup\n\n## 1. Setup\n\n## Setup");
+
+        Assert.Contains("id=\"1-setup\"", html);
+        Assert.Contains("id=\"1-setup-1\"", html);
+        Assert.Contains("id=\"setup\"", html);
+    }
+
+    [Fact]
+    public void DoesNotReuseExplicitIdsForHeadingsWithLeadingNumbers()
+    {
+        var html = new HtmlRenderer().RenderMarkdownFragment("## Custom {#6-security}\n\n## 6. Security");
+
+        Assert.Contains("id=\"6-security\"", html);
+        Assert.Contains("id=\"6-security-1\"", html);
+    }
+
+    [Fact]
+    public void ResolvesSamePageFragmentsWithDifferentCasing()
+    {
+        var html = new HtmlRenderer().RenderMarkdownFragment(
+            "## app.authorization.AuthorizedAuditContext\n\nSee [context](#app.authorization.AuthorizedAuditContext) and [missing](#Missing).");
+
+        Assert.Contains("id=\"app.authorization.authorizedauditcontext\"", html);
+        Assert.Contains("href=\"#app.authorization.authorizedauditcontext\"", html);
+        Assert.Contains("href=\"#Missing\"", html);
+    }
+
+    [Fact]
+    public void KeepsFragmentsThatMatchAnExplicitIdExactly()
+    {
+        var html = new HtmlRenderer().RenderMarkdownFragment(
+            "## Client {#Client}\n\n## Other\n\nSee [client](#Client).");
+
+        Assert.Contains("id=\"Client\"", html);
+        Assert.Contains("href=\"#Client\"", html);
+    }
+
+    [Fact]
+    public void KeepsExactAndAmbiguousFragmentsNextToIdsThatDifferInCasing()
+    {
+        var html = new HtmlRenderer().RenderMarkdownFragment(
+            "## Custom {#Client}\n\n## Client\n\nSee [custom](#Client), [auto](#client) and [ambiguous](#CLIENT).");
+
+        Assert.Contains("href=\"#Client\">custom", html);
+        Assert.Contains("href=\"#client\">auto", html);
+        Assert.Contains("href=\"#CLIENT\">ambiguous", html);
+    }
 }
