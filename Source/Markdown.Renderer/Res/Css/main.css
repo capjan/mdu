@@ -2737,6 +2737,25 @@ th, td {
     border-top: 1px solid var(--border-subtle);
 }
 
+.made-with-mdu {
+    margin: 2rem 0 0;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+.made-with-mdu a {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: var(--border);
+    text-underline-offset: 0.2em;
+    transition: color 120ms ease, text-decoration-color 120ms ease;
+}
+
+.made-with-mdu a:hover {
+    color: var(--link);
+    text-decoration-color: currentColor;
+}
+
 .page-meta {
     display: flex;
     flex-wrap: wrap;
