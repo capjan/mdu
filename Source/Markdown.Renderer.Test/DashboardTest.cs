@@ -224,6 +224,14 @@ public class DashboardTest
     [InlineData("GitHub", "github.com", "dashboard-github")]
     [InlineData("Christians GitLab", "gitlab.example.org", "dashboard-gitlab")]
     [InlineData("Xq Zw", "github.com", "dashboard-github")]
+    [InlineData("Material Design Icons", "pictogrammers.com", "dashboard-material-design-icons")]
+    [InlineData("Mermaid", "mermaid.js.org", "dashboard-mermaid")]
+    [InlineData("Anthropic", "anthropic.com", "dashboard-anthropic")]
+    [InlineData("Astro", "astro.build", "dashboard-astro")]
+    [InlineData("Framer", "framer.com", "dashboard-framer")]
+    [InlineData("Railway", "railway.app", "dashboard-railway")]
+    [InlineData("Docker", "docker.com", "dashboard-docker")]
+    [InlineData("Visual Studio Code", "code.visualstudio.com", "dashboard-visual-studio-code")]
     public void PicksADashboardIconFromTheNameOrHost(string name, string host, string shortcode)
     {
         var html = Dashboard.RenderAutomaticIcon(name, host);

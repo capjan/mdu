@@ -73,7 +73,7 @@ Outside of MDU, for example on GitHub, icon shortcodes are shown as plain text.
 
 #### Logos in color
 
-Dashboard Icons are logos of apps and self-hosted services. Unlike the other sets, they keep their own colors. When a logo has a light and a dark variant, MDU adds both and shows the one that fits the current theme. Switch the theme in the header to see the GitHub logo change:
+Dashboard Icons are logos of apps and self-hosted services. Colored logos keep their own colors. When a logo has a light and a dark variant, MDU adds both and shows the one that fits the current theme, correcting reversed black/white pairs by their colors. Simple all-black or all-white logos without variants take the surrounding text color so they remain visible in either theme. Switch the theme in the header to see the GitHub logo change:
 
 ```markdown title="Markdown"
 :dashboard-github: GitHub
@@ -81,7 +81,7 @@ Dashboard Icons are logos of apps and self-hosted services. Unlike the other set
 
 :dashboard-github: GitHub
 
-The variants also have their own shortcodes, for example `:dashboard-github-light:`, if a page should always show the same one.
+The variants also have their own shortcodes, for example `:dashboard-github-light:`, if a page should always show the same one. These preserve the upstream files: a suffix can describe the logo color or its intended background, depending on the logo. Use the shortcode without a suffix for automatic theme selection.
 
 MDU includes the Dashboard Icons whose SVG files are at most 20 KB and contain no embedded images, scripts, or links, which are about nine out of ten.
 

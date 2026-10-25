@@ -65,6 +65,7 @@ git -C "$DASHBOARD_DIR" sparse-checkout set --no-cone /svg/ /LICENSE
 git -C "$DASHBOARD_DIR" fetch -q --depth 1 --filter=blob:none origin "$DASHBOARD_ICONS_COMMIT"
 git -C "$DASHBOARD_DIR" checkout -q FETCH_HEAD
 npm install --silent --prefix "$WORK_DIR/svgo" "svgo@$SVGO_VERSION" > /dev/null
+node "$SCRIPT_DIR/dashboard-icons.test.mjs" "$WORK_DIR/svgo"
 node "$SCRIPT_DIR/dashboard-icons.mjs" "$DASHBOARD_DIR" "$WORK_DIR/svgo" "$WORK_DIR/dashboard-icons.json" "$DASHBOARD_ICONS_COMMIT"
 gzip -9 -n -c "$WORK_DIR/dashboard-icons.json" > "$RESOURCE_DIR/dashboard-icons.json.gz"
 cp "$DASHBOARD_DIR/LICENSE" "$RESOURCE_DIR/dashboard-icons.LICENSE"
