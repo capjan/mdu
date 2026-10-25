@@ -177,7 +177,7 @@ public class HtmlRenderer
         var hasHero = document.Descendants<FencedCodeBlock>()
             .Any(block => block.Info == Hero.CodeBlockLanguage);
         var hasIsometricDiagram = document.Descendants<FencedCodeBlock>()
-            .Any(block => block.Info == DiagramRenderer.IsometricLanguage);
+            .Any(block => string.Equals(block.Info, DiagramRenderer.IsometricLanguage, StringComparison.OrdinalIgnoreCase));
         var renderedMarkdown = dashboard is null ? document.ToHtml(_pipeline) : Dashboard.Render(document, _pipeline, dashboard);
         renderedMarkdown = MediaLinkEmbedder.ReplaceStandaloneLinks(renderedMarkdown, out var mediaProviders);
         var pageHero = hasHero ? Hero.ExtractFullWidth(ref renderedMarkdown) : string.Empty;

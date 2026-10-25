@@ -99,7 +99,44 @@ public class IsometricDiagramTest
         Assert.Equal("Ratio: 1", diagram.Nodes[1].Label);
         var edge = Assert.Single(diagram.Edges);
         Assert.Equal(("a", "b", IsometricEdgeStyle.Dashed, "Maps x --> y: z"), (edge.From, edge.To, edge.Style, edge.Label));
-        Assert.True(DiagramRenderer.TryRenderSvg("isometric", "a \"Input --> Output\"", out _));
+        Assert.True(DiagramRenderer.TryRenderHtml("isometric", "a \"Input --> Output\"", 0, out _));
+    }
+
+    [Theory]
+    [InlineData("accTitle: Overview", "Overview")]
+    [InlineData("accTitle Overview", "Overview")]
+    [InlineData("accTitle:Overview", "Overview")]
+    [InlineData("accTitle", "")]
+    public void ReadsTheAccessibleTitle(string line, string title)
+    {
+        Assert.Equal(title, IsometricParser.Parse($"{line}\na --> b").Title);
+    }
+
+    [Fact]
+    public void KeepsNodesWhoseIdStartsWithAccTitle()
+    {
+        var diagram = IsometricParser.Parse("accTitleServer \"Server\"\naccTitle_db --> accTitleServer");
+
+        Assert.Null(diagram.Title);
+        Assert.Equal(new[] { "accTitleServer", "accTitle_db" }, diagram.Nodes.Select(node => node.Id));
+        Assert.Single(diagram.Edges);
+    }
+
+    [Fact]
+    public void KeepsIsometricDiagramsOutOfTheSvgRenderer()
+    {
+        Assert.False(DiagramRenderer.TryRenderSvg("isometric", Sample, out _));
+        Assert.True(DiagramRenderer.TryRenderHtml("Isometric", Sample, 0, out var html));
+        Assert.StartsWith("<div class=\"iso\">", html);
+    }
+
+    [Fact]
+    public void RendersOtherDiagramsAsSvgThroughTheHtmlRenderer()
+    {
+        Assert.True(DiagramRenderer.TryRenderHtml("mermaid", "flowchart LR\nA --> B", 0, out var html));
+        Assert.True(DiagramRenderer.TryRenderSvg("mermaid", "flowchart LR\nA --> B", out var svg));
+        Assert.Equal(svg, html);
+        Assert.False(DiagramRenderer.TryRenderHtml("python", "print()", 0, out _));
     }
 
     [Theory]
@@ -113,13 +150,13 @@ public class IsometricDiagramTest
     public void KeepsDiagramsWithOutOfRangeGridValuesAsCodeBlocks(string source)
     {
         Assert.Throws<DiagramSyntaxException>(() => IsometricParser.Parse(source));
-        Assert.False(DiagramRenderer.TryRenderSvg("isometric", source, out _));
+        Assert.False(DiagramRenderer.TryRenderHtml("isometric", source, 0, out _));
     }
 
     [Fact]
     public void AcceptsTheLargestGridValues()
     {
-        Assert.True(DiagramRenderer.TryRenderSvg("isometric", "zone z cols 100 at 99,99\n  a at 99,0\nend", out _));
+        Assert.True(DiagramRenderer.TryRenderHtml("isometric", "zone z cols 100 at 99,99\n  a at 99,0\nend", 0, out _));
     }
 
     [Fact]
@@ -143,7 +180,7 @@ public class IsometricDiagramTest
     [Fact]
     public void RendersPhaseControlsAndPhasedSvg()
     {
-        Assert.True(DiagramRenderer.TryRenderSvg("isometric", Sample, out var html));
+        Assert.True(DiagramRenderer.TryRenderHtml("isometric", Sample, 0, out var html));
 
         var root = XElement.Parse(html!);
         Assert.Equal("iso", root.Attribute("class")?.Value);
@@ -166,7 +203,7 @@ public class IsometricDiagramTest
     [Fact]
     public void LeavesOutControlsWithoutPhases()
     {
-        Assert.True(DiagramRenderer.TryRenderSvg("isometric", "a --> b", out var html));
+        Assert.True(DiagramRenderer.TryRenderHtml("isometric", "a --> b", 0, out var html));
 
         Assert.DoesNotContain("iso-controls", html);
         Assert.Contains("<svg", html);
@@ -175,7 +212,7 @@ public class IsometricDiagramTest
     [Fact]
     public void RejectsUnknownIcons()
     {
-        Assert.False(DiagramRenderer.TryRenderSvg("isometric", "a \"A\" icon material-does-not-exist-anywhere", out _));
+        Assert.False(DiagramRenderer.TryRenderHtml("isometric", "a \"A\" icon material-does-not-exist-anywhere", 0, out _));
     }
 
     [Fact]

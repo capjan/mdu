@@ -26,6 +26,10 @@ internal static partial class IsometricParser
     [GeneratedRegex(@"^[A-Za-z_][\w-]*$")]
     private static partial Regex IdRegex();
 
+    // A whole word, so that node ids such as accTitleServer stay nodes.
+    [GeneratedRegex(@"^accTitle(?:\s*:|\s+|$)(?<title>.*)$")]
+    private static partial Regex AccTitleRegex();
+
     [GeneratedRegex(@"^(?<column>[0-9]+)\s*,\s*(?<row>[0-9]+)$")]
     private static partial Regex CellRegex();
 
@@ -46,9 +50,9 @@ internal static partial class IsometricParser
             var line = lines[index].Trim();
             if (line.Length == 0 || line.StartsWith("%%", StringComparison.Ordinal)) continue;
 
-            if (line.StartsWith("accTitle", StringComparison.Ordinal))
+            if (AccTitleRegex().Match(line) is { Success: true } titleMatch)
             {
-                title = line["accTitle".Length..].TrimStart(':', ' ', '\t').Trim();
+                title = titleMatch.Groups["title"].Value.Trim();
                 continue;
             }
 

@@ -31,16 +31,11 @@ public static class DiagramRenderer
     /// <exception cref="DiagramSyntaxException">The source is not a supported PlantUML component diagram.</exception>
     public static string RenderPlantUmlSvg(string source) => ComponentSvgWriter.Write(ComponentParser.Parse(source));
 
-    /// <summary>Returns <c>false</c> for other languages and for diagrams outside the supported syntax.</summary>
-    public static bool TryRenderSvg(string language, string source, [NotNullWhen(true)] out string? svg) =>
-        TryRenderSvg(language, source, 0, out svg);
-
-    /// <summary>Returns <c>false</c> for other languages and for diagrams outside the supported syntax.</summary>
-    /// <param name="language">The code block language.</param>
-    /// <param name="source">The diagram source.</param>
-    /// <param name="instance">Tells diagrams on the same page apart; see <see cref="RenderIsometricHtml"/>.</param>
-    /// <param name="svg">The rendered diagram.</param>
-    public static bool TryRenderSvg(string language, string source, int instance, [NotNullWhen(true)] out string? svg)
+    /// <summary>
+    /// Returns <c>false</c> for other languages and for diagrams outside the supported syntax. Isometric diagrams are
+    /// HTML rather than SVG, so they come from <see cref="TryRenderHtml"/> instead.
+    /// </summary>
+    public static bool TryRenderSvg(string language, string source, [NotNullWhen(true)] out string? svg)
     {
         try
         {
@@ -49,7 +44,6 @@ public static class DiagramRenderer
                 "mermaid" => MermaidRenderer.RenderSvg(source),
                 "context" => RenderContextSvg(source),
                 "plantuml" or "puml" => RenderPlantUmlSvg(source),
-                IsometricLanguage => RenderIsometricHtml(source, instance),
                 _ => null
             };
         }
@@ -59,6 +53,31 @@ public static class DiagramRenderer
         }
 
         return svg != null;
+    }
+
+    /// <summary>
+    /// Renders a diagram code block for a page: the phase controls and SVG of an isometric diagram, or the SVG of the
+    /// other diagram types. Returns <c>false</c> for other languages and for diagrams outside the supported syntax.
+    /// </summary>
+    /// <param name="language">The code block language.</param>
+    /// <param name="source">The diagram source.</param>
+    /// <param name="instance">Tells diagrams on the same page apart; see <see cref="RenderIsometricHtml"/>.</param>
+    /// <param name="html">The rendered diagram.</param>
+    public static bool TryRenderHtml(string language, string source, int instance, [NotNullWhen(true)] out string? html)
+    {
+        if (!language.Equals(IsometricLanguage, StringComparison.OrdinalIgnoreCase))
+            return TryRenderSvg(language, source, out html);
+
+        try
+        {
+            html = RenderIsometricHtml(source, instance);
+            return true;
+        }
+        catch (DiagramSyntaxException)
+        {
+            html = null;
+            return false;
+        }
     }
 
     /// <summary>FNV-1a, which unlike <see cref="string.GetHashCode()"/> stays the same between runs.</summary>
