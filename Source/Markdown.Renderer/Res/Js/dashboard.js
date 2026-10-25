@@ -53,7 +53,7 @@
         const scored = pageEntries.map(entry => {
             const title = fold(entry.title);
             const section = fold(entry.section);
-            const all = `${title} ${section} ${fold(entry.text)}`;
+            const all = `${title} ${section} ${fold(entry.text)} ${fold(entry.code || "")}`;
             if (!terms.every(term => all.includes(term))) return null;
             const score = terms.reduce((total, term) => total + (title.includes(term) ? 30 : section.includes(term) ? 15 : 1), 0);
             return { entry, score };
