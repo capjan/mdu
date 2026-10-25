@@ -57,7 +57,10 @@ internal static partial class IsometricParser
             }
 
             // Arrows and colons inside quoted text belong to a label, so the link syntax is matched with quoted text
-            // masked and the parts are then read from the original line.
+            // masked and the parts are then read from the original line. Masking needs balanced quotes.
+            if (line.Count(character => character == '"') % 2 != 0)
+                throw new DiagramSyntaxException("Unterminated quoted text.", lineNumber);
+
             if (EdgeRegex().Match(MaskQuotedText(line)) is { Success: true } edgeMatch)
             {
                 string Part(string name) => line.Substring(edgeMatch.Groups[name].Index, edgeMatch.Groups[name].Length);

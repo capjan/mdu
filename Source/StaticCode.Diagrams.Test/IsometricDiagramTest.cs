@@ -85,6 +85,10 @@ public class IsometricDiagramTest
     [InlineData("zone z\nphase One\nend")]
     [InlineData("zone z\nend\nz --> b")]
     [InlineData("a \"unterminated")]
+    [InlineData("a --> b : \"unfinished")]
+    [InlineData("a --> b : unfinished\"")]
+    [InlineData("a --> b : \"one\" \"two")]
+    [InlineData("zone z \"Title\nend")]
     public void RejectsInvalidDiagrams(string source)
     {
         Assert.Throws<DiagramSyntaxException>(() => IsometricParser.Parse(source));
@@ -100,6 +104,8 @@ public class IsometricDiagramTest
         var edge = Assert.Single(diagram.Edges);
         Assert.Equal(("a", "b", IsometricEdgeStyle.Dashed, "Maps x --> y: z"), (edge.From, edge.To, edge.Style, edge.Label));
         Assert.True(DiagramRenderer.TryRenderHtml("isometric", "a \"Input --> Output\"", 0, out _));
+        Assert.False(DiagramRenderer.TryRenderHtml("isometric", "a --> b : \"unfinished", 0, out _));
+        Assert.Equal("say \"hi\"", IsometricParser.Parse("a --> b : say \"hi\"").Edges[0].Label);
     }
 
     [Theory]
