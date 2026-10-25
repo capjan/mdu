@@ -169,15 +169,11 @@ public class ServeCommandIntegrationTest
         using var process = StartServer(docs, site, port);
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
         var pagePath = Path.Combine(site, "index.html");
-        var slowPagePath = Path.Combine(site, "Slow.html");
         var pageUrl = $"http://127.0.0.1:{port}/index.html";
 
         try
         {
             await WaitForFileContainsAsync(pagePath, "API Before", process);
-            if (File.Exists(slowPagePath))
-                return;
-
             File.WriteAllText(specificationPath, OpenApiSpecification("API After"));
 
             await WaitUntilAsync(async () => await PageContainsAsync(client, pageUrl, "API After"), process);
@@ -321,7 +317,14 @@ public class ServeCommandIntegrationTest
             if (process.HasExited)
                 throw new InvalidOperationException($"Preview process exited with code {process.ExitCode}.");
 
-            if (File.Exists(path) && File.ReadAllText(path).Contains(text, StringComparison.Ordinal)) return;
+            try
+            {
+                if (File.Exists(path) && File.ReadAllText(path).Contains(text, StringComparison.Ordinal)) return;
+            }
+            catch (IOException)
+            {
+            }
+
             await Task.Delay(5);
         }
 

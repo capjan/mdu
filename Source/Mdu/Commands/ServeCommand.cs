@@ -696,8 +696,7 @@ public sealed class ServeCommand
                Directory.Exists(change.Path) && IsInsideDirectory(change.Path, glossaryPath);
     }
 
-    private bool IsGeneratedOutputPath(string path) =>
-        IsInsideDirectory(_rootPath, _outputPath) && IsInsideDirectory(_outputPath, path);
+    private bool IsGeneratedOutputPath(string path) => IsInsideDirectory(_outputPath, path);
 
     private static void OpenBrowser(string url)
     {
@@ -827,9 +826,9 @@ public sealed class ServeCommand
 
         private void WriteChange(FileChange change)
         {
-            if (IsInsideDirectory(_rootPath, _outputPath) &&
-                (IsInsideDirectory(_outputPath, change.Path) ||
-                 change.OldPath is not null && IsInsideDirectory(_outputPath, change.OldPath))) return;
+            // External watchers can see the output folder too, for example a specification next to it.
+            if (IsInsideDirectory(_outputPath, change.Path) ||
+                change.OldPath is not null && IsInsideDirectory(_outputPath, change.OldPath)) return;
 
             _writer.TryWrite(change);
         }
