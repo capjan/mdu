@@ -20,7 +20,7 @@ public class LinkReplacer
 
     public void ReplaceAll(MarkdownDocument document, string? pdfDownloadUrl = null)
     {
-        var headingIds = GetHeadingIdsByLowercase(document);
+        var headingIds = HeadingIds.Read(document);
         foreach (var link in document.Descendants<LinkInline>())
         {
             if (IsPdfLink(link.Url))
@@ -38,31 +38,33 @@ public class LinkReplacer
     /// Heading ids are lowercase, so a same-page link such as <c>#Api.Client</c> is pointed at the heading
     /// <c>api.client</c> when no id matches its exact spelling.
     /// </summary>
-    private static string? MatchHeadingIdCasing(string? url, IReadOnlyDictionary<string, string?> headingIds)
+    private static string? MatchHeadingIdCasing(string? url, HeadingIds headingIds)
     {
         if (url is not { Length: > 1 } || url[0] != '#') return url;
         var fragment = url[1..];
-        if (headingIds.TryGetValue(fragment.ToLowerInvariant(), out var id) && id is not null && id != fragment)
-            return $"#{id}";
-        return url;
+        if (headingIds.Exact.Contains(fragment)) return url;
+        return headingIds.ByLowercase.TryGetValue(fragment.ToLowerInvariant(), out var id) && id is not null
+            ? $"#{id}"
+            : url;
     }
 
-    private static IReadOnlyDictionary<string, string?> GetHeadingIdsByLowercase(MarkdownDocument document)
+    /// <param name="ByLowercase">The id for each lowercase spelling, or <c>null</c> when several ids share it.</param>
+    private sealed record HeadingIds(IReadOnlySet<string> Exact, IReadOnlyDictionary<string, string?> ByLowercase)
     {
-        var ids = document.Descendants<HeadingBlock>()
-            .Select(heading => heading.TryGetAttributes()?.Id)
-            .OfType<string>()
-            .ToArray();
-        var exactIds = ids.ToHashSet(StringComparer.Ordinal);
-        var result = new Dictionary<string, string?>(StringComparer.Ordinal);
-        foreach (var id in ids)
+        public static HeadingIds Read(MarkdownDocument document)
         {
-            var key = id.ToLowerInvariant();
-            // An exact id wins; ids that differ only in casing are ambiguous and stay unmatched.
-            if (exactIds.Contains(key)) result[key] = key;
-            else if (!result.TryAdd(key, id) && result[key] != id) result[key] = null;
+            var exact = document.Descendants<HeadingBlock>()
+                .Select(heading => heading.TryGetAttributes()?.Id)
+                .OfType<string>()
+                .ToHashSet(StringComparer.Ordinal);
+            var byLowercase = new Dictionary<string, string?>(StringComparer.Ordinal);
+            foreach (var id in exact)
+            {
+                var key = id.ToLowerInvariant();
+                if (!byLowercase.TryAdd(key, id)) byLowercase[key] = null;
+            }
+            return new HeadingIds(exact, byLowercase);
         }
-        return result;
     }
 
     public static string? ReplaceUrl(string? url)

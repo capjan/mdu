@@ -315,4 +315,15 @@ public class RendererTest
         Assert.Contains("id=\"Client\"", html);
         Assert.Contains("href=\"#Client\"", html);
     }
+
+    [Fact]
+    public void KeepsExactAndAmbiguousFragmentsNextToIdsThatDifferInCasing()
+    {
+        var html = new HtmlRenderer().RenderMarkdownFragment(
+            "## Custom {#Client}\n\n## Client\n\nSee [custom](#Client), [auto](#client) and [ambiguous](#CLIENT).");
+
+        Assert.Contains("href=\"#Client\">custom", html);
+        Assert.Contains("href=\"#client\">auto", html);
+        Assert.Contains("href=\"#CLIENT\">ambiguous", html);
+    }
 }
