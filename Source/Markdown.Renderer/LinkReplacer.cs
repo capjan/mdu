@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Markdig.Renderers.Html;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
 
@@ -19,6 +20,7 @@ public class LinkReplacer
 
     public void ReplaceAll(MarkdownDocument document, string? pdfDownloadUrl = null)
     {
+        var headingIds = GetHeadingIdsByLowercase(document);
         foreach (var link in document.Descendants<LinkInline>())
         {
             if (IsPdfLink(link.Url))
@@ -28,8 +30,39 @@ public class LinkReplacer
                 continue;
             }
 
-            link.Url = ReplaceUrl(link.Url);
+            link.Url = MatchHeadingIdCasing(ReplaceUrl(link.Url), headingIds);
         }
+    }
+
+    /// <summary>
+    /// Heading ids are lowercase, so a same-page link such as <c>#Api.Client</c> is pointed at the heading
+    /// <c>api.client</c> when no id matches its exact spelling.
+    /// </summary>
+    private static string? MatchHeadingIdCasing(string? url, IReadOnlyDictionary<string, string?> headingIds)
+    {
+        if (url is not { Length: > 1 } || url[0] != '#') return url;
+        var fragment = url[1..];
+        if (headingIds.TryGetValue(fragment.ToLowerInvariant(), out var id) && id is not null && id != fragment)
+            return $"#{id}";
+        return url;
+    }
+
+    private static IReadOnlyDictionary<string, string?> GetHeadingIdsByLowercase(MarkdownDocument document)
+    {
+        var ids = document.Descendants<HeadingBlock>()
+            .Select(heading => heading.TryGetAttributes()?.Id)
+            .OfType<string>()
+            .ToArray();
+        var exactIds = ids.ToHashSet(StringComparer.Ordinal);
+        var result = new Dictionary<string, string?>(StringComparer.Ordinal);
+        foreach (var id in ids)
+        {
+            var key = id.ToLowerInvariant();
+            // An exact id wins; ids that differ only in casing are ambiguous and stay unmatched.
+            if (exactIds.Contains(key)) result[key] = key;
+            else if (!result.TryAdd(key, id) && result[key] != id) result[key] = null;
+        }
+        return result;
     }
 
     public static string? ReplaceUrl(string? url)

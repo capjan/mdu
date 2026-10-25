@@ -281,4 +281,25 @@ public class RendererTest
         Assert.Contains("id=\"1-setup-1\"", html);
         Assert.Contains("id=\"setup\"", html);
     }
+
+    [Fact]
+    public void ResolvesSamePageFragmentsWithDifferentCasing()
+    {
+        var html = new HtmlRenderer().RenderMarkdownFragment(
+            "## app.authorization.AuthorizedAuditContext\n\nSee [context](#app.authorization.AuthorizedAuditContext) and [missing](#Missing).");
+
+        Assert.Contains("id=\"app.authorization.authorizedauditcontext\"", html);
+        Assert.Contains("href=\"#app.authorization.authorizedauditcontext\"", html);
+        Assert.Contains("href=\"#Missing\"", html);
+    }
+
+    [Fact]
+    public void KeepsFragmentsThatMatchAnExplicitIdExactly()
+    {
+        var html = new HtmlRenderer().RenderMarkdownFragment(
+            "## Client {#Client}\n\n## Other\n\nSee [client](#Client).");
+
+        Assert.Contains("id=\"Client\"", html);
+        Assert.Contains("href=\"#Client\"", html);
+    }
 }
