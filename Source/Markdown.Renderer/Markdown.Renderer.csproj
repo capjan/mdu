@@ -26,6 +26,8 @@
       <EmbeddedResource Include="Res\Js\hero-beach.js" />
       <None Remove="Res\Js\dashboard.js" />
       <EmbeddedResource Include="Res\Js\dashboard.js" />
+      <None Remove="Res\Js\isometric-diagram.js" />
+      <EmbeddedResource Include="Res\Js\isometric-diagram.js" />
     </ItemGroup>
 
     <ItemGroup>

@@ -54,10 +54,11 @@ public class HighlightedCodeBlockRenderer : HtmlObjectRenderer<CodeBlock>
                 return;
             }
 
-            // Supported diagrams become static SVG; everything else stays a readable code block.
-            if (DiagramRenderer.TryRenderSvg(languageName, code, out var svg))
+            // Supported diagrams become static SVG, isometric ones with phase controls; everything else stays a readable
+            // code block. The block's position tells equal diagrams on one page apart.
+            if (DiagramRenderer.TryRenderHtml(languageName, code, fencedCodeBlock.Span.Start, out var diagram))
             {
-                renderer.Write("<figure class=\"diagram\">").Write(svg).WriteLine("</figure>");
+                renderer.Write("<figure class=\"diagram\">").Write(diagram).WriteLine("</figure>");
                 return;
             }
         }

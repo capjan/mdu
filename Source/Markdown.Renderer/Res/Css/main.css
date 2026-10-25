@@ -62,6 +62,14 @@
     --diagram-container-background: rgb(0 0 0 / 2.5%);
     --diagram-subgraph-border: #a3a3aa;
     --diagram-subgraph-title: #6e6e73;
+    --iso-surface: #fff;
+    --iso-platform-surface: #fff;
+    --iso-top-mix: 20%;
+    --iso-left-mix: 34%;
+    --iso-right-mix: 46%;
+    --iso-line-base: #000;
+    --iso-line-mix: 88%;
+    --iso-icon: #2c2c30;
 }
 
 :root[data-theme="light"] {
@@ -124,6 +132,14 @@
     --diagram-container-background: rgb(255 255 255 / 4%);
     --diagram-subgraph-border: #69696f;
     --diagram-subgraph-title: #a1a1a6;
+    --iso-surface: rgb(22 22 24);
+    --iso-platform-surface: #2a2a2e;
+    --iso-top-mix: 52%;
+    --iso-left-mix: 38%;
+    --iso-right-mix: 28%;
+    --iso-line-base: #fff;
+    --iso-line-mix: 70%;
+    --iso-icon: #f2f2f5;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -183,6 +199,14 @@
         --diagram-container-background: rgb(255 255 255 / 4%);
         --diagram-subgraph-border: #69696f;
         --diagram-subgraph-title: #a1a1a6;
+        --iso-surface: rgb(22 22 24);
+        --iso-platform-surface: #2a2a2e;
+        --iso-top-mix: 52%;
+        --iso-left-mix: 38%;
+        --iso-right-mix: 28%;
+        --iso-line-base: #fff;
+        --iso-line-mix: 70%;
+        --iso-icon: #f2f2f5;
     }
 }
 
@@ -2061,6 +2085,265 @@ pre code {
     max-width: 100%;
     height: auto;
     font-family: inherit;
+}
+
+/* Isometric diagrams: a tone sets the hue, and the theme sets how strongly each face mixes it into the surface. */
+.iso-tone-gray { --iso-hue: #8e8e93; }
+.iso-tone-blue { --iso-hue: #3b78c4; }
+.iso-tone-teal { --iso-hue: #2a9d8f; }
+.iso-tone-green { --iso-hue: #3d9a50; }
+.iso-tone-purple { --iso-hue: #8a5cc0; }
+.iso-tone-orange { --iso-hue: #d9822b; }
+.iso-tone-red { --iso-hue: #d0524a; }
+
+.iso-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    margin-bottom: 0.75rem;
+}
+
+.iso-play {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    height: 2rem;
+    padding: 0 0.85rem;
+    border: 0;
+    border-radius: 6px;
+    background: var(--link);
+    color: #fff;
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.iso-play[hidden] {
+    display: none;
+}
+
+.iso-play-icon {
+    width: 0;
+    height: 0;
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    border-left: 8px solid currentColor;
+}
+
+.iso-play.is-playing .iso-play-icon {
+    width: 8px;
+    height: 10px;
+    border: 0;
+    border-right: 3px solid currentColor;
+    border-left: 3px solid currentColor;
+}
+
+.iso-step {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    min-width: 2rem;
+    height: 2rem;
+    padding: 0 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--page-background);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    cursor: pointer;
+}
+
+.iso-step:hover {
+    background: var(--hover-background);
+}
+
+.iso-step input {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.iso-step-title {
+    display: none;
+}
+
+.iso-step:has(input:checked) {
+    border-color: var(--link);
+    background: var(--nav-hover);
+    color: var(--nav-hover-text);
+    font-weight: 600;
+}
+
+.iso-step:has(input:checked) .iso-step-title {
+    display: inline;
+    font-weight: 500;
+}
+
+.iso-play:focus-visible,
+.iso-step:has(input:focus-visible) {
+    outline: 2px solid var(--link);
+    outline-offset: 2px;
+}
+
+.iso:has(input[data-phase="1"]:checked) { --iso-current: 1; }
+.iso:has(input[data-phase="2"]:checked) { --iso-current: 2; }
+.iso:has(input[data-phase="3"]:checked) { --iso-current: 3; }
+.iso:has(input[data-phase="4"]:checked) { --iso-current: 4; }
+.iso:has(input[data-phase="5"]:checked) { --iso-current: 5; }
+.iso:has(input[data-phase="6"]:checked) { --iso-current: 6; }
+.iso:has(input[data-phase="7"]:checked) { --iso-current: 7; }
+.iso:has(input[data-phase="8"]:checked) { --iso-current: 8; }
+.iso:has(input[data-phase="9"]:checked) { --iso-current: 9; }
+
+/* Elements of later phases stay as faint outlines; without a checked phase everything is visible. */
+.iso-phased {
+    opacity: clamp(0.12, calc(var(--iso-current, 99) - var(--iso-phase) + 1), 1);
+    transition: opacity 0.45s ease;
+}
+
+.iso-flow {
+    opacity: clamp(0, calc(var(--iso-current, 99) - var(--iso-phase) + 1), 1);
+}
+
+.iso-face-top { fill: color-mix(in srgb, var(--iso-hue) var(--iso-top-mix), var(--iso-surface)); }
+.iso-face-left { fill: color-mix(in srgb, var(--iso-hue) var(--iso-left-mix), var(--iso-surface)); }
+.iso-face-right { fill: color-mix(in srgb, var(--iso-hue) var(--iso-right-mix), var(--iso-surface)); }
+
+.iso-node :is(polygon, path, ellipse) {
+    stroke: color-mix(in srgb, var(--iso-hue) 60%, var(--iso-surface));
+    stroke-width: 1;
+    stroke-linejoin: round;
+}
+
+.iso-platform .iso-face-top { fill: color-mix(in srgb, var(--iso-hue) 7%, var(--iso-platform-surface)); }
+.iso-platform .iso-face-left { fill: color-mix(in srgb, var(--iso-hue) 18%, var(--iso-platform-surface)); }
+.iso-platform .iso-face-right { fill: color-mix(in srgb, var(--iso-hue) 26%, var(--iso-platform-surface)); }
+
+.iso-platform polygon {
+    stroke: color-mix(in srgb, var(--iso-hue) 32%, var(--iso-platform-surface));
+    stroke-width: 1;
+    stroke-linejoin: round;
+}
+
+.iso-grid line {
+    stroke: color-mix(in srgb, var(--iso-hue) 18%, var(--iso-platform-surface));
+    stroke-width: 0.75;
+}
+
+.iso-icon {
+    color: var(--iso-icon);
+    fill: currentColor;
+}
+
+.iso-icon-dark,
+:root[data-theme="dark"] .iso-icon-light {
+    display: none;
+}
+
+:root[data-theme="dark"] .iso-icon-dark {
+    display: inline;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root[data-theme="auto"] .iso-icon-light {
+        display: none;
+    }
+
+    :root[data-theme="auto"] .iso-icon-dark {
+        display: inline;
+    }
+}
+
+.iso-edge {
+    --iso-edge-color: color-mix(in srgb, var(--iso-hue) var(--iso-line-mix), var(--iso-line-base));
+}
+
+.iso-edge-line {
+    fill: none;
+    stroke: var(--iso-edge-color);
+    stroke-width: 1.75;
+    stroke-linecap: round;
+}
+
+.iso-edge-thick .iso-edge-line {
+    stroke-width: 3;
+}
+
+.iso-edge-dashed .iso-edge-line {
+    stroke-dasharray: 5 5;
+    animation: iso-dash 0.9s linear infinite;
+}
+
+@keyframes iso-dash {
+    to { stroke-dashoffset: -10; }
+}
+
+.iso-edge-end {
+    fill: var(--iso-edge-color);
+}
+
+.iso-particle {
+    fill: var(--iso-edge-color);
+    stroke: var(--page-background);
+    stroke-width: 1.5;
+}
+
+.iso-label-background {
+    fill: color-mix(in srgb, var(--page-background) 88%, transparent);
+}
+
+.iso-label {
+    fill: var(--text-primary);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.iso-edge-label .iso-label {
+    fill: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 400;
+}
+
+.iso-zone-title {
+    fill: var(--text-primary);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.iso-zone-subtitle {
+    fill: var(--text-secondary);
+    font-size: 11px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .iso-particle {
+        display: none;
+    }
+
+    .iso-edge-dashed .iso-edge-line {
+        animation: none;
+    }
+
+    .iso-phased {
+        transition: none;
+    }
+}
+
+@media print {
+    .iso-controls {
+        display: none;
+    }
+
+    .iso {
+        --iso-current: 99 !important;
+    }
 }
 
 .diagram-node-shape {

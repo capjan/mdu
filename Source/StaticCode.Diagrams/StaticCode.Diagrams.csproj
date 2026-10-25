@@ -11,4 +11,8 @@
         <InternalsVisibleTo Include="StaticCode.Diagrams.Test" />
     </ItemGroup>
 
+    <ItemGroup>
+        <ProjectReference Include="..\StaticCode.Icons\StaticCode.Icons.csproj" />
+    </ItemGroup>
+
 </Project>

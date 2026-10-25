@@ -10,6 +10,7 @@ using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
 using Markdown.Renderer.MarkdigExtension;
 using Markdown.Renderer.Res.Model;
+using StaticCode.Diagrams;
 
 namespace Markdown.Renderer;
 
@@ -175,6 +176,8 @@ public class HtmlRenderer
         if (hasIconSearch) EnsureIconSearchAssets();
         var hasHero = document.Descendants<FencedCodeBlock>()
             .Any(block => block.Info == Hero.CodeBlockLanguage);
+        var hasIsometricDiagram = document.Descendants<FencedCodeBlock>()
+            .Any(block => string.Equals(block.Info, DiagramRenderer.IsometricLanguage, StringComparison.OrdinalIgnoreCase));
         var renderedMarkdown = dashboard is null ? document.ToHtml(_pipeline) : Dashboard.Render(document, _pipeline, dashboard);
         renderedMarkdown = MediaLinkEmbedder.ReplaceStandaloneLinks(renderedMarkdown, out var mediaProviders);
         var pageHero = hasHero ? Hero.ExtractFullWidth(ref renderedMarkdown) : string.Empty;
@@ -269,6 +272,7 @@ public class HtmlRenderer
                 + (hasOpenApiInteractiveContent ? $"<script>{OpenApiResponseScript}</script>{Environment.NewLine}" : string.Empty)
                 + (hasHero ? $"<script>{Hero.Script}</script>{Environment.NewLine}" : string.Empty)
                 + (dashboard is null ? string.Empty : $"<script>{Dashboard.Script}</script>{Environment.NewLine}")
+                + (hasIsometricDiagram ? $"<script>{Resources.IsometricDiagramScriptContent()}</script>{Environment.NewLine}" : string.Empty)
         };
         var renderedHtml = TemplateTokenRegex.Replace(Resources.HtmlTemplateContent(), match =>
             values.TryGetValue(match.Groups["name"].Value, out var value) ? value : match.Value);
