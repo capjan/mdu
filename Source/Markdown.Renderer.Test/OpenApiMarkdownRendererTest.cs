@@ -67,7 +67,7 @@ public class OpenApiMarkdownRendererTest
               "info": { "title": "Orders", "version": "1" },
               "paths": {
                 "/orders": { "get": { "tags": ["Orders"], "summary": "List orders", "responses": { "200": { "description": "OK" } } } },
-                "/health": { "get": { "summary": "Health", "responses": { "200": { "description": "OK" } } } }
+                "/health": { "get": { "summary": "Health", "deprecated": true, "responses": { "200": { "description": "OK" } } } }
               }
             }
             """);
