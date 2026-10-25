@@ -16,8 +16,8 @@ Write diagrams as text; MDU turns supported code blocks into static SVG in the r
 | [Sequence](#sequence-diagrams) | Interactions over time | `mermaid` | Mermaid, GitHub |
 | [Class](#class-diagrams) | Types and relationships | `mermaid` | Mermaid, GitHub |
 | [Component](#component-diagrams) | Architecture building blocks | `plantuml` | PlantUML |
-| [Context](#context-diagrams) | A system in its environment | `context` | MDU only |
-| [Isometric](#isometric-diagrams) | Platforms and data flows in phases | `isometric` | MDU only |
+| [Context](#context-diagrams) | A system in its environment | `context` | MDU exclusive |
+| [Isometric](#isometric-diagrams) | Platforms and data flows in phases | `isometric` | MDU exclusive |
 
 ## Flowcharts
 
