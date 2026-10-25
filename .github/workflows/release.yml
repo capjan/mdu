@@ -100,7 +100,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.402 # Temporary pin: the 10.0.403 download returns HTTP 409.
+          dotnet-version: 10.0.x
 
       - name: Test
         run: dotnet test Mdu.sln --configuration Release
@@ -128,7 +128,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.402 # Temporary pin: the 10.0.403 download returns HTTP 409.
+          dotnet-version: 10.0.x
 
       - name: Install Native AOT prerequisites on Linux
         if: runner.os == 'Linux'
@@ -233,7 +233,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.402 # Temporary pin: the 10.0.403 download returns HTTP 409.
+          dotnet-version: 10.0.x
 
       - name: Pack
         env:
