@@ -19,6 +19,8 @@ const fixtures = {
     "orphan-dark": `<g fill="white">${shape}</g>`,
     "plain": shape,
     "white": `<g fill="white">${shape}</g>`,
+    "near-white": `<g fill="#fefefe">${shape}</g>`,
+    "red-short": `<g fill="#e00">${shape}</g>`,
     "styled": `<g style="fill:#000;fill-rule:evenodd">${shape}</g>`,
     "outlined": '<path fill="none" stroke="#000" d="M1 1h8v8"/>',
     "transparent": '<path fill="none" d="M0 0h10v10H0z"/>' + shape,
@@ -69,12 +71,14 @@ test("orders near-black variants and pairs with clip paths by brightness", () =>
 });
 
 test("adapts unpaired monochrome fills, styles and strokes", () => {
-    for (const name of ["plain", "white", "styled", "outlined", "transparent"]) {
+    for (const name of ["plain", "white", "near-white", "styled", "outlined", "transparent"]) {
         assert.match(icons[name].body, /currentColor/);
         assert.equal(icons[name].dark, undefined);
     }
     assert.match(icons.outlined.body, /stroke="currentColor"/);
     assert.match(icons.outlined.body, /fill="none"/);
+    assert.doesNotMatch(icons["red-short"].body, /currentColor/);
+    assert.match(icons["red-short"].body, /#e00/);
 });
 
 test("preserves colors and complex SVG paints", () => {

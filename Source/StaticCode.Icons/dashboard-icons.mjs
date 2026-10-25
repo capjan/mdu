@@ -21,6 +21,21 @@ const unsafeContent = /<(script|image|foreignObject|iframe|a|style)\b|\son[a-z]+
 const skipped = {};
 const skip = (reason) => skipped[reason] = (skipped[reason] ?? 0) + 1;
 
+function colorProfile(color) {
+    const hex = color.toLowerCase() === "black" ? "#000000" : color.toLowerCase() === "white" ? "#ffffff" : color;
+    const long = hex.match(/^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i);
+    const short = hex.match(/^#([\da-f])([\da-f])([\da-f])$/i);
+    const channels = long?.slice(1) ?? short?.slice(1).map(value => value.repeat(2));
+    if (!channels) return null;
+    const rgb = channels.map(value => Number.parseInt(value, 16) / 255);
+    const [minimum, maximum] = [Math.min(...rgb), Math.max(...rgb)];
+    const luminance = rgb.reduce((sum, value, index) => {
+        const linear = value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+        return sum + linear * [0.2126, 0.7152, 0.0722][index];
+    }, 0);
+    return { brightness: maximum, neutral: maximum - minimum < 0.04, luminance };
+}
+
 // Inspect effective paints, not every color declaration: a group's default black may be overridden by colored
 // children. Keep complex SVGs (masks, gradients, filters, references) out of monochrome normalization.
 function paintProfile(root, ignoreClipPath = false) {
@@ -47,18 +62,12 @@ function paintProfile(root, ignoreClipPath = false) {
                 for (const paint of node.name === "line" ? [stroke] : [fill, stroke]) {
                     const color = paint.trim().toLowerCase();
                     if (color === "none") continue;
-                    const hex = color === "black" ? "#000000" : color === "white" ? "#ffffff" : color;
-                    const channels = hex.match(/^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i)
-                        ?? hex.match(/^#([\da-f])([\da-f])([\da-f])$/i)?.slice(1).map(value => value.repeat(2));
-                    if (!channels) {
+                    const profile = colorProfile(color);
+                    if (!profile) {
                         simple = false;
                         continue;
                     }
-                    const rgb = channels.slice(1).map(value => Number.parseInt(value, 16) / 255);
-                    const [minimum, maximum] = [Math.min(...rgb), Math.max(...rgb)];
-                    const luminance = rgb.reduce((sum, value, index) =>
-                        sum + value * [0.2126, 0.7152, 0.0722][index], 0);
-                    paints.push({ brightness: maximum, neutral: maximum - minimum < 0.04, luminance });
+                    paints.push(profile);
                 }
             }
         }
@@ -75,18 +84,6 @@ function monochromePaint(root) {
     return maximum <= 0.03 ? "black" : minimum >= 0.97 ? "white" : null;
 }
 
-// The upstream -light/-dark suffixes also describe background themes for some logos. Use the whole neutral paint
-// range to detect those pairs, ignoring clip paths, while keeping the stricter monochrome test above for recoloring.
-function isLightLogo(root) {
-    const paints = paintProfile(root, true);
-    return paints?.every(paint => paint.brightness >= 0.88) ?? false;
-}
-
-function isDarkLogo(root) {
-    const paints = paintProfile(root, true);
-    return paints?.every(paint => paint.brightness <= 0.2) ?? false;
-}
-
 const glyphs = new Map();
 for (const file of fs.readdirSync(svgDir).filter((file) => file.endsWith(".svg")).sort()) {
     const name = file.slice(0, -4);
@@ -96,7 +93,8 @@ for (const file of fs.readdirSync(svgDir).filter((file) => file.endsWith(".svg")
 
     let svg;
     let monochrome;
-    let profileRoot;
+    let lightLogo;
+    let darkLogo;
     try {
         svg = optimize(source, {
             multipass: true,
@@ -105,7 +103,12 @@ for (const file of fs.readdirSync(svgDir).filter((file) => file.endsWith(".svg")
                 "removeDimensions",
                 "removeScripts",
                 { name: "prefixIds", params: { prefix: `di-${name}`, delim: "-" } },
-                { name: "inspectPaints", fn: root => { profileRoot = root; monochrome = monochromePaint(root); } }
+                { name: "inspectPaints", fn: root => {
+                    monochrome = monochromePaint(root);
+                    const paints = paintProfile(root, true);
+                    lightLogo = paints?.every(paint => paint.luminance >= 0.25) ?? false;
+                    darkLogo = paints?.every(paint => paint.luminance <= 0.2) ?? false;
+                } }
             ]
         }).data;
     } catch {
@@ -125,11 +128,11 @@ for (const file of fs.readdirSync(svgDir).filter((file) => file.endsWith(".svg")
         groupAttributes.unshift(["fill", "#000"]);
     const group = groupAttributes.map(([attribute, value]) => ` ${attribute}="${value}"`).join("");
     const [left, top, width, height] = viewBox;
-    glyphs.set(name, { body: `<g${group}>${root[2]}</g>`, left, top, width, height, monochrome, root: profileRoot });
+    glyphs.set(name, { body: `<g${group}>${root[2]}</g>`, left, top, width, height, monochrome, lightLogo, darkLogo });
 }
 
 // Most "-light" files are drawn in light colors for dark themes, and "-dark" files in dark colors for light themes.
-// Some instead name the background theme; correct reversed black/white pairs by their effective paints below.
+// Some instead name the background theme; correct reversed bright/dark pairs by their effective paints below.
 const themedVariants = new Map();
 for (const [name, glyph] of glyphs) {
     if (/-(light|dark)$/.test(name)) continue;
@@ -144,7 +147,7 @@ for (const name of glyphs.keys()) {
         themedVariants.set(base, { light: glyphs.get(name), dark: glyphs.get(`${base}-light`) });
 }
 for (const [name, { light, dark }] of themedVariants) {
-    if (isLightLogo(light.root) && isDarkLogo(dark.root))
+    if (light.lightLogo && dark.darkLogo)
         themedVariants.set(name, { light: dark, dark: light });
 }
 const isVariant = (name) => {
@@ -164,11 +167,16 @@ const icons = {};
 for (const name of [...new Set([...glyphs.keys(), ...themedVariants.keys()])].sort()) {
     const themed = themedVariants.get(name);
     let glyph = themed?.light ?? glyphs.get(name);
-    // Preserve explicit suffix variants. Unsuffixed black/white logos without a pair follow the page text color.
+    // Preserve explicit suffix variants. Unsuffixed monochrome logos without a pair follow the page text color.
     if (!themed && !/-(light|dark)$/.test(name) && glyph.monochrome) {
         glyph = { ...glyph, body: glyph.body.replace(
-            /\b(fill|stroke)(="|\s*:\s*)(#(?:000000|ffffff|000|fff)|black|white)(?=[";\s])/gi,
-            "$1$2currentColor") };
+            /\b(fill|stroke)(="|\s*:\s*)(#[\da-f]{3}(?:[\da-f]{3})?|black|white)(?=[";\s])/gi,
+            (match, property, separator, color) => {
+                const profile = colorProfile(color);
+                return profile?.neutral && (profile.luminance <= 0.03 || profile.luminance >= 0.97)
+                    ? `${property}${separator}currentColor`
+                    : match;
+            }) };
     }
     icons[name] = {
         ...iconData(glyph),
