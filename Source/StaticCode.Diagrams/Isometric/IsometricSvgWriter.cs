@@ -51,7 +51,9 @@ internal static class IsometricSvgWriter
         public double Top => Base + Size.Height;
     }
 
-    public static string Write(IsometricDiagram diagram)
+    /// <param name="diagram">The parsed diagram.</param>
+    /// <param name="groupName">The radio group name of the phase controls; it must be unique on the page.</param>
+    public static string Write(IsometricDiagram diagram, string groupName)
     {
         var cells = new Dictionary<IsometricNode, GridCell>();
         var items = new List<Item>();
@@ -112,7 +114,7 @@ internal static class IsometricSvgWriter
         var height = bounds.MaxY - bounds.MinY + 2 * CanvasPadding;
         var html = new StringBuilder();
         html.Append("<div class=\"iso\">\n");
-        if (diagram.Phases.Count > 0) WriteControls(html, diagram);
+        if (diagram.Phases.Count > 0) WriteControls(html, diagram, groupName);
         html.Append("<svg xmlns=\"http://www.w3.org/2000/svg\" class=\"diagram-isometric\"")
             .Append($" viewBox=\"{F(bounds.MinX - CanvasPadding)} {F(bounds.MinY - CanvasPadding)} {F(width)} {F(height)}\"")
             .Append($" width=\"{F(width)}\" height=\"{F(height)}\"")
@@ -401,10 +403,9 @@ internal static class IsometricSvgWriter
             Math.Abs(Center.Y - other.Center.Y) < (Height + other.Height) / 2 + 2;
     }
 
-    private static void WriteControls(StringBuilder html, IsometricDiagram diagram)
+    private static void WriteControls(StringBuilder html, IsometricDiagram diagram, string groupName)
     {
-        // The radio group name only has to be unique on the page; a hash of the content keeps the output stable.
-        var name = $"iso-{StableHash(string.Join('\n', diagram.Phases) + diagram.Nodes.Count + diagram.Edges.Count):x8}";
+        var name = Escape(groupName);
         html.Append("<div class=\"iso-controls\" role=\"group\" aria-label=\"Phases\">\n")
             .Append("<button type=\"button\" class=\"iso-play\" hidden=\"\"><span class=\"iso-play-icon\" aria-hidden=\"true\"></span><span class=\"iso-play-text\">Play</span></button>\n");
         for (var index = 0; index < diagram.Phases.Count; index++)
@@ -417,13 +418,6 @@ internal static class IsometricSvgWriter
         }
 
         html.Append("</div>\n");
-    }
-
-    private static uint StableHash(string text)
-    {
-        var hash = 2166136261u;
-        foreach (var character in text) hash = (hash ^ character) * 16777619u;
-        return hash;
     }
 
     private sealed class Bounds

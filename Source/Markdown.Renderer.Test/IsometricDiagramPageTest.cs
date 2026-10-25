@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Markdown.Renderer.Test;
 
@@ -12,6 +13,19 @@ public class IsometricDiagramPageTest
         Assert.Contains("<figure class=\"diagram\"><div class=\"iso\">", page);
         Assert.Contains("class=\"iso-play\"", page);
         Assert.Contains("document.querySelectorAll(\".iso\")", page);
+    }
+
+    [Fact]
+    public async Task KeepsThePhaseControlsOfEqualDiagramsApart()
+    {
+        const string diagram = "```isometric\nphase One\na --> b\nphase Two\nb --> c\n```\n";
+        var page = await RenderPage($"# Home\n\n{diagram}\nText\n\n{diagram}");
+
+        var names = Regex.Matches(page, "<input type=\"radio\" name=\"(?<name>[^\"]+)\"")
+            .Select(match => match.Groups["name"].Value)
+            .Distinct()
+            .ToList();
+        Assert.Equal(2, names.Count);
     }
 
     [Fact]

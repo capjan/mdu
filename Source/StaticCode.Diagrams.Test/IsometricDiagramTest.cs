@@ -91,6 +91,48 @@ public class IsometricDiagramTest
     }
 
     [Fact]
+    public void KeepsArrowsInQuotedLabels()
+    {
+        var diagram = IsometricParser.Parse("a \"Input --> Output\" tone blue\nb \"Ratio: 1\"\na -.-> b : \"Maps x --> y: z\"");
+
+        Assert.Equal("Input --> Output", diagram.Nodes[0].Label);
+        Assert.Equal("Ratio: 1", diagram.Nodes[1].Label);
+        var edge = Assert.Single(diagram.Edges);
+        Assert.Equal(("a", "b", IsometricEdgeStyle.Dashed, "Maps x --> y: z"), (edge.From, edge.To, edge.Style, edge.Label));
+        Assert.True(DiagramRenderer.TryRenderSvg("isometric", "a \"Input --> Output\"", out _));
+    }
+
+    [Theory]
+    [InlineData("a at 2147483648,0")]
+    [InlineData("a at 0,99999999999999999999")]
+    [InlineData("a at 100,0")]
+    [InlineData("a at ١,0")]
+    [InlineData("zone z cols 0\nend")]
+    [InlineData("zone z cols 101\nend")]
+    [InlineData("zone z cols 2147483648\nend")]
+    public void KeepsDiagramsWithOutOfRangeGridValuesAsCodeBlocks(string source)
+    {
+        Assert.Throws<DiagramSyntaxException>(() => IsometricParser.Parse(source));
+        Assert.False(DiagramRenderer.TryRenderSvg("isometric", source, out _));
+    }
+
+    [Fact]
+    public void AcceptsTheLargestGridValues()
+    {
+        Assert.True(DiagramRenderer.TryRenderSvg("isometric", "zone z cols 100 at 99,99\n  a at 99,0\nend", out _));
+    }
+
+    [Fact]
+    public void GivesEachInstanceItsOwnRadioGroup()
+    {
+        string GroupName(int instance) =>
+            Regex.Match(DiagramRenderer.RenderIsometricHtml(Sample, instance), "name=\"(?<name>[^\"]+)\"").Groups["name"].Value;
+
+        Assert.NotEqual(GroupName(10), GroupName(20));
+        Assert.Equal(GroupName(10), GroupName(10));
+    }
+
+    [Fact]
     public void RejectsMoreThanNinePhases()
     {
         var source = string.Join('\n', Enumerable.Range(1, 10).Select(index => $"phase P{index}\na{index} --> b{index}"));

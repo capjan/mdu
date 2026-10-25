@@ -55,7 +55,8 @@ public class HighlightedCodeBlockRenderer : HtmlObjectRenderer<CodeBlock>
             }
 
             // Supported diagrams become static SVG; everything else stays a readable code block.
-            if (DiagramRenderer.TryRenderSvg(languageName, code, out var svg))
+            // The block's position tells equal diagrams on one page apart.
+            if (DiagramRenderer.TryRenderSvg(languageName, code, fencedCodeBlock.Span.Start, out var svg))
             {
                 renderer.Write("<figure class=\"diagram\">").Write(svg).WriteLine("</figure>");
                 return;

@@ -12,6 +12,9 @@ internal static partial class IsometricParser
 {
     public const int MaxPhases = 9;
 
+    /// <summary>Grid positions run from 0 to one less than this; zones have at most this many columns.</summary>
+    public const int MaxGridSize = 100;
+
     public static readonly IReadOnlySet<string> Tones = new HashSet<string>(StringComparer.Ordinal)
     {
         "blue", "teal", "green", "purple", "orange", "red", "gray"
@@ -23,7 +26,7 @@ internal static partial class IsometricParser
     [GeneratedRegex(@"^[A-Za-z_][\w-]*$")]
     private static partial Regex IdRegex();
 
-    [GeneratedRegex(@"^(?<column>\d+)\s*,\s*(?<row>\d+)$")]
+    [GeneratedRegex(@"^(?<column>[0-9]+)\s*,\s*(?<row>[0-9]+)$")]
     private static partial Regex CellRegex();
 
     public static IsometricDiagram Parse(string source)
@@ -49,18 +52,21 @@ internal static partial class IsometricParser
                 continue;
             }
 
-            if (EdgeRegex().Match(line) is { Success: true } edgeMatch)
+            // Arrows and colons inside quoted text belong to a label, so the link syntax is matched with quoted text
+            // masked and the parts are then read from the original line.
+            if (EdgeRegex().Match(MaskQuotedText(line)) is { Success: true } edgeMatch)
             {
+                string Part(string name) => line.Substring(edgeMatch.Groups[name].Index, edgeMatch.Groups[name].Length);
                 var style = edgeMatch.Groups["arrow"].Value switch
                 {
                     "-.->" => IsometricEdgeStyle.Dashed,
                     "==>" => IsometricEdgeStyle.Thick,
                     _ => IsometricEdgeStyle.Solid
                 };
-                var label = edgeMatch.Groups["label"].Success ? Unquote(edgeMatch.Groups["label"].Value.Trim()) : null;
+                var label = edgeMatch.Groups["label"].Success ? Unquote(Part("label").Trim()) : null;
                 var phase = Math.Max(1, phases.Count);
-                foreach (var from in Ids(edgeMatch.Groups["from"].Value, lineNumber))
-                foreach (var to in Ids(edgeMatch.Groups["to"].Value, lineNumber))
+                foreach (var from in Ids(Part("from"), lineNumber))
+                foreach (var to in Ids(Part("to"), lineNumber))
                 {
                     if (from == to) throw new DiagramSyntaxException($"'{from}' cannot link to itself.", lineNumber);
                     edges.Add(new IsometricEdge(from, to, style, string.IsNullOrEmpty(label) ? null : label, phase));
@@ -140,11 +146,7 @@ internal static partial class IsometricParser
             {
                 case "tone": zone.Tone = ReadTone(value, lineNumber); break;
                 case "at": zone.Cell = ReadCell(value, lineNumber); break;
-                case "cols":
-                    if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var columns) || columns < 1)
-                        throw new DiagramSyntaxException($"'cols' needs a positive number, not '{value}'.", lineNumber);
-                    zone.Columns = columns;
-                    break;
+                case "cols": zone.Columns = ReadGridNumber(value, 1, MaxGridSize, "'cols'", lineNumber); break;
                 default: throw new DiagramSyntaxException($"Unknown zone option '{key}'.", lineNumber);
             }
         }
@@ -213,7 +215,29 @@ internal static partial class IsometricParser
     {
         var match = CellRegex().Match(value);
         if (!match.Success) throw new DiagramSyntaxException($"'at' needs a column and row such as 1,0, not '{value}'.", lineNumber);
-        return new GridCell(int.Parse(match.Groups["column"].Value, CultureInfo.InvariantCulture), int.Parse(match.Groups["row"].Value, CultureInfo.InvariantCulture));
+        return new GridCell(
+            ReadGridNumber(match.Groups["column"].Value, 0, MaxGridSize - 1, "'at'", lineNumber),
+            ReadGridNumber(match.Groups["row"].Value, 0, MaxGridSize - 1, "'at'", lineNumber));
+    }
+
+    /// <summary>Reads a grid position or size; the limit keeps the layout grid small and the arithmetic in range.</summary>
+    private static int ReadGridNumber(string value, int minimum, int maximum, string option, int lineNumber) =>
+        int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var number) && number >= minimum && number <= maximum
+            ? number
+            : throw new DiagramSyntaxException($"{option} needs numbers from {minimum} to {maximum}, not '{value}'.", lineNumber);
+
+    /// <summary>Replaces the characters between double quotes with spaces of the same length; the quotes stay.</summary>
+    private static string MaskQuotedText(string line)
+    {
+        var masked = line.ToCharArray();
+        var quoted = false;
+        for (var index = 0; index < masked.Length; index++)
+        {
+            if (masked[index] == '"') quoted = !quoted;
+            else if (quoted) masked[index] = ' ';
+        }
+
+        return new string(masked);
     }
 
     private static string Unquote(string text) =>

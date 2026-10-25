@@ -408,7 +408,7 @@ phase Query
 
 Tones are `blue`, `teal`, `green`, `purple`, `orange`, `red`, and `gray`. A node takes the tone of its zone unless it sets its own, and a link takes the tone of the node it starts from.
 
-The diagram is a grid of columns and rows: columns run to the front right and rows to the front left. `at column,row` places a zone or a standalone node; inside a zone, it places a node on the platform. Items without `at` fill the free cells row by row.
+The diagram is a grid of columns and rows: columns run to the front right and rows to the front left. `at column,row` places a zone or a standalone node; inside a zone, it places a node on the platform. Items without `at` fill the free cells row by row. Columns and rows run from 0 to 99, and `cols` takes 1 to 100.
 
 A node appears in the first phase that links to it, and a zone appears with its first node. Nodes without links appear in the first phase. The page opens on the last phase, so printed pages and pages without JavaScript show the complete diagram.
 
