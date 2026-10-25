@@ -340,10 +340,13 @@
     const decodeHash = (hash) => {
         try { return decodeURIComponent(hash.slice(1)); } catch { return hash.slice(1); }
     };
-    // Clicks open the details before the browser scrolls to the target.
+    // Clicks open the details before the browser scrolls to the target. Search results use full URLs, so every
+    // link to this page counts, also one whose hash equals the current one and so fires no hashchange.
     document.addEventListener("click", (event) => {
-        const link = event.target instanceof Element ? event.target.closest("a[href^='#']") : null;
-        if (link) revealTarget(decodeHash(link.hash));
+        const link = event.target instanceof Element ? event.target.closest("a[href]") : null;
+        if (!link?.hash || link.origin !== location.origin || link.pathname !== location.pathname ||
+            link.search !== location.search) return;
+        revealTarget(decodeHash(link.hash));
     });
     // On load and on history navigation the browser has already tried to scroll to the hidden target.
     const revealLocationHash = () => revealTarget(decodeHash(location.hash))?.scrollIntoView();
