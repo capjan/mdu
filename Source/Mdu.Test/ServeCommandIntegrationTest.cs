@@ -57,7 +57,7 @@ public class ServeCommandIntegrationTest
     {
         var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
         var docs = Path.Combine(root, "Docs");
-        var site = Path.Combine(root, "site");
+        var site = Path.Combine(docs, "_site");
         Directory.CreateDirectory(docs);
         var markdownPath = Path.Combine(docs, "README.md");
         var assetPath = Path.Combine(docs, "diagram.svg");
@@ -142,6 +142,41 @@ public class ServeCommandIntegrationTest
             await WaitUntilAsync(async () =>
                 await PageContainsAsync(client, $"http://127.0.0.1:{port}/Guide/index.html", "New page") &&
                 await PageContainsAsync(client, pageUrl, "Guide/index.html"), process);
+        }
+        finally
+        {
+            StopServer(process);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task WatchesOpenApiSpecificationsChangedDuringInitialRender()
+    {
+        var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        var docs = Path.Combine(root, "Docs");
+        var api = Path.Combine(root, "api");
+        var site = Path.Combine(root, "site");
+        Directory.CreateDirectory(docs);
+        Directory.CreateDirectory(api);
+        File.WriteAllText(Path.Combine(docs, "README.md"), "# Orders\n\n```openapi\n../api/orders.json\n```\n");
+        // Keep startup rendering busy after README so the external edit overlaps the initial build.
+        File.WriteAllText(Path.Combine(docs, "Slow.md"), "# Slow\n\n" + new string('x', 5_000_000));
+        var specificationPath = Path.Combine(api, "orders.json");
+        File.WriteAllText(specificationPath, OpenApiSpecification("API Before"));
+
+        var port = FindAvailablePort();
+        using var process = StartServer(docs, site, port);
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+        var pagePath = Path.Combine(site, "index.html");
+        var pageUrl = $"http://127.0.0.1:{port}/index.html";
+
+        try
+        {
+            await WaitForFileContainsAsync(pagePath, "API Before", process);
+            File.WriteAllText(specificationPath, OpenApiSpecification("API After"));
+
+            await WaitUntilAsync(async () => await PageContainsAsync(client, pageUrl, "API After"), process);
         }
         finally
         {
@@ -272,6 +307,28 @@ public class ServeCommandIntegrationTest
             StopServer(process);
             Directory.Delete(root, recursive: true);
         }
+    }
+
+    private static async Task WaitForFileContainsAsync(string path, string text, Process process)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(12);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (process.HasExited)
+                throw new InvalidOperationException($"Preview process exited with code {process.ExitCode}.");
+
+            try
+            {
+                if (File.Exists(path) && File.ReadAllText(path).Contains(text, StringComparison.Ordinal)) return;
+            }
+            catch (IOException)
+            {
+            }
+
+            await Task.Delay(5);
+        }
+
+        throw new TimeoutException("Timed out waiting for the rendered preview file.");
     }
 
     private static async Task<bool> PageContainsAsync(HttpClient client, string url, string text)
