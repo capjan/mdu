@@ -27,7 +27,13 @@ const fixtures = {
     "gradient": '<defs><linearGradient id="a"><stop stop-color="#000"/><stop offset="1" stop-color="#fff"/></linearGradient></defs><path fill="url(#a)" d="M1 1h8v8H1z"/>',
     "masked": `<defs><mask id="a"><path fill="#fff" d="M0 0h10v10H0z"/></mask></defs><g mask="url(#a)">${shape}</g>`,
     "colored-pair-dark": `<g fill="white">${shape}</g>`,
-    "colored-pair-light": `<g fill="#2396ed">${shape}</g>`
+    "colored-pair-light": `<g fill="#2396ed">${shape}</g>`,
+    "linear-light": `<g fill="#fff">${shape}</g>`,
+    "linear-dark": `<g fill="#222326">${shape}</g>`,
+    "open-router-light": '<defs><clipPath id="a"><path d="M0 0h5v10H0z"/></clipPath></defs><path clip-path="url(#a)" fill="#fff" d="M0 0h10v10H0z"/>',
+    "open-router-dark": '<defs><clipPath id="a"><path d="M0 0h5v10H0z"/></clipPath></defs><path clip-path="url(#a)" fill="#111" d="M0 0h10v10H0z"/>',
+    "monarch-money-light": `<g fill="#ff692d">${shape}</g>`,
+    "monarch-money-dark": shape
 };
 let icons;
 try {
@@ -53,6 +59,13 @@ test("orders monochrome pairs by paint, preserving explicit files", () => {
     assert.equal(icons.normal.dark.body, icons["normal-light"].body);
     assert.equal(icons["orphan-dark"].dark, undefined);
     assert.match(icons["orphan-dark"].body, /#fff/);
+});
+
+test("orders near-black variants and pairs with clip paths by brightness", () => {
+    for (const name of ["linear", "open-router", "monarch-money"]) {
+        assert.equal(icons[name].body, icons[`${name}-dark`].body);
+        assert.equal(icons[name].dark.body, icons[`${name}-light`].body);
+    }
 });
 
 test("adapts unpaired monochrome fills, styles and strokes", () => {

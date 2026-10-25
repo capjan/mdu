@@ -23,37 +23,68 @@ const skip = (reason) => skipped[reason] = (skipped[reason] ?? 0) + 1;
 
 // Inspect effective paints, not every color declaration: a group's default black may be overridden by colored
 // children. Keep complex SVGs (masks, gradients, filters, references) out of monochrome normalization.
-function monochromePaint(root) {
-    const paints = new Set();
+function paintProfile(root, ignoreClipPath = false) {
+    const paints = [];
     let simple = true;
     function visit(node, fill = "#000", stroke = "none") {
         if (node.type === "element") {
             if (["title", "desc", "metadata"].includes(node.name)) return;
+            if (ignoreClipPath && ["defs", "clipPath"].includes(node.name)) return;
             if (!["svg", "g", "path", "rect", "circle", "ellipse", "polygon", "polyline", "line"].includes(node.name)
-                || ["mask", "filter", "clip-path"].some(key => key in node.attributes)) {
+                || ["mask", "filter"].some(key => key in node.attributes)
+                || !ignoreClipPath && "clip-path" in node.attributes) {
                 simple = false;
                 return;
             }
             const styles = Object.fromEntries((node.attributes.style ?? "").split(";")
                 .filter(value => value.includes(":"))
                 .map(value => value.split(":").map(part => part.trim())));
-            if (["mask", "filter", "clip-path"].some(key => key in styles)) simple = false;
+            if (["mask", "filter"].some(key => key in styles)
+                || !ignoreClipPath && "clip-path" in styles) simple = false;
             fill = styles.fill ?? node.attributes.fill ?? fill;
             stroke = styles.stroke ?? node.attributes.stroke ?? stroke;
             if (node.name !== "svg" && node.name !== "g") {
                 for (const paint of node.name === "line" ? [stroke] : [fill, stroke]) {
                     const color = paint.trim().toLowerCase();
                     if (color === "none") continue;
-                    paints.add(["#000", "#000000", "black"].includes(color) ? "black"
-                        : ["#fff", "#ffffff", "white"].includes(color) ? "white" : "other");
+                    const hex = color === "black" ? "#000000" : color === "white" ? "#ffffff" : color;
+                    const channels = hex.match(/^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i)
+                        ?? hex.match(/^#([\da-f])([\da-f])([\da-f])$/i)?.slice(1).map(value => value.repeat(2));
+                    if (!channels) {
+                        simple = false;
+                        continue;
+                    }
+                    const rgb = channels.slice(1).map(value => Number.parseInt(value, 16) / 255);
+                    const [minimum, maximum] = [Math.min(...rgb), Math.max(...rgb)];
+                    const luminance = rgb.reduce((sum, value, index) =>
+                        sum + value * [0.2126, 0.7152, 0.0722][index], 0);
+                    paints.push({ brightness: maximum, neutral: maximum - minimum < 0.04, luminance });
                 }
             }
         }
         for (const child of node.children ?? []) visit(child, fill, stroke);
     }
     visit(root);
-    const [paint] = paints;
-    return simple && paints.size === 1 && paint !== "other" ? paint : null;
+    return simple && paints.length > 0 ? paints : null;
+}
+
+function monochromePaint(root) {
+    const paints = paintProfile(root);
+    if (!paints || paints.some(paint => !paint.neutral)) return null;
+    const [minimum, maximum] = [Math.min(...paints.map(paint => paint.luminance)), Math.max(...paints.map(paint => paint.luminance))];
+    return maximum <= 0.03 ? "black" : minimum >= 0.97 ? "white" : null;
+}
+
+// The upstream -light/-dark suffixes also describe background themes for some logos. Use the whole neutral paint
+// range to detect those pairs, ignoring clip paths, while keeping the stricter monochrome test above for recoloring.
+function isLightLogo(root) {
+    const paints = paintProfile(root, true);
+    return paints?.every(paint => paint.brightness >= 0.88) ?? false;
+}
+
+function isDarkLogo(root) {
+    const paints = paintProfile(root, true);
+    return paints?.every(paint => paint.brightness <= 0.2) ?? false;
 }
 
 const glyphs = new Map();
@@ -65,6 +96,7 @@ for (const file of fs.readdirSync(svgDir).filter((file) => file.endsWith(".svg")
 
     let svg;
     let monochrome;
+    let profileRoot;
     try {
         svg = optimize(source, {
             multipass: true,
@@ -73,7 +105,7 @@ for (const file of fs.readdirSync(svgDir).filter((file) => file.endsWith(".svg")
                 "removeDimensions",
                 "removeScripts",
                 { name: "prefixIds", params: { prefix: `di-${name}`, delim: "-" } },
-                { name: "inspectPaints", fn: root => { monochrome = monochromePaint(root); } }
+                { name: "inspectPaints", fn: root => { profileRoot = root; monochrome = monochromePaint(root); } }
             ]
         }).data;
     } catch {
@@ -93,7 +125,7 @@ for (const file of fs.readdirSync(svgDir).filter((file) => file.endsWith(".svg")
         groupAttributes.unshift(["fill", "#000"]);
     const group = groupAttributes.map(([attribute, value]) => ` ${attribute}="${value}"`).join("");
     const [left, top, width, height] = viewBox;
-    glyphs.set(name, { body: `<g${group}>${root[2]}</g>`, left, top, width, height, monochrome });
+    glyphs.set(name, { body: `<g${group}>${root[2]}</g>`, left, top, width, height, monochrome, root: profileRoot });
 }
 
 // Most "-light" files are drawn in light colors for dark themes, and "-dark" files in dark colors for light themes.
@@ -112,7 +144,7 @@ for (const name of glyphs.keys()) {
         themedVariants.set(base, { light: glyphs.get(name), dark: glyphs.get(`${base}-light`) });
 }
 for (const [name, { light, dark }] of themedVariants) {
-    if (light.monochrome === "white" && dark.monochrome === "black")
+    if (isLightLogo(light.root) && isDarkLogo(dark.root))
         themedVariants.set(name, { light: dark, dark: light });
 }
 const isVariant = (name) => {
