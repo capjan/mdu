@@ -21,6 +21,41 @@ const unsafeContent = /<(script|image|foreignObject|iframe|a|style)\b|\son[a-z]+
 const skipped = {};
 const skip = (reason) => skipped[reason] = (skipped[reason] ?? 0) + 1;
 
+// Inspect effective paints, not every color declaration: a group's default black may be overridden by colored
+// children. Keep complex SVGs (masks, gradients, filters, references) out of monochrome normalization.
+function monochromePaint(root) {
+    const paints = new Set();
+    let simple = true;
+    function visit(node, fill = "#000", stroke = "none") {
+        if (node.type === "element") {
+            if (["title", "desc", "metadata"].includes(node.name)) return;
+            if (!["svg", "g", "path", "rect", "circle", "ellipse", "polygon", "polyline", "line"].includes(node.name)
+                || ["mask", "filter", "clip-path"].some(key => key in node.attributes)) {
+                simple = false;
+                return;
+            }
+            const styles = Object.fromEntries((node.attributes.style ?? "").split(";")
+                .filter(value => value.includes(":"))
+                .map(value => value.split(":").map(part => part.trim())));
+            if (["mask", "filter", "clip-path"].some(key => key in styles)) simple = false;
+            fill = styles.fill ?? node.attributes.fill ?? fill;
+            stroke = styles.stroke ?? node.attributes.stroke ?? stroke;
+            if (node.name !== "svg" && node.name !== "g") {
+                for (const paint of node.name === "line" ? [stroke] : [fill, stroke]) {
+                    const color = paint.trim().toLowerCase();
+                    if (color === "none") continue;
+                    paints.add(["#000", "#000000", "black"].includes(color) ? "black"
+                        : ["#fff", "#ffffff", "white"].includes(color) ? "white" : "other");
+                }
+            }
+        }
+        for (const child of node.children ?? []) visit(child, fill, stroke);
+    }
+    visit(root);
+    const [paint] = paints;
+    return simple && paints.size === 1 && paint !== "other" ? paint : null;
+}
+
 const glyphs = new Map();
 for (const file of fs.readdirSync(svgDir).filter((file) => file.endsWith(".svg")).sort()) {
     const name = file.slice(0, -4);
@@ -29,6 +64,7 @@ for (const file of fs.readdirSync(svgDir).filter((file) => file.endsWith(".svg")
     if (source.length > maxSize) { skip("size"); continue; }
 
     let svg;
+    let monochrome;
     try {
         svg = optimize(source, {
             multipass: true,
@@ -36,7 +72,8 @@ for (const file of fs.readdirSync(svgDir).filter((file) => file.endsWith(".svg")
                 { name: "preset-default", params: { overrides: { inlineStyles: { onlyMatchedOnce: false } } } },
                 "removeDimensions",
                 "removeScripts",
-                { name: "prefixIds", params: { prefix: `di-${name}`, delim: "-" } }
+                { name: "prefixIds", params: { prefix: `di-${name}`, delim: "-" } },
+                { name: "inspectPaints", fn: root => { monochrome = monochromePaint(root); } }
             ]
         }).data;
     } catch {
@@ -50,18 +87,17 @@ for (const file of fs.readdirSync(svgDir).filter((file) => file.endsWith(".svg")
     if (viewBox.length !== 4 || viewBox.some(Number.isNaN) || viewBox[2] <= 0 || viewBox[3] <= 0) { skip("viewBox"); continue; }
     if (unsafeContent.test(root[2])) { skip("content"); continue; }
 
-    // Keep the root's presentation attributes on a group. The monochrome Material Design logo has no theme
-    // variants, so let its unfilled shapes follow the text color; preserve other logos' original black default.
+    // Keep the root's presentation attributes and SVG's default black fill on a group.
     const groupAttributes = Object.entries(attributes).filter(([attribute]) => presentationAttributes.test(attribute));
     if (!groupAttributes.some(([attribute, value]) => attribute === "fill" || (attribute === "style" && /fill\s*:/.test(value))))
-        groupAttributes.unshift(["fill", name === "material-design-icons" ? "currentColor" : "#000"]);
+        groupAttributes.unshift(["fill", "#000"]);
     const group = groupAttributes.map(([attribute, value]) => ` ${attribute}="${value}"`).join("");
     const [left, top, width, height] = viewBox;
-    glyphs.set(name, { body: `<g${group}>${root[2]}</g>`, left, top, width, height });
+    glyphs.set(name, { body: `<g${group}>${root[2]}</g>`, left, top, width, height, monochrome });
 }
 
 // Most "-light" files are drawn in light colors for dark themes, and "-dark" files in dark colors for light themes.
-// Mermaid instead names the background theme, so its pair is corrected below.
+// Some instead name the background theme; correct reversed black/white pairs by their effective paints below.
 const themedVariants = new Map();
 for (const [name, glyph] of glyphs) {
     if (/-(light|dark)$/.test(name)) continue;
@@ -75,7 +111,10 @@ for (const name of glyphs.keys()) {
     if (base && !glyphs.has(base) && glyphs.has(`${base}-light`))
         themedVariants.set(base, { light: glyphs.get(name), dark: glyphs.get(`${base}-light`) });
 }
-themedVariants.set("mermaid", { light: glyphs.get("mermaid-light"), dark: glyphs.get("mermaid-dark") });
+for (const [name, { light, dark }] of themedVariants) {
+    if (light.monochrome === "white" && dark.monochrome === "black")
+        themedVariants.set(name, { light: dark, dark: light });
+}
 const isVariant = (name) => {
     const base = name.match(/^(.+)-(light|dark)$/)?.[1];
     return base !== undefined && themedVariants.has(base);
@@ -92,8 +131,15 @@ const iconData = (glyph) => ({
 const icons = {};
 for (const name of [...new Set([...glyphs.keys(), ...themedVariants.keys()])].sort()) {
     const themed = themedVariants.get(name);
+    let glyph = themed?.light ?? glyphs.get(name);
+    // Preserve explicit suffix variants. Unsuffixed black/white logos without a pair follow the page text color.
+    if (!themed && !/-(light|dark)$/.test(name) && glyph.monochrome) {
+        glyph = { ...glyph, body: glyph.body.replace(
+            /\b(fill|stroke)(="|\s*:\s*)(#(?:000000|ffffff|000|fff)|black|white)(?=[";\s])/gi,
+            "$1$2currentColor") };
+    }
     icons[name] = {
-        ...iconData(themed?.light ?? glyphs.get(name)),
+        ...iconData(glyph),
         ...(themed && { dark: iconData(themed.dark) }),
         // These shortcodes stay usable, but the search omits the variants and Docker.
         ...((isVariant(name) || name === "docker") && { hidden: true })

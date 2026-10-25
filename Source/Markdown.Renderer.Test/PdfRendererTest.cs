@@ -6,6 +6,26 @@ namespace Markdown.Renderer.Test;
 
 public class PdfRendererTest
 {
+    [Theory]
+    [InlineData("material-design-icons")]
+    [InlineData("alacritty")]
+    public void RendersThemeAwareMonochromeIconsInPdfTextColor(string name)
+    {
+        Assert.True(StaticCode.Icons.IconCatalog.TryGetIcon("dashboard-" + name, out var icon));
+        Assert.Contains("currentColor", icon.Glyph.Body);
+        var document = new System.Xml.XmlDocument();
+        document.LoadXml(icon.Glyph.ToSvg());
+        var actual = new StringBuilder();
+        PdfSvgRenderer.Draw(document.DocumentElement!, actual, 0, 0, 24, 24, 800);
+
+        document.LoadXml(icon.Glyph.ToSvg().Replace("currentColor", "#1d1d1f", StringComparison.Ordinal));
+        var expected = new StringBuilder();
+        PdfSvgRenderer.Draw(document.DocumentElement!, expected, 0, 0, 24, 24, 800);
+
+        Assert.Equal(expected.ToString(), actual.ToString());
+        Assert.Contains(" rg", actual.ToString());
+    }
+
     [Fact]
     public void RendersVideoSourcesAsPdfLinksWithoutFallbackText()
     {

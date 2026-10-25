@@ -84,6 +84,37 @@ public class IconTest
         Assert.Null(darkBackground.DarkGlyph);
     }
 
+    [Theory]
+    [InlineData("anthropic")]
+    [InlineData("astro")]
+    [InlineData("dotnet")]
+    [InlineData("golang")]
+    [InlineData("rust")]
+    [InlineData("stripe")]
+    [InlineData("vim")]
+    [InlineData("django")]
+    public void OrdersOtherMonochromeVariantsByTheirColors(string name)
+    {
+        Assert.True(IconCatalog.TryGetIcon("dashboard-" + name, out var icon));
+
+        Assert.NotNull(icon.DarkGlyph);
+        Assert.Matches("(?:fill=\"|fill:)#000", icon.Glyph.Body);
+        Assert.Matches("(?:fill=\"|fill:)#fff", icon.DarkGlyph!.Body);
+    }
+
+    [Theory]
+    [InlineData("alacritty")]
+    [InlineData("railway")]
+    [InlineData("framer")]
+    [InlineData("ableton")]
+    public void AdaptsOtherUnpairedMonochromeLogos(string name)
+    {
+        Assert.True(IconCatalog.TryGetIcon("dashboard-" + name, out var icon));
+
+        Assert.Null(icon.DarkGlyph);
+        Assert.Contains("currentColor", icon.Glyph.Body);
+    }
+
     [Fact]
     public void MaterialDesignIconsInheritTheThemeTextColor()
     {
