@@ -25,8 +25,9 @@ public class MarkdownDocumentReader : IMarkdownDocumentReader
         "^url[ \\t]+of[ \\t]+(?<id>[\\p{L}\\p{N}_.]+)[ \\t]+is[ \\t]+\\[\\[(?<url>[^\\]]+)\\]\\][ \\t]*$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex HtmlUrlAttributeRegex = new(
-        "\\s(?:src|href|poster)\\s*=\\s*(?:\"(?<double>[^\"]*)\"|'(?<single>[^']*)')",
+        "(?<![\\w-])(?:src|href|poster)\\s*=\\s*(?:\"(?<double>[^\"]*)\"|'(?<single>[^']*)')",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+    private static readonly Regex HtmlCommentRegex = new("<!--.*?(?:-->|$)", RegexOptions.Compiled | RegexOptions.Singleline);
 
     public IMarkdownHeader ReadHeader(IParserInput input)
     {
@@ -135,26 +136,34 @@ public class MarkdownDocumentReader : IMarkdownDocumentReader
         foreach (var block in document.Descendants<HtmlBlock>())
         {
             if (block.Lines.Lines == null) continue;
-            for (var index = 0; index < block.Lines.Count; index++)
-            {
-                foreach (var destination in ReadHtmlAttributeUrls(block.Lines.Lines[index].Slice.ToString()))
-                    yield return new MarkdownLink(string.Empty, destination, false, block.Line + index + 1);
-            }
+            // The whole block is read at once so tags and comments may span lines.
+            var html = string.Join('\n', block.Lines.Lines.Take(block.Lines.Count).Select(line => line.Slice.ToString()));
+            foreach (var (destination, index) in ReadHtmlAttributeUrlsWithIndex(html))
+                yield return new MarkdownLink(string.Empty, destination, false, block.Line + html[..index].Count(c => c == '\n') + 1);
         }
 
         foreach (var inline in document.Descendants<HtmlInline>())
         {
-            foreach (var destination in ReadHtmlAttributeUrls(inline.Tag))
+            foreach (var (destination, _) in ReadHtmlAttributeUrlsWithIndex(inline.Tag))
                 yield return new MarkdownLink(string.Empty, destination, false, inline.Line + 1);
         }
     }
 
-    private static IEnumerable<string> ReadHtmlAttributeUrls(string html) =>
-        HtmlUrlAttributeRegex.Matches(html)
-            .Select(match => WebUtility.HtmlDecode(match.Groups["double"].Success
+    /// <summary>Reads the local and remote URLs in <c>src</c>, <c>href</c> and <c>poster</c> attributes, outside comments.</summary>
+    internal static IEnumerable<string> ReadHtmlAttributeUrls(string html) =>
+        ReadHtmlAttributeUrlsWithIndex(html).Select(url => url.Destination);
+
+    private static IEnumerable<(string Destination, int Index)> ReadHtmlAttributeUrlsWithIndex(string html)
+    {
+        // Comments are blanked out instead of removed so match positions still give the right line.
+        var withoutComments = HtmlCommentRegex.Replace(html, comment =>
+            new string(comment.Value.Select(c => c == '\n' ? '\n' : ' ').ToArray()));
+        return HtmlUrlAttributeRegex.Matches(withoutComments)
+            .Select(match => (Destination: WebUtility.HtmlDecode(match.Groups["double"].Success
                 ? match.Groups["double"].Value
-                : match.Groups["single"].Value))
-            .Where(url => !string.IsNullOrWhiteSpace(url));
+                : match.Groups["single"].Value), match.Index))
+            .Where(url => !string.IsNullOrWhiteSpace(url.Destination));
+    }
 
     private static IEnumerable<IMarkdownLink> ReadDiagramLinks(FencedCodeBlock block)
     {

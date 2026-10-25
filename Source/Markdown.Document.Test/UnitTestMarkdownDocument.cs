@@ -62,6 +62,28 @@ public class UnitTestMarkdownDocument
     }
 
     [Fact]
+    public void ReadLinksIgnoresHtmlComments()
+    {
+        const string markdown = "# Overview\n\n<!-- <iframe src=\"missing.html\"></iframe> -->\n\nText <!-- <img src=\"missing.png\"> --> inline.\n\n<div>\n<!--\n<img src=\"hidden.png\">\n-->\n<img src=\"visible.png\">\n</div>\n";
+
+        var links = MarkdownDocument.ReadLinks(markdown).ToArray();
+
+        var link = Assert.Single(links);
+        Assert.Equal("visible.png", link.Destination);
+        Assert.Equal(11, link.LineNumber);
+    }
+
+    [Fact]
+    public void ReadLinksFindsAttributesOfMultiLineTags()
+    {
+        const string markdown = "<iframe\nsrc=\"assets/demo.html\"\ndata-src=\"ignored.html\">\n</iframe>\n";
+
+        var link = Assert.Single(MarkdownDocument.ReadLinks(markdown));
+        Assert.Equal("assets/demo.html", link.Destination);
+        Assert.Equal(2, link.LineNumber);
+    }
+
+    [Fact]
     public void ReadLinksIgnoresHtmlInCode()
     {
         const string markdown = "# Overview\n\n```html\n<iframe src=\"demo.html\"></iframe>\n```\n\nUse `<img src=\"logo.png\">`.\n";

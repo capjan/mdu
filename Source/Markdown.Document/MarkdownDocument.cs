@@ -25,4 +25,12 @@ public static class MarkdownDocument
     {
         return Reader().ReadAnalysis(documentContent);
     }
+
+    /// <summary>
+    /// Reads the URLs in <c>src</c>, <c>href</c> and <c>poster</c> attributes of an HTML file, outside comments.
+    /// </summary>
+    public static IEnumerable<string> ReadHtmlUrls(string html)
+    {
+        return MarkdownDocumentReader.ReadHtmlAttributeUrls(html);
+    }
 }

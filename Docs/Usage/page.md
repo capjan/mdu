@@ -25,6 +25,8 @@ MDU then updates every relative link in the documentation folder:
 
 A link that still points to the right file is left as it is: pages of a moved folder that link to each other keep their links, and a link to a folder such as `Guide/` stays a folder link. Links in code, links to web addresses, and absolute paths never change. A rename that only changes the case of a name, such as `Setup.md` to `setup.md`, updates the links too, because web servers usually tell case apart.
 
+Paths in raw HTML, such as `<iframe src="assets/demo.html">`, are not updated. Run `mdu lint` after a move: it reports such paths when they no longer resolve (`MDU004`).
+
 ```text
 $ mdu page move docs/Setup.md docs/Start/
 Moved page: Setup.md -> Start/Setup.md

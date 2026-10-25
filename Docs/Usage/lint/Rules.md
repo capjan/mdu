@@ -45,11 +45,11 @@ For example, `# Keyboard Keys` matches the directory `Keyboard-Keys`. See [Rule 
 
 ## MDU003: LinkCasing
 
-The path in a local link must use the same casing as its target on disk. This catches links that may work on a case-insensitive file system but fail on a case-sensitive one. Query strings and fragments do not affect the path check. This also applies to local destinations in supported Mermaid, context, and PlantUML node links. Correct the target path to match the file or directory name. See [Rule 3](Rule3.md) for an example.
+The path in a local link must use the same casing as its target on disk. This catches links that may work on a case-insensitive file system but fail on a case-sensitive one. Query strings and fragments do not affect the path check. This also applies to local destinations in supported Mermaid, context, and PlantUML node links, and to `src`, `href`, and `poster` attributes in raw HTML. Correct the target path to match the file or directory name. See [Rule 3](Rule3.md) for an example.
 
 ## MDU004: LocalLinkExists
 
-Relative local links, image targets, and destinations in supported Mermaid, context, and PlantUML node links must point to an existing file or to a directory containing a `README.md`. Query strings and fragments are ignored when resolving the path. External URLs and fragment-only links are not checked by this rule.
+Relative local links, image targets, destinations in supported Mermaid, context, and PlantUML node links, and `src`, `href`, and `poster` attributes in raw HTML (outside HTML comments) must point to an existing file or to a directory containing a `README.md`. Query strings and fragments are ignored when resolving the path. External URLs and fragment-only links are not checked by this rule.
 
 Fix the destination or add the missing target. A casing mismatch for an existing target is reported as `MDU003` instead.
 
