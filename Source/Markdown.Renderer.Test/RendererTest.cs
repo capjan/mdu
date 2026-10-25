@@ -257,4 +257,28 @@ public class RendererTest
         Assert.DoesNotContain(">Footnotes</a>", html.Split("class=\"toc-list\"", 2).ElementAtOrDefault(1) ?? string.Empty);
     }
 
+    [Theory]
+    [InlineData("## 6. Sicherheitsinvarianten", "6-sicherheitsinvarianten")]
+    [InlineData("## 3.1 Überblick", "31-uberblick")]
+    [InlineData("## 2024", "2024")]
+    [InlineData("## 10 `mdu render`", "10-mdu-render")]
+    [InlineData("## Overview", "overview")]
+    [InlineData("## app.Client", "app.client")]
+    [InlineData("## 6. Security {#custom}", "custom")]
+    public void KeepsLeadingNumbersInHeadingIds(string heading, string expectedId)
+    {
+        var html = new HtmlRenderer().RenderMarkdownFragment(heading);
+
+        Assert.Contains($"id=\"{expectedId}\"", html);
+    }
+
+    [Fact]
+    public void NumbersDuplicateHeadingIdsWithLeadingNumbers()
+    {
+        var html = new HtmlRenderer().RenderMarkdownFragment("## 1. Setup\n\n## 1. Setup\n\n## Setup");
+
+        Assert.Contains("id=\"1-setup\"", html);
+        Assert.Contains("id=\"1-setup-1\"", html);
+        Assert.Contains("id=\"setup\"", html);
+    }
 }

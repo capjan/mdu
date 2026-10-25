@@ -31,6 +31,7 @@ public sealed class SearchIndexBuilder
         .UseGridTables()
         .UsePipeTables()
         .UseAdvancedExtensions()
+        .UseHeadingIds()
         .UseGitHubAlerts()
         .UseIconsAndEmojis()
         .UseKeyboardKeys()

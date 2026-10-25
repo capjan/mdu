@@ -70,7 +70,8 @@ public class HtmlRenderer
         pipelineBuilder
             .UseGridTables()
             .UsePipeTables()
-            .UseAdvancedExtensions();
+            .UseAdvancedExtensions()
+            .UseHeadingIds();
         if (sharedAbbreviations is not null) pipelineBuilder.Extensions.Add(sharedAbbreviations);
         return pipelineBuilder
             .UseScrollableTables()
