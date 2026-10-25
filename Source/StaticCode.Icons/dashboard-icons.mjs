@@ -93,6 +93,8 @@ for (const file of fs.readdirSync(svgDir).filter((file) => file.endsWith(".svg")
 
     let svg;
     let monochrome;
+    let lightLogo;
+    let darkLogo;
     let whiteLogo;
     try {
         svg = optimize(source, {
@@ -105,6 +107,8 @@ for (const file of fs.readdirSync(svgDir).filter((file) => file.endsWith(".svg")
                 { name: "inspectPaints", fn: root => {
                     monochrome = monochromePaint(root);
                     const paints = paintProfile(root, true);
+                    lightLogo = paints?.every(paint => paint.luminance >= 0.25) ?? false;
+                    darkLogo = paints?.every(paint => paint.luminance <= 0.2) ?? false;
                     whiteLogo = paints?.every(paint => paint.luminance >= 0.9) ?? false;
                 } }
             ]
@@ -126,7 +130,7 @@ for (const file of fs.readdirSync(svgDir).filter((file) => file.endsWith(".svg")
         groupAttributes.unshift(["fill", "#000"]);
     const group = groupAttributes.map(([attribute, value]) => ` ${attribute}="${value}"`).join("");
     const [left, top, width, height] = viewBox;
-    glyphs.set(name, { body: `<g${group}>${root[2]}</g>`, left, top, width, height, monochrome, whiteLogo });
+    glyphs.set(name, { body: `<g${group}>${root[2]}</g>`, left, top, width, height, monochrome, lightLogo, darkLogo, whiteLogo });
 }
 
 // Most "-light" files are drawn in light colors for dark themes, and "-dark" files in dark colors for light themes.
@@ -146,7 +150,7 @@ for (const name of glyphs.keys()) {
         themedVariants.set(base, { light: glyphs.get(name), dark: glyphs.get(`${base}-light`) });
 }
 for (const [name, { light, dark }] of themedVariants) {
-    if (light.whiteLogo && !dark.whiteLogo)
+    if ((light.lightLogo && dark.darkLogo) || (light.whiteLogo && !dark.whiteLogo))
         themedVariants.set(name, { light: dark, dark: light });
 }
 const isVariant = (name) => {

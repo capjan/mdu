@@ -32,6 +32,8 @@ const fixtures = {
     "colored-pair-light": `<g fill="#2396ed">${shape}</g>`,
     "current-color-pair-dark": `<g fill="white">${shape}</g>`,
     "current-color-pair-light": `<g fill="currentColor">${shape}</g>`,
+    "bright-pair-dark": `<g fill="#e57cd8">${shape}</g>`,
+    "bright-pair-light": `<g fill="#2c1138">${shape}</g>`,
     "linear-light": `<g fill="#fff">${shape}</g>`,
     "linear-dark": `<g fill="#222326">${shape}</g>`,
     "open-router-light": '<defs><clipPath id="a"><path d="M0 0h5v10H0z"/></clipPath></defs><path clip-path="url(#a)" fill="#fff" d="M0 0h10v10H0z"/>',
@@ -77,6 +79,11 @@ test("moves nearly white variants away from the light theme even when the other 
         assert.equal(icons[name].body, icons[`${name}-light`].body);
         assert.equal(icons[name].dark.body, icons[`${name}-dark`].body);
     }
+});
+
+test("keeps darker variants in the light theme when the other is bright but not white", () => {
+    assert.equal(icons["bright-pair"].body, icons["bright-pair-light"].body);
+    assert.equal(icons["bright-pair"].dark.body, icons["bright-pair-dark"].body);
 });
 
 test("adapts unpaired monochrome fills, styles and strokes", () => {
