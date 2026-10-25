@@ -50,6 +50,26 @@ public class UnitTestMarkdownDocument
     }
 
     [Fact]
+    public void ReadLinksIncludesUrlsInRawHtml()
+    {
+        const string markdown = "# Overview\n\n<iframe src=\"assets/demo/index.html\"></iframe>\n\nText with <img src='images/logo.png' alt=\"Logo\"> inline.\n\n<video poster=\"poster.jpg\">\n<source src=\"clip.mp4\">\n</video>\n";
+
+        var links = MarkdownDocument.ReadLinks(markdown).ToArray();
+
+        Assert.Equal(new[] { "assets/demo/index.html", "clip.mp4", "images/logo.png", "poster.jpg" },
+            links.Select(link => link.Destination).OrderBy(destination => destination, StringComparer.Ordinal));
+        Assert.Equal(3, links.Single(link => link.Destination == "assets/demo/index.html").LineNumber);
+    }
+
+    [Fact]
+    public void ReadLinksIgnoresHtmlInCode()
+    {
+        const string markdown = "# Overview\n\n```html\n<iframe src=\"demo.html\"></iframe>\n```\n\nUse `<img src=\"logo.png\">`.\n";
+
+        Assert.Empty(MarkdownDocument.ReadLinks(markdown));
+    }
+
+    [Fact]
     public void ReadLinksDoesNotTreatFootnoteDefinitionsAsLinks()
     {
         const string markdown = "# Overview\n\n[^unused]: Not a link target.\n";

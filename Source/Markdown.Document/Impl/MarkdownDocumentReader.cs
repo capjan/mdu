@@ -1,4 +1,5 @@
-﻿using System.Text.RegularExpressions;
+﻿using System.Net;
+using System.Text.RegularExpressions;
 using Core.Extensions.ParserRelated;
 using Core.Parser;
 using Markdig;
@@ -23,6 +24,9 @@ public class MarkdownDocumentReader : IMarkdownDocumentReader
     private static readonly Regex PlantUmlNodeLinkRegex = new(
         "^url[ \\t]+of[ \\t]+(?<id>[\\p{L}\\p{N}_.]+)[ \\t]+is[ \\t]+\\[\\[(?<url>[^\\]]+)\\]\\][ \\t]*$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex HtmlUrlAttributeRegex = new(
+        "\\s(?:src|href|poster)\\s*=\\s*(?:\"(?<double>[^\"]*)\"|'(?<single>[^']*)')",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     public IMarkdownHeader ReadHeader(IParserInput input)
     {
@@ -61,10 +65,11 @@ public class MarkdownDocumentReader : IMarkdownDocumentReader
                 return new MarkdownLink(text, url, isImage, lineNumber);
             });
         var diagramLinks = document.Descendants<FencedCodeBlock>().SelectMany(ReadDiagramLinks);
+        var htmlLinks = ReadHtmlLinks(document);
         var footnotes = ReadFootnotes(document, definitions);
 
         return new MarkdownDocumentAnalysis(
-            markdownLinks.Concat(diagramLinks).ToArray(),
+            markdownLinks.Concat(diagramLinks).Concat(htmlLinks).ToArray(),
             footnotes.UnusedFootnotes,
             footnotes.DuplicateFootnotes);
     }
@@ -120,6 +125,36 @@ public class MarkdownDocumentReader : IMarkdownDocumentReader
 
         return reachable;
     }
+
+    /// <summary>
+    /// Reads <c>src</c>, <c>href</c> and <c>poster</c> attributes from raw HTML, such as
+    /// <c>&lt;iframe src="assets/demo/index.html"&gt;</c>, so their files are checked and copied like Markdown links.
+    /// </summary>
+    private static IEnumerable<IMarkdownLink> ReadHtmlLinks(Markdig.Syntax.MarkdownDocument document)
+    {
+        foreach (var block in document.Descendants<HtmlBlock>())
+        {
+            if (block.Lines.Lines == null) continue;
+            for (var index = 0; index < block.Lines.Count; index++)
+            {
+                foreach (var destination in ReadHtmlAttributeUrls(block.Lines.Lines[index].Slice.ToString()))
+                    yield return new MarkdownLink(string.Empty, destination, false, block.Line + index + 1);
+            }
+        }
+
+        foreach (var inline in document.Descendants<HtmlInline>())
+        {
+            foreach (var destination in ReadHtmlAttributeUrls(inline.Tag))
+                yield return new MarkdownLink(string.Empty, destination, false, inline.Line + 1);
+        }
+    }
+
+    private static IEnumerable<string> ReadHtmlAttributeUrls(string html) =>
+        HtmlUrlAttributeRegex.Matches(html)
+            .Select(match => WebUtility.HtmlDecode(match.Groups["double"].Success
+                ? match.Groups["double"].Value
+                : match.Groups["single"].Value))
+            .Where(url => !string.IsNullOrWhiteSpace(url));
 
     private static IEnumerable<IMarkdownLink> ReadDiagramLinks(FencedCodeBlock block)
     {
