@@ -93,8 +93,7 @@ for (const file of fs.readdirSync(svgDir).filter((file) => file.endsWith(".svg")
 
     let svg;
     let monochrome;
-    let lightLogo;
-    let darkLogo;
+    let whiteLogo;
     try {
         svg = optimize(source, {
             multipass: true,
@@ -106,8 +105,7 @@ for (const file of fs.readdirSync(svgDir).filter((file) => file.endsWith(".svg")
                 { name: "inspectPaints", fn: root => {
                     monochrome = monochromePaint(root);
                     const paints = paintProfile(root, true);
-                    lightLogo = paints?.every(paint => paint.luminance >= 0.25) ?? false;
-                    darkLogo = paints?.every(paint => paint.luminance <= 0.2) ?? false;
+                    whiteLogo = paints?.every(paint => paint.luminance >= 0.9) ?? false;
                 } }
             ]
         }).data;
@@ -128,11 +126,12 @@ for (const file of fs.readdirSync(svgDir).filter((file) => file.endsWith(".svg")
         groupAttributes.unshift(["fill", "#000"]);
     const group = groupAttributes.map(([attribute, value]) => ` ${attribute}="${value}"`).join("");
     const [left, top, width, height] = viewBox;
-    glyphs.set(name, { body: `<g${group}>${root[2]}</g>`, left, top, width, height, monochrome, lightLogo, darkLogo });
+    glyphs.set(name, { body: `<g${group}>${root[2]}</g>`, left, top, width, height, monochrome, whiteLogo });
 }
 
 // Most "-light" files are drawn in light colors for dark themes, and "-dark" files in dark colors for light themes.
-// Some instead name the background theme; correct reversed bright/dark pairs by their effective paints below.
+// Some suffixes name the background theme. If the light-theme variant is almost white and the other is not,
+// swap them regardless of whether the other logo is dark, colored or uses currentColor.
 const themedVariants = new Map();
 for (const [name, glyph] of glyphs) {
     if (/-(light|dark)$/.test(name)) continue;
@@ -147,7 +146,7 @@ for (const name of glyphs.keys()) {
         themedVariants.set(base, { light: glyphs.get(name), dark: glyphs.get(`${base}-light`) });
 }
 for (const [name, { light, dark }] of themedVariants) {
-    if (light.lightLogo && dark.darkLogo)
+    if (light.whiteLogo && !dark.whiteLogo)
         themedVariants.set(name, { light: dark, dark: light });
 }
 const isVariant = (name) => {

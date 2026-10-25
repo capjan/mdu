@@ -30,6 +30,8 @@ const fixtures = {
     "masked": `<defs><mask id="a"><path fill="#fff" d="M0 0h10v10H0z"/></mask></defs><g mask="url(#a)">${shape}</g>`,
     "colored-pair-dark": `<g fill="white">${shape}</g>`,
     "colored-pair-light": `<g fill="#2396ed">${shape}</g>`,
+    "current-color-pair-dark": `<g fill="white">${shape}</g>`,
+    "current-color-pair-light": `<g fill="currentColor">${shape}</g>`,
     "linear-light": `<g fill="#fff">${shape}</g>`,
     "linear-dark": `<g fill="#222326">${shape}</g>`,
     "open-router-light": '<defs><clipPath id="a"><path d="M0 0h5v10H0z"/></clipPath></defs><path clip-path="url(#a)" fill="#fff" d="M0 0h10v10H0z"/>',
@@ -70,6 +72,13 @@ test("orders near-black variants and pairs with clip paths by brightness", () =>
     }
 });
 
+test("moves nearly white variants away from the light theme even when the other is colored", () => {
+    for (const name of ["colored-pair", "current-color-pair"]) {
+        assert.equal(icons[name].body, icons[`${name}-light`].body);
+        assert.equal(icons[name].dark.body, icons[`${name}-dark`].body);
+    }
+});
+
 test("adapts unpaired monochrome fills, styles and strokes", () => {
     for (const name of ["plain", "white", "near-white", "styled", "outlined", "transparent"]) {
         assert.match(icons[name].body, /currentColor/);
@@ -81,10 +90,12 @@ test("adapts unpaired monochrome fills, styles and strokes", () => {
     assert.match(icons["red-short"].body, /#e00/);
 });
 
-test("preserves colors and complex SVG paints", () => {
-    for (const name of ["colored", "multicolor", "gradient", "masked", "colored-pair"])
+test("preserves logo colors and complex SVG paints while reordering variants", () => {
+    for (const name of ["colored", "multicolor", "gradient", "masked"])
         assert.doesNotMatch(icons[name].body, /currentColor/);
     assert.match(icons.colored.body, /#2396ed/);
-    assert.equal(icons["colored-pair"].body, icons["colored-pair-dark"].body);
-    assert.equal(icons["colored-pair"].dark.body, icons["colored-pair-light"].body);
+    assert.match(icons["colored-pair"].body, /#2396ed/);
+    assert.match(icons["colored-pair"].dark.body, /#fff/);
+    assert.match(icons["current-color-pair"].body, /currentColor/);
+    assert.match(icons["current-color-pair"].dark.body, /#fff/);
 });
