@@ -223,6 +223,65 @@ public class SearchIndexBuilderTest
         Assert.Contains("Inline API", apiEntry.GetProperty("text").GetString());
     }
 
+    [Fact]
+    public void IndexesEachOpenApiOperationOnceWithItsSections()
+    {
+        const string markdown = """
+            # API guide
+
+            ```openapi
+            openapi: 3.1.0
+            info:
+              title: Inline API
+              version: 1.0.0
+            paths:
+              /widgets/{widget_id}:
+                get:
+                  summary: Read widget
+                  parameters:
+                    - in: path
+                      name: widget_id
+                      required: true
+                      description: Widget reservation key.
+                      schema: { type: string }
+                  responses:
+                    '200':
+                      description: Widget details
+                      content:
+                        application/json:
+                          schema:
+                            type: object
+                            properties:
+                              name: { type: string }
+              /gadgets:
+                get:
+                  summary: List gadgets
+                  responses:
+                    '200':
+                      description: Gadget list
+            ```
+
+            ## Next steps
+
+            Continue reading.
+            """;
+
+        var expanded = OpenApiMarkdownRenderer.ExpandCodeBlocks(
+            markdown,
+            Path.Combine(Path.GetTempPath(), "search-openapi-sections.md"),
+            includeSpecificationPageLink: false);
+        var entries = BuildIndex(expanded);
+        var hits = entries.Where(entry => entry.GetProperty("text").GetString()!
+            .Contains("reservation key", StringComparison.Ordinal)).ToArray();
+
+        var widget = Assert.Single(hits);
+        Assert.StartsWith("GET /widgets/", widget.GetProperty("section").GetString());
+        Assert.Contains("Widget details", widget.GetProperty("text").GetString());
+        Assert.DoesNotContain(entries, entry => entry.GetProperty("section").GetString() is "Path Parameters" or "Schema" or "Example");
+        Assert.Contains(entries, entry => entry.GetProperty("section").GetString()!.StartsWith("GET /gadgets", StringComparison.Ordinal));
+        Assert.Contains(entries, entry => entry.GetProperty("section").GetString() == "Next steps");
+    }
+
     private static JsonElement[] BuildIndex(string markdown)
     {
         var outputPath = Path.Combine(Path.GetTempPath(), $"mdu-search-test-{Guid.NewGuid():N}");

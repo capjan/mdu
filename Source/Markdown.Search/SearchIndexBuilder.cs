@@ -17,6 +17,7 @@ public sealed class SearchIndexBuilder
         "<h(?<level>[1-6])(?<attributes>[^>]*)>(?<title>.*?)</h\\k<level>>",
         RegexOptions.Compiled | RegexOptions.Singleline | RegexOptions.CultureInvariant);
     private static readonly Regex IdRegex = new("\\bid=\"(?<id>[^\"]+)\"", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex OperationClassRegex = new("\\bclass=\"(?:[^\"]*\\s)?openapi-operation(?:\\s[^\"]*)?\"", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex ScriptAndStyleRegex = new("<(script|style)\\b[^>]*>.*?</\\1>", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
     private static readonly Regex HtmlTagRegex = new("<[^>]+>", RegexOptions.Compiled | RegexOptions.Singleline);
     private static readonly Regex WhitespaceRegex = new("\\s+", RegexOptions.Compiled);
@@ -78,19 +79,47 @@ public sealed class SearchIndexBuilder
         if (!string.IsNullOrWhiteSpace(introduction) || introductionCode is { Count: > 0 })
             AddEntry(title, string.Empty, url, introduction, introductionCode);
 
+        // Parameters, responses, examples and schemas of an API operation belong to the operation's entry,
+        // so a search finds the operation once instead of each of its sections.
+        var operationLevel = 0;
+        var operationEntry = -1;
         for (var index = 0; index < headings.Length; index++)
         {
             var heading = headings[index];
+            var level = heading.Groups["level"].Value[0] - '0';
+            var contentStart = heading.Index + heading.Length;
+            var contentEnd = index + 1 < headings.Length ? headings[index + 1].Index : html.Length;
+            if (operationEntry >= 0 && level > operationLevel)
+            {
+                var sectionText = $"{ExtractText(heading.Groups["title"].Value)} {ExtractText(html[contentStart..contentEnd])}";
+                var subsectionId = IdRegex.Match(heading.Groups["attributes"].Value);
+                AppendToEntry(operationEntry, sectionText,
+                    subsectionId.Success ? codeBySection.GetValueOrDefault(subsectionId.Groups["id"].Value) : null);
+                continue;
+            }
+            operationEntry = -1;
+
             var idMatch = IdRegex.Match(heading.Groups["attributes"].Value);
             if (!idMatch.Success) continue;
 
             var section = ExtractText(heading.Groups["title"].Value);
-            var contentStart = heading.Index + heading.Length;
-            var contentEnd = index + 1 < headings.Length ? headings[index + 1].Index : html.Length;
             var text = ExtractText(html[contentStart..contentEnd]);
             var sectionUrl = $"{url}#{Uri.EscapeDataString(idMatch.Groups["id"].Value)}";
             AddEntry(title, section, sectionUrl, text, codeBySection.GetValueOrDefault(idMatch.Groups["id"].Value));
+            if (OperationClassRegex.IsMatch(heading.Groups["attributes"].Value))
+            {
+                operationLevel = level;
+                operationEntry = _entries.Count - 1;
+            }
         }
+    }
+
+    private void AppendToEntry(int index, string text, List<string>? code)
+    {
+        var entry = _entries[index];
+        var joinedText = string.IsNullOrWhiteSpace(text) ? entry.Text : $"{entry.Text} {text}".Trim();
+        var joinedCode = code is { Count: > 0 } ? $"{entry.Code} {string.Join(" ", code)}".Trim() : entry.Code;
+        _entries[index] = entry with { Text = joinedText, Code = joinedCode };
     }
 
     public void WriteIndex(string outputPath)
