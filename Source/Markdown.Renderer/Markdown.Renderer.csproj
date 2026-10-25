@@ -16,12 +16,16 @@
       <EmbeddedResource Include="Res\Css\main.css" />
       <None Remove="Res\Css\hero.css" />
       <EmbeddedResource Include="Res\Css\hero.css" />
+      <None Remove="Res\Css\dashboard.css" />
+      <EmbeddedResource Include="Res\Css\dashboard.css" />
       <None Remove="Res\Html\main.html" />
       <EmbeddedResource Include="Res\Html\main.html" />
       <None Remove="Res\Js\icon-search.js" />
       <EmbeddedResource Include="Res\Js\icon-search.js" />
       <None Remove="Res\Js\hero-beach.js" />
       <EmbeddedResource Include="Res\Js\hero-beach.js" />
+      <None Remove="Res\Js\dashboard.js" />
+      <EmbeddedResource Include="Res\Js\dashboard.js" />
       <None Remove="Res\Js\isometric-diagram.js" />
       <EmbeddedResource Include="Res\Js\isometric-diagram.js" />
     </ItemGroup>

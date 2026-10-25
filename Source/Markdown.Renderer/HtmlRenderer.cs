@@ -162,7 +162,8 @@ public class HtmlRenderer
         string pageIcon = "",
         IReadOnlyList<NavigationItem>? topNavigationItems = null,
         DateTimeOffset? lastModified = null,
-        string? pdfDownloadUrl = null)
+        string? pdfDownloadUrl = null,
+        DashboardOptions? dashboard = null)
     {
         var prefix = string.Concat(Enumerable.Repeat("../", nestingDeep));
         var cssFileLink = prefix + "css/main.css";
@@ -177,7 +178,7 @@ public class HtmlRenderer
             .Any(block => block.Info == Hero.CodeBlockLanguage);
         var hasIsometricDiagram = document.Descendants<FencedCodeBlock>()
             .Any(block => block.Info == DiagramRenderer.IsometricLanguage);
-        var renderedMarkdown = document.ToHtml(_pipeline);
+        var renderedMarkdown = dashboard is null ? document.ToHtml(_pipeline) : Dashboard.Render(document, _pipeline, dashboard);
         renderedMarkdown = MediaLinkEmbedder.ReplaceStandaloneLinks(renderedMarkdown, out var mediaProviders);
         var pageHero = hasHero ? Hero.ExtractFullWidth(ref renderedMarkdown) : string.Empty;
         renderedMarkdown = InsertFootnotesTitle(renderedMarkdown);
@@ -237,27 +238,29 @@ public class HtmlRenderer
             ["SITE_THEME_STYLE"] = RenderThemeStyles(_siteConfiguration),
             ["SEARCH_SCRIPT_LINK"] = HtmlEncoder.Default.Encode(searchScriptLink),
             ["SEARCH_INDEX_LINK"] = HtmlEncoder.Default.Encode(searchIndexLink),
-            ["TOC_LAYOUT_CLASS"] = " has-on-this-page",
+            ["TOC_LAYOUT_CLASS"] = dashboard is null ? " has-on-this-page" : string.Empty,
             ["NAVIGATION_ITEMS"] = RenderNavigationItems(model.NavigationItems),
             ["TOP_NAVIGATION_ITEMS"] = RenderTopNavigationItems(model.TopNavigationItems),
             ["SIDEBAR_SECTION_TITLE"] = currentTopNavigationItem is not null && hasWideSidebar && !hasUnassignedSidebarPages
                 ? $"<div class=\"site-nav-section-title\">{HtmlEncoder.Default.Encode(currentTopNavigationItem.Title)}</div>"
                 : string.Empty,
             ["TOP_NAVIGATION_CLASS"] = hasTopNavigation ? string.Empty : " is-empty",
-            ["SITE_LAYOUT_CLASS"] = hasTopNavigation
+            ["SITE_LAYOUT_CLASS"] = (hasTopNavigation
                 ? hasWideSidebar
                     ? hasCurrentTopSection
                         ? " has-top-navigation has-current-top-section has-wide-sidebar"
                         : " has-top-navigation has-wide-sidebar"
                     : " has-top-navigation no-wide-sidebar"
-                : " has-wide-sidebar",
+                : " has-wide-sidebar")
+                + (dashboard is null ? string.Empty : " is-dashboard"),
             ["MEDIA_SETTINGS_BUTTON"] = providersForSettings.Count > 0 ? MediaLinkEmbedder.SettingsButtonHtml : string.Empty,
             ["MEDIA_SETTINGS_DIALOG"] = MediaLinkEmbedder.RenderSettingsDialog(providersForSettings),
             ["MARKDOWN"] = model.RenderedMarkdown,
             ["PAGE_HERO"] = pageHero,
-            ["PAGE_STYLES"] = hasHero ? $"<style>{Hero.Styles}</style>" : string.Empty,
-            ["PAGE_BREADCRUMBS"] = breadcrumbMarkup,
-            ["PAGE_TOC"] = RenderOnThisPage(tocHeadings),
+            ["PAGE_STYLES"] = (hasHero ? $"<style>{Hero.Styles}</style>" : string.Empty)
+                + (dashboard is null ? string.Empty : $"<style>{Dashboard.Styles}</style>"),
+            ["PAGE_BREADCRUMBS"] = dashboard is null ? breadcrumbMarkup : string.Empty,
+            ["PAGE_TOC"] = dashboard is null ? RenderOnThisPage(tocHeadings) : string.Empty,
             ["PAGE_FOOTER"] = RenderPageFooter(model.NavigationItems, editPageLink, !editLinkInserted, lastModified),
             ["BACK_TO_TOP"] = "<a class=\"back-to-top\" id=\"back-to-top\" href=\"#top\" aria-label=\"Back to top\" title=\"Back to top\"><svg viewBox=\"0 0 20 20\" aria-hidden=\"true\"><path d=\"M10 16V4m-5 5 5-5 5 5\"></path></svg><span>Back to top</span></a>",
             ["GITHUB_REPOSITORY_LINK"] = RenderGitHubRepositoryLink(editPageLink),
@@ -268,6 +271,7 @@ public class HtmlRenderer
                 + (providersForSettings.Count > 0 ? $"<script>{MediaLinkEmbedder.Script}</script>{Environment.NewLine}" : string.Empty)
                 + (hasOpenApiInteractiveContent ? $"<script>{OpenApiResponseScript}</script>{Environment.NewLine}" : string.Empty)
                 + (hasHero ? $"<script>{Hero.Script}</script>{Environment.NewLine}" : string.Empty)
+                + (dashboard is null ? string.Empty : $"<script>{Dashboard.Script}</script>{Environment.NewLine}")
                 + (hasIsometricDiagram ? $"<script>{Resources.IsometricDiagramScriptContent()}</script>{Environment.NewLine}" : string.Empty)
         };
         var renderedHtml = TemplateTokenRegex.Replace(Resources.HtmlTemplateContent(), match =>

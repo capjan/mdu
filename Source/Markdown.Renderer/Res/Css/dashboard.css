@@ -1,0 +1,710 @@
+/* Dashboard pages: a start page of link tiles grouped by second-level headings. */
+
+.site-layout.is-dashboard .content-layout {
+    display: block;
+}
+
+.site-layout.is-dashboard .site-main {
+    padding-inline: 2rem;
+}
+
+.dashboard {
+    --dashboard-tile-background: var(--surface-current);
+    --dashboard-tile-hover: var(--nav-hover);
+    --dashboard-tile-radius: 12px;
+}
+
+.dashboard > h1 {
+    margin-bottom: 0.5rem;
+}
+
+.dashboard-toolbar {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 1.5rem;
+    margin: 1.25rem 0 2.5rem;
+}
+
+.dashboard-search {
+    position: relative;
+    display: flex;
+    flex: 1 1 22rem;
+    align-items: center;
+    max-width: 44rem;
+}
+
+.dashboard-search > svg {
+    position: absolute;
+    left: 0.95rem;
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: var(--text-secondary);
+    stroke-linecap: round;
+    stroke-width: 1.7;
+    pointer-events: none;
+}
+
+.dashboard-search input {
+    width: 100%;
+    height: 2.75rem;
+    padding: 0 2.75rem 0 2.6rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--dashboard-tile-background);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 1rem;
+    transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+}
+
+.dashboard-search input::placeholder {
+    color: var(--text-secondary);
+}
+
+.dashboard-search input:focus {
+    border-color: var(--link);
+    outline: none;
+    background: var(--page-background);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--link) 22%, transparent);
+}
+
+.dashboard-search input::-webkit-search-cancel-button {
+    display: none;
+}
+
+.dashboard-search-key {
+    position: absolute;
+    right: 0.85rem;
+    font-size: 0.8rem;
+    pointer-events: none;
+}
+
+.dashboard-search:focus-within .dashboard-search-key,
+.dashboard-search:has(input:not(:placeholder-shown)) .dashboard-search-key {
+    display: none;
+}
+
+/* The clear button replaces the slash key once the field holds text. */
+.dashboard-search-clear {
+    position: absolute;
+    right: 0.55rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: var(--hover-background);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background-color 120ms ease, color 120ms ease, opacity 160ms ease, scale 160ms ease;
+}
+
+.dashboard-search:has(input:placeholder-shown) .dashboard-search-clear {
+    display: none;
+}
+
+@starting-style {
+    .dashboard-search-clear {
+        opacity: 0;
+        scale: 0.6;
+    }
+}
+
+.dashboard-search-clear:hover {
+    background: var(--nav-hover);
+    color: var(--nav-hover-text);
+}
+
+.dashboard-search-clear:focus-visible {
+    outline: 2px solid var(--link);
+    outline-offset: 2px;
+}
+
+.dashboard-search-clear svg {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-width: 1.8;
+}
+
+.dashboard-search-hint {
+    position: absolute;
+    top: 100%;
+    left: 1.25rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1.1rem;
+    margin: 0.5rem 0 0;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+}
+
+.dashboard-search-hint-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    white-space: nowrap;
+}
+
+.dashboard-clock {
+    margin-left: auto;
+    color: var(--text-secondary);
+    font-size: 1.05rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.dashboard-clock strong {
+    color: var(--text-primary);
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+.dashboard-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+    align-items: start;
+    gap: 2rem 1.5rem;
+    margin-bottom: 2.5rem;
+}
+
+.dashboard-row[hidden],
+.dashboard-group[hidden],
+.dashboard-tile[hidden] {
+    display: none;
+}
+
+.dashboard-group {
+    min-width: 0;
+}
+
+.markdown-content .dashboard-group h2 {
+    margin: 0 0 0.75rem;
+    padding: 0;
+    border: 0;
+    font-size: 1.125rem;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+}
+
+.dashboard-group h2 .headerlink {
+    display: none;
+}
+
+.dashboard-group > p {
+    margin: -0.4rem 0 0.75rem;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.markdown-content ul.dashboard-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.markdown-content .dashboard-tiles > li {
+    margin: 0;
+    padding: 0;
+    container-type: inline-size;
+}
+
+.markdown-content .dashboard-tiles > li::before {
+    content: none;
+}
+
+/* Further paragraphs or nested lists of a tile's list item. */
+.dashboard-tile:has(.dashboard-tile-more) > a.dashboard-link {
+    height: auto;
+}
+
+.dashboard-tile-more {
+    margin: 0.35rem 0.4rem 0;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    line-height: 1.45;
+}
+
+.markdown-content .dashboard-tile-more > :is(p, ul, ol) {
+    margin: 0.2rem 0;
+}
+
+.dashboard-note {
+    padding: 0.5rem 0.25rem;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.markdown-content a.dashboard-link {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-height: 2.75rem;
+    height: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--dashboard-tile-radius);
+    background: var(--dashboard-tile-background);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    line-height: 1.3;
+    text-decoration: none;
+    transition: background-color 120ms ease, border-color 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+}
+
+/* Pointing at a tile selects it (see the script), so hover only adds a lift; the selection draws the ring. */
+.markdown-content a.dashboard-link:hover {
+    text-decoration: none;
+    transform: translateY(-1px);
+}
+
+.markdown-content a.dashboard-link:focus-visible,
+.markdown-content a.dashboard-page:focus-visible {
+    outline: 2px solid var(--link);
+    outline-offset: 3px;
+    border-radius: var(--dashboard-tile-radius);
+}
+
+/* The match that Enter opens: a tinted tile, unlike the outline of keyboard focus. */
+/* The match that Enter opens: a blue ring on a faint tint, unlike the offset outline of keyboard focus. The tint stays
+   light enough for secondary text to keep a contrast of at least 4.5:1 in both themes. */
+.markdown-content a.dashboard-link.is-selected,
+.markdown-content a.dashboard-page.is-selected {
+    border-color: var(--link);
+    background: color-mix(in srgb, var(--link) 6%, var(--page-background));
+    box-shadow: 0 0 0 1px var(--link), 0 6px 18px color-mix(in srgb, var(--link) 16%, transparent);
+}
+
+.dashboard-tiles.has-descriptions a.dashboard-link {
+    min-height: 4rem;
+    padding: 0.7rem 0.9rem;
+    gap: 0.9rem;
+}
+
+.dashboard-icon {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+}
+
+.dashboard-link .dashboard-icon {
+    transition: transform 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.markdown-content a.dashboard-link:hover .dashboard-icon {
+    transform: scale(1.08);
+}
+
+/* Tiles and groups that the filter shows again fade in instead of popping up. */
+.dashboard-tile,
+.dashboard-group,
+.dashboard-pages {
+    transition: opacity 200ms ease, translate 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+@starting-style {
+    .dashboard-tile,
+    .dashboard-group,
+    .dashboard-pages {
+        opacity: 0;
+        translate: 0 4px;
+    }
+}
+
+.dashboard-tiles.has-descriptions .dashboard-icon {
+    width: 2.25rem;
+    height: 2.25rem;
+}
+
+.dashboard-icon .icon,
+.dashboard-icon .emoji {
+    height: 100%;
+    font-size: 1.4rem;
+    line-height: 1;
+}
+
+.dashboard-icon .icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+.dashboard-icon img {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    object-fit: contain;
+}
+
+.dashboard-monogram {
+    border-radius: 8px;
+    background: hsl(var(--dashboard-hue) 55% 92%);
+    color: hsl(var(--dashboard-hue) 60% 30%);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+:root[data-theme="dark"] .dashboard-monogram {
+    background: hsl(var(--dashboard-hue) 35% 22%);
+    color: hsl(var(--dashboard-hue) 70% 80%);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root[data-theme="auto"] .dashboard-monogram {
+        background: hsl(var(--dashboard-hue) 35% 22%);
+        color: hsl(var(--dashboard-hue) 70% 80%);
+    }
+}
+
+.dashboard-text {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+.dashboard-tiles:not(.has-descriptions) .dashboard-text {
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.dashboard-name {
+    overflow: hidden;
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dashboard-tiles.has-descriptions .dashboard-name {
+    font-size: 0.95rem;
+}
+
+.dashboard-description {
+    overflow: hidden;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dashboard-tiles:not(.has-descriptions) .dashboard-description {
+    min-width: 0;
+    flex-shrink: 1;
+}
+
+/* Narrow compact tiles keep the name and drop the host name. */
+@container (max-width: 15rem) {
+    .dashboard-tiles:not(.has-descriptions) .dashboard-description {
+        display: none;
+    }
+}
+
+.dashboard-status {
+    position: absolute;
+    top: 0.45rem;
+    right: 0.45rem;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--border);
+}
+
+.dashboard-status.is-up {
+    background: #34c759;
+    box-shadow: 0 0 0 3px rgb(52 199 89 / 18%);
+}
+
+.dashboard-status.is-down {
+    background: #ff3b30;
+    box-shadow: 0 0 0 3px rgb(255 59 48 / 18%);
+}
+
+/* Matching pages appear as sheets in A4 portrait format, so they read as documents rather than links. They share the
+   surface, border, and hover of the tiles. */
+.dashboard-pages {
+    margin: 0 0 2.5rem;
+}
+
+.dashboard-pages[hidden],
+.dashboard-empty[hidden] {
+    display: none;
+}
+
+.markdown-content .dashboard-pages-title {
+    margin: 0 0 0.75rem;
+    color: var(--text-primary);
+    font-size: 1.125rem;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+}
+
+.markdown-content ul.dashboard-pages-list {
+    display: flex;
+    gap: 1rem;
+    overflow-x: auto;
+    /* Room for the lift on hover and the focus outline. */
+    margin: -0.25rem;
+    padding: 0.25rem 0.25rem 0.75rem;
+    list-style: none;
+    scrollbar-width: thin;
+}
+
+.markdown-content .dashboard-pages-list > li {
+    flex: none;
+    margin: 0;
+}
+
+.markdown-content a.dashboard-page {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    width: 13rem;
+    aspect-ratio: 1 / 1.4142;
+    padding: 1rem 1.05rem 0.85rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    background: var(--dashboard-tile-background);
+    color: var(--text-primary);
+    text-decoration: none;
+    transition: background-color 160ms ease, border-color 160ms ease, transform 220ms cubic-bezier(0.2, 0.7, 0.2, 1),
+        box-shadow 220ms ease;
+}
+
+.markdown-content a.dashboard-page:hover {
+    text-decoration: none;
+    transform: translateY(-3px);
+}
+
+.markdown-content a.dashboard-page.is-entering {
+    animation: dashboard-page-in 320ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation-delay: calc(var(--dashboard-page-index, 0) * 45ms);
+}
+
+@keyframes dashboard-page-in {
+    from {
+        opacity: 0;
+        transform: translateY(8px) scale(0.985);
+    }
+}
+
+.dashboard-page-label {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+    margin-bottom: 0.55rem;
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    line-height: 1.3;
+}
+
+.dashboard-page-label svg {
+    width: 0.85rem;
+    height: 0.85rem;
+    flex: none;
+    fill: none;
+    stroke: currentColor;
+    stroke-linejoin: round;
+    stroke-width: 1.4;
+    transition: transform 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+a.dashboard-page:hover .dashboard-page-label svg {
+    transform: rotate(-6deg) translateY(-1px);
+}
+
+.dashboard-page-label span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dashboard-page-title {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+.dashboard-page-section {
+    display: -webkit-box;
+    overflow: hidden;
+    margin-top: 0.2rem;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-weight: 500;
+    line-height: 1.3;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+.dashboard-page-text {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    margin-top: 0.7rem;
+    padding-top: 0.7rem;
+    border-top: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    line-height: 1.55;
+    -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
+}
+
+.site-main .dashboard-page-text mark {
+    padding: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.dashboard-page-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    min-height: 1rem;
+    margin-top: 0.5rem;
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+}
+
+.dashboard-page-footer svg {
+    width: 0.9rem;
+    height: 0.9rem;
+    flex: none;
+    fill: none;
+    stroke: var(--link);
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.6;
+    opacity: 0;
+    transform: translateX(-6px);
+    transition: opacity 180ms ease, transform 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+a.dashboard-page:hover .dashboard-page-footer svg,
+a.dashboard-page:focus-visible .dashboard-page-footer svg,
+a.dashboard-page.is-selected .dashboard-page-footer svg {
+    opacity: 1;
+    transform: none;
+}
+
+.dashboard-empty {
+    color: var(--text-secondary);
+}
+
+@media (max-width: 760px) {
+    .site-layout.is-dashboard .site-main {
+        padding-inline: 1rem;
+    }
+
+    .dashboard-clock {
+        order: -1;
+        margin-left: 0;
+    }
+
+    .dashboard-search-hint {
+        display: none;
+    }
+}
+
+/* A soft light follows the pointer across the tile under it. It sits behind the content, so text keeps its contrast. */
+.markdown-content a.dashboard-link,
+.markdown-content a.dashboard-page {
+    isolation: isolate;
+}
+
+.markdown-content a.dashboard-link::after,
+.markdown-content a.dashboard-page::after {
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(
+        220px circle at var(--dashboard-pointer-x, 50%) var(--dashboard-pointer-y, 0%),
+        color-mix(in srgb, var(--link) 16%, transparent),
+        transparent 70%);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 200ms ease;
+    content: "";
+}
+
+.markdown-content a.dashboard-page {
+    position: relative;
+}
+
+.markdown-content a.dashboard-link.is-selected:hover::after,
+.markdown-content a.dashboard-page.is-selected:hover::after {
+    opacity: 1;
+}
+
+.markdown-content a.dashboard-link.is-selected:hover,
+.markdown-content a.dashboard-page.is-selected:hover {
+    box-shadow: 0 0 0 1px var(--link), 0 10px 26px color-mix(in srgb, var(--link) 20%, transparent);
+}
+
+/* A short press gives clicks a tactile response. */
+.markdown-content a.dashboard-link:active {
+    transform: translateY(0) scale(0.985);
+    transition-duration: 80ms;
+}
+
+.markdown-content a.dashboard-page:active {
+    transform: translateY(-1px) scale(0.985);
+    transition-duration: 80ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .markdown-content a.dashboard-link,
+    .markdown-content a.dashboard-link:hover,
+    .markdown-content a.dashboard-page,
+    .markdown-content a.dashboard-page:hover,
+    .markdown-content a.dashboard-link:active,
+    .markdown-content a.dashboard-page:active,
+    .markdown-content a.dashboard-link:hover .dashboard-icon,
+    a.dashboard-page:hover .dashboard-page-label svg,
+    .dashboard-page-footer svg {
+        transition: none;
+        transform: none;
+    }
+
+    .markdown-content a.dashboard-page.is-entering {
+        animation: none;
+    }
+
+    .dashboard-tile,
+    .dashboard-group,
+    .dashboard-pages {
+        transition: none;
+    }
+}

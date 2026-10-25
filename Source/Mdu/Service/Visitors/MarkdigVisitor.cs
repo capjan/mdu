@@ -129,7 +129,8 @@ public class MarkdigVisitor : BaseVisitor
                     entity.Icon,
                     topNavigation,
                     GetLastModified(entity),
-                    pdfUrl).GetAwaiter().GetResult();
+                    pdfUrl,
+                    Dashboard.ReadFrontMatter(entity.FrontMatter)).GetAwaiter().GetResult();
 
             File.Move(temporaryPath, outputFileName, true);
             WriteAliasPage(entity, outputFileName);
