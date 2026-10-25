@@ -34,7 +34,7 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: 10.0.402 # Temporary pin: the 10.0.403 download returns HTTP 409.
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v6
