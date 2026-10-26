@@ -210,8 +210,10 @@ internal static class IsometricSvgWriter
         {
             if (text == null) continue;
             baseline += size + 3;
-            labels.Append($"<text class=\"{cssClass}\" x=\"{F(TitleInset)}\" y=\"{F(baseline)}\">{Escape(text)}</text>");
             var length = TextMetrics.Width(text) * size / TextMetrics.FontSize * 1.08;
+            // Like node labels, the lettering gets a background, so a connection passing underneath does not blur it.
+            labels.Append($"<rect class=\"iso-label-background\" x=\"{F(TitleInset - 4)}\" y=\"{F(baseline - size - 2)}\" width=\"{F(length + 8)}\" height=\"{F(size + 8)}\" rx=\"4\"/>");
+            labels.Append($"<text class=\"{cssClass}\" x=\"{F(TitleInset)}\" y=\"{F(baseline)}\">{Escape(text)}</text>");
             bounds.Include(corner + direction * (TitleInset + length) + new Point(0, baseline + 4), 0, 0);
 
             // Link labels avoid the slanted lettering, which a row of small boxes approximates.

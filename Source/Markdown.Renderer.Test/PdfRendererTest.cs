@@ -27,6 +27,31 @@ public class PdfRendererTest
     }
 
     [Fact]
+    public void SkipsIsometricParticlesInPdf()
+    {
+        const string withoutParticle = """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+              <g class="iso-edge"><path class="iso-edge-line" d="M0 0 L24 24"/></g>
+            </svg>
+            """;
+        const string withParticle = """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+              <g class="iso-edge"><path class="iso-edge-line" d="M0 0 L24 24"/><g class="iso-flow"><circle class="iso-particle" r="3"><animateMotion dur="2s" path="M0 0 L24 24"/></circle></g></g>
+            </svg>
+            """;
+        var expected = new StringBuilder();
+        var actual = new StringBuilder();
+        var document = new System.Xml.XmlDocument();
+
+        document.LoadXml(withoutParticle);
+        PdfSvgRenderer.Draw(document.DocumentElement!, expected, 0, 0, 24, 24, 800);
+        document.LoadXml(withParticle);
+        PdfSvgRenderer.Draw(document.DocumentElement!, actual, 0, 0, 24, 24, 800);
+
+        Assert.Equal(expected.ToString(), actual.ToString());
+    }
+
+    [Fact]
     public void SkipsDarkIsometricIconVariantInPdf()
     {
         const string svg = """
