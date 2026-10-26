@@ -186,6 +186,8 @@ public class HtmlRenderer
         renderedMarkdown = MediaLinkEmbedder.ReplaceStandaloneLinks(renderedMarkdown, out var mediaProviders);
         var pageHero = hasHero ? Hero.ExtractFullWidth(ref renderedMarkdown) : string.Empty;
         renderedMarkdown = InsertFootnotesTitle(renderedMarkdown);
+        var dashboardFootnotes = dashboard is null ? string.Empty : ExtractDashboardFootnotes(ref renderedMarkdown)
+            .Replace("<hr />\n", string.Empty, StringComparison.Ordinal);
         if (!string.IsNullOrWhiteSpace(pageIcon))
         {
             var iconName = pageIcon.Trim().Trim(':').Replace('/', '-');
@@ -265,7 +267,7 @@ public class HtmlRenderer
                 + (dashboard is null ? string.Empty : $"<style>{Dashboard.Styles}</style>"),
             ["PAGE_BREADCRUMBS"] = dashboard is null ? breadcrumbMarkup : string.Empty,
             ["PAGE_TOC"] = dashboard is null ? RenderOnThisPage(tocHeadings) : string.Empty,
-            ["PAGE_FOOTER"] = RenderPageFooter(model.NavigationItems, editPageLink, !editLinkInserted, lastModified),
+            ["PAGE_FOOTER"] = RenderPageFooter(model.NavigationItems, editPageLink, !editLinkInserted, lastModified) + dashboardFootnotes,
             ["BACK_TO_TOP"] = "<a class=\"back-to-top\" id=\"back-to-top\" href=\"#top\" aria-label=\"Back to top\" title=\"Back to top\"><svg viewBox=\"0 0 20 20\" aria-hidden=\"true\"><path d=\"M10 16V4m-5 5 5-5 5 5\"></path></svg><span>Back to top</span></a>",
             ["GITHUB_REPOSITORY_LINK"] = RenderGitHubRepositoryLink(editPageLink),
             ["PAGE_SCRIPTS"] =
@@ -567,6 +569,17 @@ public class HtmlRenderer
         "<div class=\"footnotes\">\n<hr />\n",
         "<div class=\"footnotes\">\n<hr />\n<h2 class=\"footnotes-title\">Footnotes</h2>\n",
         StringComparison.Ordinal);
+
+    private static string ExtractDashboardFootnotes(ref string renderedMarkdown)
+    {
+        const string marker = "<div class=\"footnotes\">";
+        var index = renderedMarkdown.IndexOf(marker, StringComparison.Ordinal);
+        if (index < 0) return string.Empty;
+
+        var footnotes = renderedMarkdown[index..].Trim();
+        renderedMarkdown = renderedMarkdown[..index].TrimEnd();
+        return footnotes;
+    }
 
     private static string RenderPageFooter(
         IReadOnlyList<NavigationItem> navigationItems,

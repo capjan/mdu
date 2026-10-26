@@ -8,6 +8,10 @@
     padding-inline: 2rem;
 }
 
+.site-layout.is-dashboard .markdown-content > .footnotes {
+    margin-top: 1.25rem;
+}
+
 .dashboard {
     --dashboard-tile-background: var(--surface-current);
     --dashboard-tile-hover: var(--nav-hover);
