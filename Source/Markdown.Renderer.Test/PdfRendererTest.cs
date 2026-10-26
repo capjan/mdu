@@ -27,6 +27,25 @@ public class PdfRendererTest
     }
 
     [Fact]
+    public void SkipsDarkIsometricIconVariantInPdf()
+    {
+        const string svg = """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+              <g class="iso-icon-light"><rect x="0" y="0" width="12" height="24" fill="#00ff00"/></g>
+              <g class="iso-icon-dark"><rect x="12" y="0" width="12" height="24" fill="#ff0000"/></g>
+            </svg>
+            """;
+        var document = new System.Xml.XmlDocument();
+        document.LoadXml(svg);
+        var output = new StringBuilder();
+
+        PdfSvgRenderer.Draw(document.DocumentElement!, output, 0, 0, 24, 24, 800);
+
+        Assert.Contains("0 1 0 rg", output.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("1 0 0 rg", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DrawsIsometricDiagramInLastPhaseInPdf()
     {
         const string markdown = """

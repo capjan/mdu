@@ -62,7 +62,8 @@ internal static class PdfSvgRenderer
         {
             if (node is not XmlElement element) continue;
             var classes = string.Join(' ', inheritedClasses, element.GetAttribute("class")).Trim();
-            if (classes.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains("icon-dark", StringComparer.Ordinal)) continue;
+            // The PDF is always light, so the dark icon variants that the stylesheet hides in light mode are skipped.
+            if (ClassContains(classes, "icon-dark") || ClassContains(classes, "iso-icon-dark")) continue;
             var name = element.LocalName.ToLowerInvariant();
             if (name is "defs" or "clippath") continue;
 
