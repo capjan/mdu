@@ -144,7 +144,7 @@ internal sealed class PdfLayout
             case "h1": case "h2": case "h3": case "h4": case "h5": case "h6":
                 return 11 + HeadingSize(element) * 1.35 + 5;
             case "figure" when HasClass(element, "diagram"):
-                var diagram = element.ChildNodes.OfType<XmlElement>().FirstOrDefault(child => child.LocalName == "svg");
+                var diagram = DiagramSvg(element);
                 return diagram is null ? 18 : SvgBlockHeight(diagram, 470, 300) + 10;
             case "div" when HasClass(element, "math-display"):
                 var formula = element.ChildNodes.OfType<XmlElement>().FirstOrDefault(child => child.LocalName == "svg");
@@ -165,6 +165,11 @@ internal sealed class PdfLayout
         var next = NextContentBlock(blocks, firstIndex + 1);
         return 11 + HeadingSize(heading) * 1.35 + 5 + MinimumBlockHeight(next);
     }
+
+    // Isometric diagrams wrap their SVG in phase controls, so the SVG is not always a direct child of the figure.
+    // Its phases are cumulative and every element is drawn, which shows the last phase, where everything is visible.
+    private static XmlElement? DiagramSvg(XmlElement figure) =>
+        figure.GetElementsByTagName("svg").OfType<XmlElement>().FirstOrDefault();
 
     private static double SvgBlockHeight(XmlElement svg, double maxWidth, double maxHeight)
     {
@@ -235,7 +240,7 @@ internal sealed class PdfLayout
             case "figure":
                 if (HasClass(element, "diagram"))
                 {
-                    var svg = element.ChildNodes.OfType<XmlElement>().FirstOrDefault(child => child.LocalName == "svg");
+                    var svg = DiagramSvg(element);
                     if (svg is not null) DrawSvgBlock(svg, indent + 8, 470, 300);
                     return;
                 }
