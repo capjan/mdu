@@ -346,7 +346,7 @@ public class ServeCommandIntegrationTest
         }
         """;
 
-    private static Process StartServer(string docs, string site, int port)
+    private static Process StartServer(string docs, string site, int port, TaskCompletionSource<bool> ready)
     {
         var projectPath = Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory,
@@ -375,6 +375,14 @@ public class ServeCommandIntegrationTest
         startInfo.ArgumentList.Add("--no-browser");
 
         var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start the preview process.");
+        // mdu prints this line only after it has bound the port.
+        process.OutputDataReceived += (_, eventArgs) =>
+        {
+            if (eventArgs.Data?.StartsWith("Serving ", StringComparison.Ordinal) == true) ready.TrySetResult(true);
+        };
+        process.EnableRaisingEvents = true;
+        process.Exited += (_, _) => ready.TrySetResult(false);
+        if (process.HasExited) ready.TrySetResult(false);
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
         return process;
@@ -407,37 +415,19 @@ public class ServeCommandIntegrationTest
 
     /// <summary>
     /// Starts the preview on a free port. The port is released before the server binds it, so another process can take
-    /// it in between; the server then exits, and the start is retried on a new port.
+    /// it in between; the server then exits, and the start is retried on a new port. Startup counts as done when mdu
+    /// reports that it serves, which it does only after binding the port.
     /// </summary>
     private static async Task<(Process Process, int Port)> StartServerOnFreePortAsync(string docs, string site)
     {
         for (var attempt = 1; ; attempt++)
         {
             var port = FindAvailablePort();
-            var process = StartServer(docs, site, port);
-            var deadline = DateTime.UtcNow.AddSeconds(10);
-            while (!process.HasExited && DateTime.UtcNow < deadline)
-            {
-                if (await IsListeningAsync(port) && !process.HasExited) return (process, port);
-                await Task.Delay(50);
-            }
-
-            if (!process.HasExited || attempt == 5) return (process, port);
+            var ready = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var process = StartServer(docs, site, port, ready);
+            var completed = await Task.WhenAny(ready.Task, Task.Delay(TimeSpan.FromSeconds(30)));
+            if (completed != ready.Task || ready.Task.Result || attempt == 5) return (process, port);
             process.Dispose();
-        }
-    }
-
-    private static async Task<bool> IsListeningAsync(int port)
-    {
-        using var client = new TcpClient();
-        try
-        {
-            await client.ConnectAsync(IPAddress.Loopback, port);
-            return true;
-        }
-        catch (SocketException)
-        {
-            return false;
         }
     }
 
