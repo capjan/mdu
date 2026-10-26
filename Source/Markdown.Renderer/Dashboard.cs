@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.RegularExpressions;
 using Markdig;
+using Markdig.Extensions.Footnotes;
 using Markdig.Extensions.TaskLists;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
@@ -113,6 +114,8 @@ public static class Dashboard
         html.AppendLine(">");
 
         var blocks = document.ToList();
+        var footnotes = blocks.OfType<FootnoteGroup>().FirstOrDefault();
+        if (footnotes is not null) blocks.Remove(footnotes);
         var firstGroup = blocks.FindIndex(block => block is HeadingBlock { Level: 2 });
         var usedIds = ReadHeadingIds(FindHeadingBlocks(blocks), pipeline);
         var introduction = firstGroup < 0 ? blocks : blocks.Take(firstGroup).ToList();
@@ -129,6 +132,7 @@ public static class Dashboard
         html.AppendLine("</div>");
         html.AppendLine("<p class=\"dashboard-empty\" id=\"dashboard-empty\" hidden></p>");
         html.AppendLine("</div>");
+        if (footnotes is not null) html.Append(RenderBlock(footnotes, pipeline));
         return html.ToString();
     }
 

@@ -83,6 +83,27 @@ public class DashboardTest
     }
 
     [Fact]
+    public async Task RendersFootnotesBelowLastUpdatedWithoutASeparator()
+    {
+        var html = await RenderPage("""
+            ## Products[^1]
+
+            - [Project](https://example.org)
+
+            [^1]: Finished project.
+            """, Options, new DateTimeOffset(2026, 10, 3, 14, 0, 0, TimeSpan.FromHours(2)));
+
+        var lastUpdatedIndex = html.IndexOf("Last updated on <time", StringComparison.Ordinal);
+        var footnotesIndex = html.IndexOf("<div class=\"footnotes\">", StringComparison.Ordinal);
+        Assert.True(lastUpdatedIndex >= 0);
+        Assert.True(footnotesIndex > lastUpdatedIndex);
+
+        var footnotes = html[footnotesIndex..].Split("</div>", 2)[0];
+        Assert.Contains("<h2 class=\"footnotes-title\">Footnotes</h2>", footnotes);
+        Assert.DoesNotContain("<hr />", footnotes);
+    }
+
+    [Fact]
     public async Task RendersTheResultContainersWithoutGroups()
     {
         var html = await RenderPage("# Start\n\nOnly an introduction.\n", Options);
@@ -373,11 +394,14 @@ public class DashboardTest
 
     private static readonly DashboardOptions Options = new("https://duckduckgo.com/?q={query}", true, false, true);
 
-    private static async Task<string> RenderPage(string markdown, DashboardOptions? dashboard)
+    private static async Task<string> RenderPage(
+        string markdown,
+        DashboardOptions? dashboard,
+        DateTimeOffset? lastModified = null)
     {
         var html = new StringBuilder();
         await using var writer = new StringWriter(html);
-        await new HtmlRenderer().WriteHtml(writer, "Start", "", 0, markdown, "", dashboard: dashboard);
+        await new HtmlRenderer().WriteHtml(writer, "Start", "", 0, markdown, "", lastModified: lastModified, dashboard: dashboard);
         return html.ToString();
     }
 
