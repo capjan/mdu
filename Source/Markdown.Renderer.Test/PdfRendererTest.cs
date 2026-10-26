@@ -27,6 +27,32 @@ public class PdfRendererTest
     }
 
     [Fact]
+    public void DrawsIsometricDiagramInLastPhaseInPdf()
+    {
+        const string markdown = """
+            ```isometric
+            zone backend "Backend" at 0,0
+              api "API" icon material-server
+              db  "DB"  icon material-database
+            end
+            client "Client" icon material-account at 0,1
+            phase Start
+              client --> api : request
+            phase Done
+              api --> db : query
+            ```
+            """;
+        using var output = new MemoryStream();
+
+        new PdfRenderer(new HtmlRenderer()).WritePdf(output, "Isometric",
+        [new PdfSourceSection("Isometric", "isometric/index.html", markdown)], includeFrontMatter: false);
+
+        var pdf = Encoding.Latin1.GetString(output.ToArray());
+        Assert.Contains($"<{Convert.ToHexString(Encoding.ASCII.GetBytes("API"))}>", pdf, StringComparison.Ordinal);
+        Assert.DoesNotContain($"<{Convert.ToHexString(Encoding.ASCII.GetBytes("Start"))}> Tj", pdf, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RendersVideoSourcesAsPdfLinksWithoutFallbackText()
     {
         const string markdown = """
