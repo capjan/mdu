@@ -64,6 +64,8 @@ internal static class PdfSvgRenderer
             var classes = string.Join(' ', inheritedClasses, element.GetAttribute("class")).Trim();
             // The PDF is always light, so the dark icon variants that the stylesheet hides in light mode are skipped.
             if (ClassContains(classes, "icon-dark") || ClassContains(classes, "iso-icon-dark")) continue;
+            // Particles only exist to be animated along their edge and have no static position, so they are skipped.
+            if (ClassContains(classes, "iso-particle")) continue;
             var name = element.LocalName.ToLowerInvariant();
             if (name is "defs" or "clippath") continue;
 

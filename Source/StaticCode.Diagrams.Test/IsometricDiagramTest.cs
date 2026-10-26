@@ -246,6 +246,14 @@ public class IsometricDiagramTest
     }
 
     [Fact]
+    public void GivesZoneTitlesALabelBackground()
+    {
+        var html = DiagramRenderer.RenderIsometricHtml("zone cloud \"Cloud\" at 0,0\n  api \"API\"\nend");
+
+        Assert.Matches("<rect class=\"iso-label-background\"[^>]*/>\\s*<text class=\"iso-zone-title\"", html);
+    }
+
+    [Fact]
     public void RendersTheSameOutputForTheSameSource()
     {
         Assert.Equal(DiagramRenderer.RenderIsometricHtml(Sample), DiagramRenderer.RenderIsometricHtml(Sample));
