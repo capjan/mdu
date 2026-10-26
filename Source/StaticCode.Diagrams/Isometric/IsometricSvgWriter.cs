@@ -99,15 +99,16 @@ internal static class IsometricSvgWriter
         var edges = new StringBuilder();
         var labels = new StringBuilder();
         var labelBoxes = new List<LabelBox>();
+        var titles = new List<Point[]>();
 
         foreach (var item in items.Where(item => item.Zone != null).OrderBy(item => item.X + item.Y))
-            WritePlatform(platforms, labels, item, bounds, labelBoxes);
+            WritePlatform(platforms, labels, item, bounds, labelBoxes, titles);
 
         foreach (var node in placed.OrderBy(node => node.X + node.Y).ThenBy(node => node.X))
             WriteNode(nodes, labels, node, bounds, labelBoxes);
 
         foreach (var edge in diagram.Edges)
-            WriteEdge(edges, labels, edge, byId[edge.From], byId[edge.To], placed, bounds, labelBoxes);
+            WriteEdge(edges, labels, edge, byId[edge.From], byId[edge.To], placed, bounds, labelBoxes, titles);
 
         var width = bounds.MaxX - bounds.MinX + 2 * CanvasPadding;
         var height = bounds.MaxY - bounds.MinY + 2 * CanvasPadding;
@@ -186,7 +187,7 @@ internal static class IsometricSvgWriter
     private static string Phased(string classes, int phase) =>
         $"<g class=\"iso-phased {classes}\" style=\"--iso-phase: {phase.ToString(CultureInfo.InvariantCulture)}\">";
 
-    private static void WritePlatform(StringBuilder svg, StringBuilder labels, Item item, Bounds bounds, List<LabelBox> labelBoxes)
+    private static void WritePlatform(StringBuilder svg, StringBuilder labels, Item item, Bounds bounds, List<LabelBox> labelBoxes, List<Point[]> titles)
     {
         var zone = item.Zone!;
         var (x0, y0, x1, y1) = (item.X, item.Y, item.X + item.Width, item.Y + item.Depth);
@@ -211,6 +212,8 @@ internal static class IsometricSvgWriter
             if (text == null) continue;
             baseline += size + 3;
             var length = TextMetrics.Width(text) * size / TextMetrics.FontSize * 1.08;
+            titles.Add([LetteringPoint(corner, direction, TitleInset - 4, baseline - size - 2), LetteringPoint(corner, direction, TitleInset + length + 4, baseline - size - 2),
+                LetteringPoint(corner, direction, TitleInset + length + 4, baseline + 6), LetteringPoint(corner, direction, TitleInset - 4, baseline + 6)]);
             // Like node labels, the lettering gets a background, so a connection passing underneath does not blur it.
             labels.Append($"<rect class=\"iso-label-background\" x=\"{F(TitleInset - 4)}\" y=\"{F(baseline - size - 2)}\" width=\"{F(length + 8)}\" height=\"{F(size + 8)}\" rx=\"4\"/>");
             labels.Append($"<text class=\"{cssClass}\" x=\"{F(TitleInset)}\" y=\"{F(baseline)}\">{Escape(text)}</text>");
@@ -305,7 +308,7 @@ internal static class IsometricSvgWriter
     /// Particles move along the link in its direction.
     /// </summary>
     private static void WriteEdge(StringBuilder svg, StringBuilder labels, IsometricEdge edge, PlacedNode from, PlacedNode to,
-        IReadOnlyList<PlacedNode> nodes, Bounds bounds, List<LabelBox> labelBoxes)
+        IReadOnlyList<PlacedNode> nodes, Bounds bounds, List<LabelBox> labelBoxes, List<Point[]> titles)
     {
         var start = Project(from.X, from.Y, from.Top);
         var end = Project(to.X, to.Y, to.Top);
@@ -316,12 +319,15 @@ internal static class IsometricSvgWriter
         }
         else
         {
-            // Bend where the link passes over fewer other nodes; along x first when both are equal.
+            // Bend where the link crosses fewer other nodes and zone titles; along x first when both are equal.
             var others = nodes.Where(node => node != from && node != to).ToList();
             var xFirst = new Point(to.X, from.Y);
             var yFirst = new Point(from.X, to.Y);
-            var corner = Crossings(others, from, xFirst, to) <= Crossings(others, from, yFirst, to) ? xFirst : yFirst;
-            points = [start, Project(corner.X, corner.Y, from.Top), end];
+            Point[] xRoute = [start, Project(xFirst.X, xFirst.Y, from.Top), end];
+            Point[] yRoute = [start, Project(yFirst.X, yFirst.Y, from.Top), end];
+            var xCost = Crossings(others, from, xFirst, to) + TitleCrossings(titles, xRoute);
+            var yCost = Crossings(others, from, yFirst, to) + TitleCrossings(titles, yRoute);
+            points = xCost <= yCost ? xRoute : yRoute;
         }
 
         var path = new StringBuilder($"M{F(start.X)} {F(start.Y)}");
@@ -375,6 +381,35 @@ internal static class IsometricSvgWriter
         WriteLabel(labels, edge.Label, box, bounds);
         labels.Append("</g>\n");
     }
+
+    /// <summary>Counts the zone titles that a route passes through, sampling the route along its screen-space segments.</summary>
+    private static int TitleCrossings(IEnumerable<Point[]> titles, Point[] route) =>
+        titles.Count(title =>
+        {
+            for (var index = 1; index < route.Length; index++)
+            {
+                var segment = route[index] - route[index - 1];
+                var steps = Math.Max(1, (int)Math.Ceiling(segment.Length / 4));
+                for (var step = 0; step <= steps; step++)
+                    if (InsideQuad(route[index - 1] + segment * ((double)step / steps), title)) return true;
+            }
+            return false;
+        });
+
+    /// <summary>Whether a point lies inside a convex quadrilateral given in order.</summary>
+    private static bool InsideQuad(Point point, Point[] quad)
+    {
+        var signs = Enumerable.Range(0, quad.Length).Select(index =>
+        {
+            var edge = quad[(index + 1) % quad.Length] - quad[index];
+            var offset = point - quad[index];
+            return edge.X * offset.Y - edge.Y * offset.X;
+        }).ToList();
+        return signs.All(sign => sign >= 0) || signs.All(sign => sign <= 0);
+    }
+
+    /// <summary>A point of a zone title, in the same local space as its text: x runs along the lettering, y goes down.</summary>
+    private static Point LetteringPoint(Point corner, Point direction, double x, double y) => corner + direction * x + new Point(0, y);
 
     /// <summary>Counts the nodes whose footprint an axis-aligned route through <paramref name="corner"/> crosses.</summary>
     private static int Crossings(IEnumerable<PlacedNode> nodes, PlacedNode from, Point corner, PlacedNode to) =>
