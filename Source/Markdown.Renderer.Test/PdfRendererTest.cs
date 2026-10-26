@@ -50,6 +50,9 @@ public class PdfRendererTest
         var pdf = Encoding.Latin1.GetString(output.ToArray());
         Assert.Contains($"<{Convert.ToHexString(Encoding.ASCII.GetBytes("API"))}>", pdf, StringComparison.Ordinal);
         Assert.DoesNotContain($"<{Convert.ToHexString(Encoding.ASCII.GetBytes("Start"))}> Tj", pdf, StringComparison.Ordinal);
+        // Label backgrounds are white, and connection lines are stroked with a width instead of filled.
+        Assert.Contains("1 1 1 rg", pdf, StringComparison.Ordinal);
+        Assert.Contains("1.75 w", pdf, StringComparison.Ordinal);
     }
 
     [Fact]

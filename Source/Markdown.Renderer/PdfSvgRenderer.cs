@@ -71,13 +71,13 @@ internal static class PdfSvgRenderer
             var fillOpacity = opacity * ParseLength(element.GetAttribute("fill-opacity"), 1);
             var strokeOpacity = opacity * ParseLength(element.GetAttribute("stroke-opacity"), 1);
 
-            var fill = ReadColor(element, "fill") ?? ClassFill(classes) ?? inheritedFill;
-            var stroke = ReadColor(element, "stroke") ?? ClassStroke(classes) ?? inheritedStroke;
-            var textColor = ReadColor(element, "fill") ?? ClassText(classes) ?? inheritedFill;
+            var fill = ReadColor(element, "fill") ?? PdfIsometricStyle.Fill(classes) ?? ClassFill(classes) ?? inheritedFill;
+            var stroke = ReadColor(element, "stroke") ?? PdfIsometricStyle.Stroke(classes) ?? ClassStroke(classes) ?? inheritedStroke;
+            var textColor = ReadColor(element, "fill") ?? PdfIsometricStyle.Text(classes) ?? ClassText(classes) ?? inheritedFill;
             fill = ApplyOpacity(fill, fillOpacity);
             stroke = ApplyOpacity(stroke, strokeOpacity);
             textColor = ApplyOpacity(textColor, fillOpacity);
-            var strokeWidth = ParseLength(element.GetAttribute("stroke-width"), ClassStrokeWidth(classes, inheritedStrokeWidth));
+            var strokeWidth = ParseLength(element.GetAttribute("stroke-width"), PdfIsometricStyle.StrokeWidth(classes) ?? ClassStrokeWidth(classes, inheritedStrokeWidth));
             var fontSize = ParseLength(element.GetAttribute("font-size"), inheritedFontSize);
             switch (name)
             {
