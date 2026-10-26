@@ -1716,14 +1716,6 @@ blockquote {
     fill: currentColor;
 }
 
-.icon-custom-color svg [fill]:not([fill="none"]) {
-    fill: currentColor;
-}
-
-.icon-custom-color svg [stroke]:not([stroke="none"]) {
-    stroke: currentColor;
-}
-
 /* A leading icon, such as an arrow before a link, moves a little toward the hovered link. */
 .markdown-content .icon:has(+ a) svg {
     transition: transform 120ms ease;
