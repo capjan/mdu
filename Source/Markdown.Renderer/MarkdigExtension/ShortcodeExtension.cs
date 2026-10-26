@@ -96,7 +96,9 @@ public class IconInlineRenderer : HtmlObjectRenderer<IconInline>
     {
         // Plain text output, for example for heading identifiers, has no room for an icon.
         if (!renderer.EnableHtmlForInline) return;
-        renderer.Write("<span").WriteAttributes(ShortcodeAttributes.With(obj, "icon")).Write('>')
+        var attributes = ShortcodeAttributes.With(obj, "icon");
+        if (ShortcodeAttributes.HasColor(obj)) attributes.AddClass("icon-custom-color");
+        renderer.Write("<span").WriteAttributes(attributes).Write('>')
             .Write(obj.Icon.ToSvg())
             .Write("</span>");
     }
@@ -122,6 +124,25 @@ public class EmojiShortcodeInlineRenderer : HtmlObjectRenderer<EmojiShortcodeInl
 
 internal static class ShortcodeAttributes
 {
+    public static bool HasColor(Inline inline)
+    {
+        var properties = inline.TryGetAttributes()?.Properties;
+        if (properties is null) return false;
+
+        foreach (var (name, value) in properties)
+        {
+            if (!name.Equals("style", StringComparison.OrdinalIgnoreCase) || value is null) continue;
+            foreach (var declaration in value.Split(';'))
+            {
+                var separator = declaration.IndexOf(':');
+                if (separator > 0 && declaration[..separator].Trim().Equals("color", StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
     public static HtmlAttributes With(Inline inline, string className)
     {
         var attributes = new HtmlAttributes();

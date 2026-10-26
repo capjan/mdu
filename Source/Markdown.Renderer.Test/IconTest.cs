@@ -42,7 +42,16 @@ public class IconTest
         var html = Render(":dashboard-docker:");
 
         Assert.Matches("^<p><span class=\"icon\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"[-0-9. ]+\" aria-hidden=\"true\" focusable=\"false\"><g fill=", html);
+        Assert.DoesNotContain("icon-custom-color", html);
         Assert.DoesNotContain("icon-dark", html);
+    }
+
+    [Fact]
+    public void MarksIconsWithAnExplicitColorForPaletteOverride()
+    {
+        var html = Render(":dashboard-files:{ style=\"color: #16803c\" }");
+
+        Assert.StartsWith("<p><span class=\"icon icon-custom-color\" style=\"color: #16803c\"><svg", html);
     }
 
     [Fact]
@@ -188,7 +197,7 @@ public class IconTest
     {
         var html = Render(":octicons-heart-fill-24:{ .heart #love style=\"color: red\" }");
 
-        Assert.StartsWith("<p><span id=\"love\" class=\"icon heart\" style=\"color: red\"><svg", html);
+        Assert.StartsWith("<p><span id=\"love\" class=\"icon heart icon-custom-color\" style=\"color: red\"><svg", html);
     }
 
     [Fact]
