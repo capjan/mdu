@@ -573,7 +573,7 @@ public class HtmlRenderer
     private static string ExtractDashboardFootnotes(ref string renderedMarkdown)
     {
         const string marker = "<div class=\"footnotes\">";
-        var index = renderedMarkdown.IndexOf(marker, StringComparison.Ordinal);
+        var index = renderedMarkdown.LastIndexOf(marker, StringComparison.Ordinal);
         if (index < 0) return string.Empty;
 
         var footnotes = renderedMarkdown[index..].Trim();
