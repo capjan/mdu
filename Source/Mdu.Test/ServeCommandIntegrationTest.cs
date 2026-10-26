@@ -17,8 +17,8 @@ public class ServeCommandIntegrationTest
         File.WriteAllText(Path.Combine(docs, "README.md"), "# Home\n\n[Guide](Guide.md)");
         File.WriteAllText(Path.Combine(docs, "Guide.md"), "# Guide\n");
 
-        var port = FindAvailablePort();
-        using var process = StartServer(docs, site, port);
+        var (process, port) = await StartServerOnFreePortAsync(docs, site);
+        using var _ = process;
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
         var aliasUrl = $"http://127.0.0.1:{port}/Guide/index.html";
 
@@ -64,8 +64,8 @@ public class ServeCommandIntegrationTest
         File.WriteAllText(markdownPath, "# Before\n\n![Diagram](diagram.svg)");
         File.WriteAllText(assetPath, "asset-v1");
 
-        var port = FindAvailablePort();
-        using var process = StartServer(docs, site, port);
+        var (process, port) = await StartServerOnFreePortAsync(docs, site);
+        using var _ = process;
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
         var pageUrl = $"http://127.0.0.1:{port}/index.html";
         var assetUrl = $"http://127.0.0.1:{port}/diagram.svg";
@@ -121,8 +121,8 @@ public class ServeCommandIntegrationTest
         var markdownPath = Path.Combine(docs, "README.md");
         File.WriteAllText(markdownPath, "# Home\n\nBefore");
 
-        var port = FindAvailablePort();
-        using var process = StartServer(docs, site, port);
+        var (process, port) = await StartServerOnFreePortAsync(docs, site);
+        using var _ = process;
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
         var pageUrl = $"http://127.0.0.1:{port}/index.html";
 
@@ -165,8 +165,8 @@ public class ServeCommandIntegrationTest
         var specificationPath = Path.Combine(api, "orders.json");
         File.WriteAllText(specificationPath, OpenApiSpecification("API Before"));
 
-        var port = FindAvailablePort();
-        using var process = StartServer(docs, site, port);
+        var (process, port) = await StartServerOnFreePortAsync(docs, site);
+        using var _ = process;
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
         var pagePath = Path.Combine(site, "index.html");
         var pageUrl = $"http://127.0.0.1:{port}/index.html";
@@ -198,8 +198,8 @@ public class ServeCommandIntegrationTest
         var specificationPath = Path.Combine(api, "orders.json");
         File.WriteAllText(specificationPath, OpenApiSpecification("API Before"));
 
-        var port = FindAvailablePort();
-        using var process = StartServer(docs, site, port);
+        var (process, port) = await StartServerOnFreePortAsync(docs, site);
+        using var _ = process;
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
         var pageUrl = $"http://127.0.0.1:{port}/index.html";
         var specPageUrl = $"http://127.0.0.1:{port}/index-orders-spec.html";
@@ -271,8 +271,8 @@ public class ServeCommandIntegrationTest
         File.WriteAllText(glossaryPath, "*[CPU]: Central processing unit\n");
         File.WriteAllText(alternateGlossaryPath, "*[CPU]: Alternate processing unit\n");
 
-        var port = FindAvailablePort();
-        using var process = StartServer(docs, site, port);
+        var (process, port) = await StartServerOnFreePortAsync(docs, site);
+        using var _ = process;
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
         var pageUrl = $"http://127.0.0.1:{port}/index.html";
 
@@ -351,6 +351,8 @@ public class ServeCommandIntegrationTest
         var projectPath = Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory,
             "../../../../Mdu/Mdu.csproj"));
+        // The test runs the mdu build of its own configuration, so this is the build that `dotnet test` produced.
+        var configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
         var startInfo = new ProcessStartInfo("dotnet")
         {
             WorkingDirectory = Path.GetDirectoryName(projectPath)!,
@@ -362,7 +364,7 @@ public class ServeCommandIntegrationTest
         startInfo.ArgumentList.Add("--project");
         startInfo.ArgumentList.Add(projectPath);
         startInfo.ArgumentList.Add("--configuration");
-        startInfo.ArgumentList.Add("Release");
+        startInfo.ArgumentList.Add(configuration);
         startInfo.ArgumentList.Add("--no-build");
         startInfo.ArgumentList.Add("--");
         startInfo.ArgumentList.Add("serve");
@@ -401,6 +403,42 @@ public class ServeCommandIntegrationTest
         }
 
         throw new TimeoutException("Timed out waiting for the preview site to update.");
+    }
+
+    /// <summary>
+    /// Starts the preview on a free port. The port is released before the server binds it, so another process can take
+    /// it in between; the server then exits, and the start is retried on a new port.
+    /// </summary>
+    private static async Task<(Process Process, int Port)> StartServerOnFreePortAsync(string docs, string site)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            var port = FindAvailablePort();
+            var process = StartServer(docs, site, port);
+            var deadline = DateTime.UtcNow.AddSeconds(10);
+            while (!process.HasExited && DateTime.UtcNow < deadline)
+            {
+                if (await IsListeningAsync(port) && !process.HasExited) return (process, port);
+                await Task.Delay(50);
+            }
+
+            if (!process.HasExited || attempt == 5) return (process, port);
+            process.Dispose();
+        }
+    }
+
+    private static async Task<bool> IsListeningAsync(int port)
+    {
+        using var client = new TcpClient();
+        try
+        {
+            await client.ConnectAsync(IPAddress.Loopback, port);
+            return true;
+        }
+        catch (SocketException)
+        {
+            return false;
+        }
     }
 
     private static int FindAvailablePort()
