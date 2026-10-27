@@ -122,10 +122,10 @@ public sealed class CustomIconTest : IDisposable
         Assert.True(IconCatalog.TryGetIcon("acme-gradient", out var icon));
         Assert.Equal(
             "<g class=\"acme-gradient-scope\">" +
-            "<defs><style> .acme-gradient-scope .acme-gradient-cls-1 { fill: url(#acme-gradient-fade); opacity: .5 }  .acme-gradient-scope #acme-gradient-dot &gt; .acme-gradient-cls-1 { fill: #f00 } </style>" +
+            "<defs><style> .acme-gradient-scope .acme-gradient-cls-1 { fill: url(#acme-gradient-fade); opacity: .5 }  .acme-gradient-scope :is(#acme-gradient-dot, .acme-gradient-dot--copy) &gt; .acme-gradient-cls-1 { fill: #f00 } </style>" +
             "<linearGradient id=\"acme-gradient-fade\"><stop offset=\"0\" /></linearGradient></defs>" +
             "<rect id=\"acme-gradient-dot\" class=\"acme-gradient-cls-1 acme-gradient-cls-2\" style=\"fill: url(#acme-gradient-fade)\" width=\"10\" height=\"10\" />" +
-            "<g><rect class=\"acme-gradient-cls-1 acme-gradient-cls-2\" style=\"fill: url(#acme-gradient-fade)\" width=\"10\" height=\"10\" /></g></g>",
+            "<g><rect class=\"acme-gradient-cls-1 acme-gradient-cls-2 acme-gradient-dot--copy\" style=\"fill: url(#acme-gradient-fade)\" width=\"10\" height=\"10\" /></g></g>",
             icon.Glyph.Body);
     }
 
@@ -201,8 +201,40 @@ public sealed class CustomIconTest : IDisposable
         Assert.True(IconCatalog.TryGetIcon("acme-reuse", out var icon));
         Assert.DoesNotContain("<use", icon.Glyph.Body);
         Assert.Contains(
-            "<g opacity=\".5\" transform=\"scale(2) translate(1 3)\"><g><g><path fill=\"currentColor\" d=\"M0 0h2v2z\" /></g><g transform=\"translate(2 0)\"><path fill=\"currentColor\" d=\"M0 0h2v2z\" /></g></g></g>",
+            "<g opacity=\".5\" transform=\"scale(2) translate(1 3)\"><g transform=\"translate(0 0) scale(1 1)\"><g><path fill=\"currentColor\" d=\"M0 0h2v2z\" /></g><g transform=\"translate(2 0)\"><path fill=\"currentColor\" d=\"M0 0h2v2z\" /></g></g></g>",
             icon.Glyph.Body);
+    }
+
+    [Theory]
+    [InlineData("0 0 100 100", "", "translate(0 0) scale(0.1 0.1)")]
+    [InlineData("0 0 100 50", "", "translate(0 2.5) scale(0.1 0.1)")]
+    [InlineData("10 10 100 50", "xMinYMax meet", "translate(-1 4) scale(0.1 0.1)")]
+    [InlineData("0 0 100 50", "xMidYMid slice", "translate(-5 0) scale(0.2 0.2)")]
+    [InlineData("0 0 100 50", "none", "translate(0 0) scale(0.1 0.2)")]
+    public void ScalesSymbolsToTheSizeOfTheirUse(string viewBox, string preserveAspectRatio, string transform)
+    {
+        var aspectRatio = preserveAspectRatio.Length == 0 ? "" : $" preserveAspectRatio=\"{preserveAspectRatio}\"";
+        WriteIcon("acme/symbol.svg",
+            $"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><symbol id="big" viewBox="{viewBox}"{aspectRatio}><rect width="100" height="100"/></symbol><use href="#big" width="10" height="10"/></svg>""");
+
+        IconCatalog.UseCustomIcons(_root);
+
+        Assert.True(IconCatalog.TryGetIcon("acme-symbol", out var icon));
+        Assert.EndsWith($"<g><g transform=\"{transform}\"><rect width=\"100\" height=\"100\" /></g></g>", icon.Glyph.Body);
+    }
+
+    [Fact]
+    public void KeepsIdentifierStylesOnCopies()
+    {
+        WriteIcon("acme/styled-use.svg",
+            """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><style>#shape { fill: red } #other { fill: blue }</style><defs><path id="shape" d="M0 0h2v2z"/></defs><use href="#shape"/><path id="other" d="M0 0"/></svg>""");
+
+        IconCatalog.UseCustomIcons(_root);
+
+        Assert.True(IconCatalog.TryGetIcon("acme-styled-use", out var icon));
+        Assert.Contains(".acme-styled-use-scope :is(#acme-styled-use-shape, .acme-styled-use-shape--copy) { fill: red }", icon.Glyph.Body);
+        Assert.Contains(".acme-styled-use-scope #acme-styled-use-other { fill: blue }", icon.Glyph.Body);
+        Assert.Contains("<g><path d=\"M0 0h2v2z\" class=\"acme-styled-use-shape--copy\" /></g>", icon.Glyph.Body);
     }
 
     [Fact]

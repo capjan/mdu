@@ -119,9 +119,9 @@ internal static partial class SvgIconReader
 
         var prefix = Identifier().Replace(idPrefix, "_");
         var hasStyleSheet = root.Descendants(Svg + "style").Any();
-        var context = new CleanContext(prefix, hasStyleSheet);
+        var context = new CleanContext(prefix, hasStyleSheet, GetCopiedIds(root));
         var content = new XElement("g", root.Nodes().Select(node => Clean(node, context)).OfType<XNode>());
-        InlineUseReferences(content);
+        InlineUseReferences(content, context);
 
         // Presentation attributes of the root, such as fill="none" or stroke="currentColor", move to the group. An
         // icon with a style sheet always keeps the group, because its class limits the style sheet to this icon.
@@ -140,7 +140,7 @@ internal static partial class SvgIconReader
     /// neither <c>defs</c> nor <c>use</c>. A reference to a missing element or a chain of references deeper than
     /// <see cref="MaxUseDepth"/>, for example a cycle, is removed.
     /// </summary>
-    private static void InlineUseReferences(XElement content)
+    private static void InlineUseReferences(XElement content, CleanContext context)
     {
         var elementsById = content.Descendants()
             .Where(element => element.Attribute("id") is not null)
@@ -160,13 +160,24 @@ internal static partial class SvgIconReader
                     continue;
                 }
 
+                // A copy must not repeat the identifiers. A class takes their place for the style sheet.
                 var copy = new XElement(target);
-                foreach (var element in copy.DescendantsAndSelf()) element.Attribute("id")?.Remove();
+                foreach (var element in copy.DescendantsAndSelf().Where(element => element.Attribute("id") is not null))
+                {
+                    var id = (string)element.Attribute("id")!;
+                    element.Attribute("id")!.Remove();
+                    if (context.PrefixClasses)
+                        element.SetAttributeValue("class", string.Join(' ', new[] { (string?)element.Attribute("class"), CopyClass(id) }.OfType<string>()));
+                }
                 if (copy.Name.LocalName == "symbol")
                 {
                     copy.Name = "g";
+                    var symbolTransform = SymbolTransform(copy, use);
                     copy.Attribute("viewBox")?.Remove();
                     copy.Attribute("preserveAspectRatio")?.Remove();
+                    copy.Attribute("width")?.Remove();
+                    copy.Attribute("height")?.Remove();
+                    if (symbolTransform is not null) copy.SetAttributeValue("transform", symbolTransform);
                 }
 
                 var transform = string.Join(' ', new[]
@@ -186,6 +197,57 @@ internal static partial class SvgIconReader
     }
 
     private const int MaxUseDepth = 8;
+
+    private static HashSet<string> GetCopiedIds(XElement root)
+    {
+        var elementsById = root.Descendants()
+            .Where(element => element.Attribute("id") is not null)
+            .GroupBy(element => (string)element.Attribute("id")!, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+        return root.Descendants(Svg + "use")
+            .Select(use => (string?)use.Attribute("href") ?? (string?)use.Attribute(XLink + "href"))
+            .Where(href => href is not null && href.StartsWith('#') && elementsById.ContainsKey(href[1..]))
+            .SelectMany(href => elementsById[href![1..]].DescendantsAndSelf())
+            .Select(element => (string?)element.Attribute("id"))
+            .OfType<string>()
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    private static string CopyClass(string prefixedId) => prefixedId + "--copy";
+
+    /// <summary>
+    /// Returns the transform that maps the view box of a symbol onto the size that the <c>use</c> element asks for,
+    /// following <c>preserveAspectRatio</c>, or <c>null</c> when the symbol has no view box.
+    /// </summary>
+    private static string? SymbolTransform(XElement symbol, XElement use)
+    {
+        if (symbol.Attribute("viewBox") is null || ReadViewBox(symbol) is not { } viewBox) return null;
+        var (viewLeft, viewTop, viewWidth, viewHeight) = viewBox;
+        var width = ReadLength(use, "width") ?? ReadLength(symbol, "width") ?? viewWidth;
+        var height = ReadLength(use, "height") ?? ReadLength(symbol, "height") ?? viewHeight;
+
+        var aspectRatio = ((string?)symbol.Attribute("preserveAspectRatio") ?? "xMidYMid meet")
+            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        var align = aspectRatio.FirstOrDefault() ?? "xMidYMid";
+        var scaleX = width / viewWidth;
+        var scaleY = height / viewHeight;
+        if (align != "none")
+        {
+            var slice = aspectRatio.Length > 1 && aspectRatio[1] == "slice";
+            scaleX = scaleY = slice ? Math.Max(scaleX, scaleY) : Math.Min(scaleX, scaleY);
+        }
+
+        var translateX = Align(align, "xMid", "xMax", width - viewWidth * scaleX) - viewLeft * scaleX;
+        var translateY = Align(align, "YMid", "YMax", height - viewHeight * scaleY) - viewTop * scaleY;
+        return $"translate({Format(translateX)} {Format(translateY)}) scale({Format(scaleX)} {Format(scaleY)})";
+
+        static double Align(string align, string middle, string end, double space) =>
+            align.Contains(middle, StringComparison.Ordinal) ? space / 2
+            : align.Contains(end, StringComparison.Ordinal) ? space
+            : 0;
+    }
+
+    private static string Format(double value) => Math.Round(value, 6).ToString(CultureInfo.InvariantCulture);
 
     private static string Serialize(XNode node) => node.ToString(SaveOptions.DisableFormatting);
 
@@ -305,7 +367,13 @@ internal static partial class SvgIconReader
         var scope = "." + context.ScopeClass;
         return string.Join(", ", SplitSelectors(selectors).Select(selector =>
         {
-            selector = CssSelectorName().Replace(selector.Trim(), match => match.Groups[1].Value + context.Prefix + match.Groups[2].Value);
+            selector = CssSelectorName().Replace(selector.Trim(), match =>
+            {
+                var name = context.Prefix + match.Groups[2].Value;
+                if (match.Groups[1].Value == ".") return "." + name;
+                // An element copied in place of a use reference has a class instead of its identifier.
+                return context.CopiedIds.Contains(match.Groups[2].Value) ? $":is(#{name}, .{CopyClass(name)})" : "#" + name;
+            });
             var root = CssRootSelector().Match(selector);
             return root.Success ? scope + selector[root.Length..] : $"{scope} {selector}";
         }));
@@ -363,7 +431,8 @@ internal static partial class SvgIconReader
         return double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var length) && length > 0 ? length : null;
     }
 
-    private sealed record CleanContext(string Prefix, bool PrefixClasses)
+    /// <param name="CopiedIds">The identifiers, without prefix, of the elements that <c>use</c> references copy.</param>
+    private sealed record CleanContext(string Prefix, bool PrefixClasses, IReadOnlySet<string> CopiedIds)
     {
         public string ScopeClass => Prefix + "scope";
     }
