@@ -33,6 +33,7 @@ public sealed class ServeCommand
     private string _rootPath = string.Empty;
     private string _outputPath = string.Empty;
     private string? _glossaryPath;
+    private string? _iconsPath;
     private bool _hasPdfLink;
 
     private Dictionary<string, MarkdownFile> _pages => _dependencyIndex.Pages;
@@ -176,6 +177,8 @@ public sealed class ServeCommand
         var glossaryPath = SiteConfigurationReader.ResolveGlossaryPath(_rootPath, siteConfiguration);
         var glossaryMarkdown = glossaryPath is null ? null : File.ReadAllText(glossaryPath);
         _renderer.SetGlossary(glossaryMarkdown);
+        _iconsPath = SiteConfigurationReader.GetIconsPath(_rootPath, siteConfiguration);
+        SiteConfigurationReader.UseCustomIcons(_rootPath, siteConfiguration);
         var graph = _graphBuilder.CreateGraph(_settings, glossaryPath);
         _navigationRoots = graph;
 
@@ -360,6 +363,15 @@ public sealed class ServeCommand
 
         if (_glossaryPath is not null && relevantChanges.Any(change =>
                 IsGlossaryPathChange(change, _glossaryPath)))
+        {
+            RebuildSite();
+            server.Publish(reloadAll: true);
+            return;
+        }
+
+        var defaultIconsPath = Path.Combine(_rootPath, SiteConfigurationReader.DefaultIconsFolder);
+        if (relevantChanges.Any(change => IsIconsChange(change.Path, defaultIconsPath) ||
+                                          change.OldPath is not null && IsIconsChange(change.OldPath, defaultIconsPath)))
         {
             RebuildSite();
             server.Publish(reloadAll: true);
@@ -695,6 +707,11 @@ public sealed class ServeCommand
         return change.Kind is (FileChangeKind.Created or FileChangeKind.Renamed) &&
                Directory.Exists(change.Path) && IsInsideDirectory(change.Path, glossaryPath);
     }
+
+    // The default folder counts even before it exists, so that creating it adds the icons.
+    private bool IsIconsChange(string path, string defaultIconsPath) =>
+        PathComparer.Equals(path, defaultIconsPath) || IsInsideDirectory(defaultIconsPath, path) ||
+        _iconsPath is not null && (PathComparer.Equals(path, _iconsPath) || IsInsideDirectory(_iconsPath, path));
 
     private bool IsGeneratedOutputPath(string path) => IsInsideDirectory(_outputPath, path);
 

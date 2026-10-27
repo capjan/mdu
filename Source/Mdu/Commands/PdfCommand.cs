@@ -37,6 +37,7 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
 
         var defaultOutputName = singleFilePath is null ? "documentation.pdf" : $"{Path.GetFileNameWithoutExtension(singleFilePath)}.pdf";
         var outputPath = Path.GetFullPath(settings.OutputPath ?? Path.Combine(Environment.CurrentDirectory, defaultOutputName));
+        SiteConfigurationReader.TryUseCustomIcons(rootPath);
         MarkdownFile[] graph;
         try
         {

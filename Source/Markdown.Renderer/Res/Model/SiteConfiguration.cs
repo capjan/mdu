@@ -4,6 +4,7 @@ public sealed class SiteConfiguration
 {
     public string SiteName { get; set; } = "Documentation";
     public string? Glossary { get; set; }
+    public string? Icons { get; set; }
     public string? LogoLight { get; set; }
     public string? LogoDark { get; set; }
     public string? FaviconLight { get; set; }

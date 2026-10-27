@@ -15,6 +15,17 @@ public sealed class IconSet
         _data = new Lazy<IconSetData>(() => IconSetData.Load(resourceName));
     }
 
+    internal IconSet(string shortcodePrefix, IconSetData data, string website)
+    {
+        ShortcodePrefix = shortcodePrefix;
+        Website = website;
+        _data = new Lazy<IconSetData>(data);
+        IsCustom = true;
+    }
+
+    /// <summary>True for a set of the documentation's own SVG files; see <see cref="IconCatalog.UseCustomIcons"/>.</summary>
+    public bool IsCustom { get; }
+
     public string ShortcodePrefix { get; }
     public string Website { get; }
     public string Name => _data.Value.Name;

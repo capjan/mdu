@@ -43,6 +43,11 @@ internal sealed class IconData
 
     /// <summary>The variant for the dark theme, if the icon has light and dark variants.</summary>
     public IconData? Dark { get; init; }
+
+    public IconData WithDark(IconData dark) => new()
+    {
+        Body = Body, Left = Left, Top = Top, Width = Width, Height = Height, Hidden = Hidden, Dark = dark
+    };
 }
 
 [JsonSerializable(typeof(IconSetData))]
