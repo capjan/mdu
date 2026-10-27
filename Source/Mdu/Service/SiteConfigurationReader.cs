@@ -93,19 +93,6 @@ public static class SiteConfigurationReader
         IconCatalog.UseCustomIcons(path);
     }
 
-    /// <summary>Like <see cref="UseCustomIcons"/>, but reports problems on standard error instead of throwing.</summary>
-    public static void TryUseCustomIcons(string rootPath)
-    {
-        try
-        {
-            UseCustomIcons(rootPath, Read(rootPath));
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or YamlDotNet.Core.YamlException or InvalidOperationException or ArgumentException)
-        {
-            Console.Error.WriteLine($"Could not load the custom icons: {exception.Message}");
-        }
-    }
-
     public static void CopyAssets(string rootPath, string outputPath, SiteConfiguration configuration)
     {
         foreach (var asset in new[] { configuration.LogoLight, configuration.LogoDark, configuration.FaviconLight, configuration.FaviconDark }

@@ -35,19 +35,23 @@ internal static partial class CustomIconSets
         var setName = Path.GetFileName(directory);
         ValidateName(setName, directory);
 
-        var files = Directory.EnumerateFiles(directory, "*.svg", SearchOption.AllDirectories)
+        var paths = Directory.EnumerateFiles(directory, "*.svg", SearchOption.AllDirectories)
             .Where(path => !Path.GetRelativePath(directory, path).Split(Path.DirectorySeparatorChar).Any(part => part.StartsWith('.')))
-            .ToDictionary(path => GetIconName(directory, path), StringComparer.Ordinal);
+            .GroupBy(path => GetIconName(directory, path), StringComparer.Ordinal)
+            .ToArray();
+        var duplicate = paths.FirstOrDefault(group => group.Count() > 1);
+        if (duplicate is not null)
+            throw new InvalidOperationException(
+                $"The custom icon set '{setName}' has several files for the icon '{duplicate.Key}': {string.Join(", ", duplicate.Order(StringComparer.Ordinal))}");
+        var files = paths.ToDictionary(group => group.Key, group => group.Single(), StringComparer.Ordinal);
 
         var icons = new Dictionary<string, IconData>(StringComparer.Ordinal);
         foreach (var (name, path) in files.Where(file => !file.Key.EndsWith(DarkSuffix, StringComparison.Ordinal)).OrderBy(file => file.Key, StringComparer.Ordinal))
         {
             ValidateName(name, path);
-            var idPrefix = $"{setName}-{name}-";
-            var light = SvgIconReader.Read(path, idPrefix);
             icons[name] = files.TryGetValue(name + DarkSuffix, out var darkPath)
-                ? light.WithDark(SvgIconReader.Read(darkPath, idPrefix + "dark-"))
-                : light;
+                ? SvgIconReader.Read(path, IdPrefix(setName, name, dark: false)).WithDark(SvgIconReader.Read(darkPath, IdPrefix(setName, name, dark: true)))
+                : SvgIconReader.Read(path, IdPrefix(setName, name, dark: false));
         }
 
         var orphan = files.Keys.FirstOrDefault(name => name.EndsWith(DarkSuffix, StringComparison.Ordinal) && !icons.ContainsKey(name[..^DarkSuffix.Length]));
@@ -64,11 +68,26 @@ internal static partial class CustomIconSets
         return relative[..^".svg".Length].Replace(Path.DirectorySeparatorChar, '-');
     }
 
+    /// <summary>
+    /// Returns the prefix for the identifiers, classes, and animation names of an icon, for example <c>acme-logo--</c>.
+    /// The first <c>--</c> ends it, because names contain no <c>--</c> and the encoding of <c>_</c> and <c>+</c>
+    /// produces none, so no identifier of one icon can equal one of another icon.
+    /// </summary>
+    private static string IdPrefix(string setName, string name, bool dark) =>
+        $"{EncodeName(setName)}-{EncodeName(name)}{(dark ? "_d" : string.Empty)}--";
+
+    // _ and + become _u and _p, so _d marks the dark variant and every name maps to its own prefix.
+    private static string EncodeName(string name) =>
+        name.Replace("_", "_u", StringComparison.Ordinal).Replace("+", "_p", StringComparison.Ordinal);
+
     private static void ValidateName(string name, string path)
     {
         if (!ValidName().IsMatch(name))
             throw new InvalidOperationException(
                 $"Custom icon names may contain only letters, digits, '-', '_', and '+': {path}");
+        if (name.Contains("--", StringComparison.Ordinal) || name.StartsWith('-') || name.EndsWith('-'))
+            throw new InvalidOperationException(
+                $"Custom icon names may not start or end with '-' or contain '--': {path}");
     }
 
     [GeneratedRegex("^[A-Za-z0-9_+-]+$")]
@@ -86,9 +105,22 @@ internal static partial class SvgIconReader
     private static readonly XNamespace Svg = "http://www.w3.org/2000/svg";
     private static readonly XNamespace XLink = "http://www.w3.org/1999/xlink";
 
-    private static readonly HashSet<string> RemovedElements = new(StringComparer.Ordinal)
+    // The SVG elements an icon may use. Every other element is removed with its content: scripts, foreignObject, and
+    // metadata, but also HTML names such as img or meta that the HTML parser would take out of the inline SVG.
+    private static readonly HashSet<string> AllowedElements = new(StringComparer.Ordinal)
     {
-        "script", "foreignObject", "title", "desc", "metadata"
+        "a", "animate", "animateMotion", "animateTransform", "circle", "clipPath", "defs", "ellipse", "feBlend",
+        "feColorMatrix", "feComponentTransfer", "feComposite", "feConvolveMatrix", "feDiffuseLighting",
+        "feDisplacementMap", "feDistantLight", "feDropShadow", "feFlood", "feFuncA", "feFuncB", "feFuncG", "feFuncR",
+        "feGaussianBlur", "feImage", "feMerge", "feMergeNode", "feMorphology", "feOffset", "fePointLight",
+        "feSpecularLighting", "feSpotLight", "feTile", "feTurbulence", "filter", "g", "image", "line", "linearGradient",
+        "marker", "mask", "mpath", "path", "pattern", "polygon", "polyline", "radialGradient", "rect", "set", "stop",
+        "style", "svg", "switch", "symbol", "text", "textPath", "tspan", "use", "view"
+    };
+
+    private static readonly HashSet<string> AnimationElements = new(StringComparer.Ordinal)
+    {
+        "animate", "animateMotion", "animateTransform", "set"
     };
 
     // Attributes of the root element that only size or identify the SVG; the others, such as fill or stroke, are kept.
@@ -260,8 +292,12 @@ internal static partial class SvgIconReader
         switch (node)
         {
             case XElement element:
-                if (element.Name.Namespace != Svg || RemovedElements.Contains(element.Name.LocalName)) return null;
-                var clean = new XElement(element.Name.LocalName, CleanAttributes(element, context, isRoot: false));
+                var name = element.Name.LocalName;
+                if (element.Name.Namespace != Svg || !AllowedElements.Contains(name) || IsUnsafeAnimation(element)) return null;
+                // A link becomes a plain group: an icon links nowhere, and its own link would nest in the page's links.
+                var clean = name == "a"
+                    ? new XElement("g", CleanAttributes(element, context, isRoot: false).Where(attribute => attribute.Name.LocalName is not ("href" or "target")))
+                    : new XElement(name, CleanAttributes(element, context, isRoot: false));
                 if (element.Name.LocalName == "style")
                     clean.Add(new XText(RewriteStyleSheet(element.Value, context)));
                 else
@@ -272,6 +308,18 @@ internal static partial class SvgIconReader
             default:
                 return null;
         }
+    }
+
+    // An animation of a reference or an event handler, such as <set attributeName="href" to="javascript:…"/>, would
+    // bring back what the attribute checks removed. Animated values are cleaned like attribute values.
+    private static bool IsUnsafeAnimation(XElement element)
+    {
+        if (!AnimationElements.Contains(element.Name.LocalName)) return false;
+        var attributeName = ((string?)element.Attribute("attributeName"))?.Trim() ?? string.Empty;
+        var localName = attributeName[(attributeName.LastIndexOf(':') + 1)..];
+        return localName.Equals("href", StringComparison.OrdinalIgnoreCase) ||
+               localName.Equals("target", StringComparison.OrdinalIgnoreCase) ||
+               localName.StartsWith("on", StringComparison.OrdinalIgnoreCase);
     }
 
     private static IEnumerable<XAttribute> CleanAttributes(XElement element, CleanContext context, bool isRoot)

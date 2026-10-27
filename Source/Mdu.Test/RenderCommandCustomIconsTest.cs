@@ -57,6 +57,23 @@ public sealed class RenderCommandCustomIconsTest : IDisposable
     }
 
     [Fact]
+    public void PdfFailsLikeRenderOnInvalidIcons()
+    {
+        WriteFile(".icons/acme/logo.svg", "<svg");
+        WriteFile("README.md", "# Home\n\n:acme-logo:\n");
+        var output = Path.Combine(_root, "documentation.pdf");
+
+        var command = new PdfCommand(
+            new GraphBuilder(new DataPreparationVisitor(new MarkdownDocumentReader())),
+            new PdfRenderer(new HtmlRenderer()));
+        var result = command.Execute(new RenderCommandSettings { RootPath = _root, OutputPath = output, SearchPattern = "*.md" });
+
+        Assert.Equal(1, result);
+        Assert.Equal(1, Render());
+        Assert.False(File.Exists(output));
+    }
+
+    [Fact]
     public void ReadsTheIconsSetting()
     {
         WriteFile("mdu.yml", "icons: assets/icons\n");

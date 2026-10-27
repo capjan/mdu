@@ -121,12 +121,86 @@ public sealed class CustomIconTest : IDisposable
 
         Assert.True(IconCatalog.TryGetIcon("acme-gradient", out var icon));
         Assert.Equal(
-            "<g class=\"acme-gradient-scope\">" +
-            "<defs><style> .acme-gradient-scope .acme-gradient-cls-1 { fill: url(#acme-gradient-fade); opacity: .5 }  .acme-gradient-scope :is(#acme-gradient-dot, .acme-gradient-dot--copy) &gt; .acme-gradient-cls-1 { fill: #f00 } </style>" +
-            "<linearGradient id=\"acme-gradient-fade\"><stop offset=\"0\" /></linearGradient></defs>" +
-            "<rect id=\"acme-gradient-dot\" class=\"acme-gradient-cls-1 acme-gradient-cls-2\" style=\"fill: url(#acme-gradient-fade)\" width=\"10\" height=\"10\" />" +
-            "<g><rect class=\"acme-gradient-cls-1 acme-gradient-cls-2 acme-gradient-dot--copy\" style=\"fill: url(#acme-gradient-fade)\" width=\"10\" height=\"10\" /></g></g>",
+            "<g class=\"acme-gradient--scope\">" +
+            "<defs><style> .acme-gradient--scope .acme-gradient--cls-1 { fill: url(#acme-gradient--fade); opacity: .5 }  .acme-gradient--scope :is(#acme-gradient--dot, .acme-gradient--dot--copy) &gt; .acme-gradient--cls-1 { fill: #f00 } </style>" +
+            "<linearGradient id=\"acme-gradient--fade\"><stop offset=\"0\" /></linearGradient></defs>" +
+            "<rect id=\"acme-gradient--dot\" class=\"acme-gradient--cls-1 acme-gradient--cls-2\" style=\"fill: url(#acme-gradient--fade)\" width=\"10\" height=\"10\" />" +
+            "<g><rect class=\"acme-gradient--cls-1 acme-gradient--cls-2 acme-gradient--dot--copy\" style=\"fill: url(#acme-gradient--fade)\" width=\"10\" height=\"10\" /></g></g>",
             icon.Glyph.Body);
+    }
+
+    [Fact]
+    public void RemovesAnimationsOfReferencesAndEventHandlers()
+    {
+        WriteIcon("acme/animated.svg",
+            """
+            <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 24 24">
+              <a href="#x" target="_blank"><set attributeName="href" to="javascript:alert(1)"/><rect width="24" height="24"/></a>
+              <image href="#x"><animate attributeName="xlink:href" values="https://example.com/a.png"/></image>
+              <rect><set attributeName="onclick" to="alert(1)"/><set attributeName="fill" to="url(https://example.com/p.svg#g)"/>
+                <animate attributeName="x" from="0" to="10" dur="1s"/></rect>
+            </svg>
+            """);
+
+        IconCatalog.UseCustomIcons(_root);
+
+        Assert.True(IconCatalog.TryGetIcon("acme-animated", out var icon));
+        Assert.Equal(
+            "<g><rect width=\"24\" height=\"24\" /></g><image href=\"#acme-animated--x\" />" +
+            "<rect><set attributeName=\"fill\" to=\"none\" /><animate attributeName=\"x\" from=\"0\" to=\"10\" dur=\"1s\" /></rect>",
+            icon.Glyph.Body);
+    }
+
+    [Fact]
+    public void KeepsOnlySvgElements()
+    {
+        WriteIcon("acme/html.svg",
+            """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
+              <img src="https://example.com/a.png"/><meta http-equiv="refresh" content="0;url=https://example.com"/>
+              <embed src="https://example.com/a.swf"/><iframe src="https://example.com"/><div>Text</div>
+              <circle r="5"/>
+            </svg>
+            """);
+
+        IconCatalog.UseCustomIcons(_root);
+
+        Assert.True(IconCatalog.TryGetIcon("acme-html", out var icon));
+        Assert.Equal("<circle r=\"5\" />", icon.Glyph.Body);
+    }
+
+    [Fact]
+    public void GivesEveryIconItsOwnIdentifierPrefix()
+    {
+        WriteIcon("a/b.svg", """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path id="c-x" d="M0 0"/></svg>""");
+        WriteIcon("a/b-c.svg", """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path id="x" d="M0 0"/></svg>""");
+        WriteIcon("a/b_d.svg", """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path id="x" d="M0 0"/></svg>""");
+        WriteIcon("a/b.dark.svg", """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path id="x" d="M0 0"/></svg>""");
+
+        IconCatalog.UseCustomIcons(_root);
+
+        string[] ids =
+        [
+            Id("a-b", dark: false), Id("a-b-c", dark: false), Id("a-b_d", dark: false), Id("a-b", dark: true)
+        ];
+        Assert.Equal(["a-b--c-x", "a-b-c--x", "a-b_ud--x", "a-b_d--x"], ids);
+
+        static string Id(string shortcode, bool dark)
+        {
+            Assert.True(IconCatalog.TryGetIcon(shortcode, out var icon));
+            return System.Text.RegularExpressions.Regex.Match((dark ? icon.DarkGlyph! : icon.Glyph).Body, "id=\"([^\"]+)\"").Groups[1].Value;
+        }
+    }
+
+    [Fact]
+    public void ExplainsIconsWithTheSameName()
+    {
+        WriteIcon("acme/cloud/server.svg", """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"/>""");
+        WriteIcon("acme/cloud-server.svg", """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"/>""");
+
+        var exception = Assert.Throws<InvalidOperationException>(() => IconCatalog.UseCustomIcons(_root));
+
+        Assert.Contains("The custom icon set 'acme' has several files for the icon 'cloud-server'", exception.Message);
     }
 
     [Fact]
@@ -148,7 +222,7 @@ public sealed class CustomIconTest : IDisposable
         Assert.True(IconCatalog.TryGetIcon("acme-external", out var icon));
         Assert.DoesNotContain("example.com", icon.Glyph.Body);
         Assert.DoesNotContain("@import", icon.Glyph.Body);
-        Assert.Contains(".acme-external-scope rect { fill: none; stroke: url(#acme-external-line) }", icon.Glyph.Body);
+        Assert.Contains(".acme-external--scope rect { fill: none; stroke: url(#acme-external--line) }", icon.Glyph.Body);
         Assert.Contains("<rect fill=\"none\" style=\"background: none\"", icon.Glyph.Body);
         Assert.Contains("<circle fill=\"url(data:image/png;base64,AAAA)\"", icon.Glyph.Body);
     }
@@ -185,11 +259,11 @@ public sealed class CustomIconTest : IDisposable
 
         Assert.True(IconCatalog.TryGetIcon("acme-one", out var one));
         Assert.True(IconCatalog.TryGetIcon("acme-two", out var two));
-        Assert.Contains("@keyframes acme-one-spin {", one.Glyph.Body);
-        Assert.Contains("rect { animation: acme-one-spin 1s linear infinite }", one.Glyph.Body);
-        Assert.Contains("circle { animation-name: acme-one-spin, fade }", one.Glyph.Body);
-        Assert.Contains("<circle style=\"animation: 2s acme-one-spin\"", one.Glyph.Body);
-        Assert.Contains("@keyframes acme-two-spin {", two.Glyph.Body);
+        Assert.Contains("@keyframes acme-one--spin {", one.Glyph.Body);
+        Assert.Contains("rect { animation: acme-one--spin 1s linear infinite }", one.Glyph.Body);
+        Assert.Contains("circle { animation-name: acme-one--spin, fade }", one.Glyph.Body);
+        Assert.Contains("<circle style=\"animation: 2s acme-one--spin\"", one.Glyph.Body);
+        Assert.Contains("@keyframes acme-two--spin {", two.Glyph.Body);
     }
 
     [Fact]
@@ -201,9 +275,9 @@ public sealed class CustomIconTest : IDisposable
         IconCatalog.UseCustomIcons(_root);
 
         Assert.True(IconCatalog.TryGetIcon("acme-legacy", out var icon));
-        Assert.Contains("@-webkit-keyframes acme-legacy-spin {", icon.Glyph.Body);
-        Assert.Contains("rect { -webkit-animation: acme-legacy-spin 1s; -moz-animation-name: acme-legacy-spin }", icon.Glyph.Body);
-        Assert.Contains("<rect style=\"-webkit-animation-name: acme-legacy-spin\"", icon.Glyph.Body);
+        Assert.Contains("@-webkit-keyframes acme-legacy--spin {", icon.Glyph.Body);
+        Assert.Contains("rect { -webkit-animation: acme-legacy--spin 1s; -moz-animation-name: acme-legacy--spin }", icon.Glyph.Body);
+        Assert.Contains("<rect style=\"-webkit-animation-name: acme-legacy--spin\"", icon.Glyph.Body);
     }
 
     [Fact]
@@ -215,10 +289,10 @@ public sealed class CustomIconTest : IDisposable
         IconCatalog.UseCustomIcons(_root);
 
         Assert.True(IconCatalog.TryGetIcon("acme-rooted", out var icon));
-        Assert.StartsWith("<g id=\"acme-rooted-logo\" class=\"acme-rooted-scope\">", icon.Glyph.Body);
-        Assert.Contains(".acme-rooted-scope#acme-rooted-logo path { fill: red }", icon.Glyph.Body);
-        Assert.Contains(".acme-rooted-scope#acme-rooted-logo { color: blue }", icon.Glyph.Body);
-        Assert.Contains(".acme-rooted-scope #acme-rooted-logo-part { fill: green }", icon.Glyph.Body);
+        Assert.StartsWith("<g id=\"acme-rooted--logo\" class=\"acme-rooted--scope\">", icon.Glyph.Body);
+        Assert.Contains(".acme-rooted--scope#acme-rooted--logo path { fill: red }", icon.Glyph.Body);
+        Assert.Contains(".acme-rooted--scope#acme-rooted--logo { color: blue }", icon.Glyph.Body);
+        Assert.Contains(".acme-rooted--scope #acme-rooted--logo-part { fill: green }", icon.Glyph.Body);
     }
 
     [Fact]
@@ -239,12 +313,12 @@ public sealed class CustomIconTest : IDisposable
         IconCatalog.UseCustomIcons(_root);
 
         Assert.True(IconCatalog.TryGetIcon("acme-styled", out var icon));
-        Assert.StartsWith("<g fill=\"none\" class=\"acme-styled-scope\"><style>", icon.Glyph.Body);
-        Assert.Contains(".acme-styled-scope path, .acme-styled-scope &gt; circle:is(.acme-styled-a, .acme-styled-b) { fill: red }", icon.Glyph.Body);
-        Assert.Contains(".acme-styled-scope { color: blue }", icon.Glyph.Body);
-        Assert.Contains("@media (prefers-color-scheme: dark) { .acme-styled-scope path { fill: blue } }", icon.Glyph.Body);
-        Assert.Contains("@keyframes acme-styled-spin { from { opacity: 0 } 50% { opacity: .5 } }", icon.Glyph.Body);
-        Assert.StartsWith("<g class=\"acme-styled-dark-scope\"><style>.acme-styled-dark-scope path { fill: white }</style>", icon.DarkGlyph!.Body);
+        Assert.StartsWith("<g fill=\"none\" class=\"acme-styled--scope\"><style>", icon.Glyph.Body);
+        Assert.Contains(".acme-styled--scope path, .acme-styled--scope &gt; circle:is(.acme-styled--a, .acme-styled--b) { fill: red }", icon.Glyph.Body);
+        Assert.Contains(".acme-styled--scope { color: blue }", icon.Glyph.Body);
+        Assert.Contains("@media (prefers-color-scheme: dark) { .acme-styled--scope path { fill: blue } }", icon.Glyph.Body);
+        Assert.Contains("@keyframes acme-styled--spin { from { opacity: 0 } 50% { opacity: .5 } }", icon.Glyph.Body);
+        Assert.StartsWith("<g class=\"acme-styled_d--scope\"><style>.acme-styled_d--scope path { fill: white }</style>", icon.DarkGlyph!.Body);
     }
 
     [Fact]
@@ -312,7 +386,7 @@ public sealed class CustomIconTest : IDisposable
             """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><symbol id="big" viewBox="0 0 100 100"><rect fill="#000" width="100" height="100"/></symbol><use href="#big" width="10" height="10"/></svg>""");
         IconCatalog.UseCustomIcons(_root);
         Assert.True(IconCatalog.TryGetIcon("acme-symbol-pdf", out var icon));
-        Assert.StartsWith("<defs><symbol id=\"acme-symbol-pdf-big\"", icon.Glyph.Body);
+        Assert.StartsWith("<defs><symbol id=\"acme-symbol-pdf--big\"", icon.Glyph.Body);
 
         Assert.Equal(1, CountPdfShapes(icon.Glyph.ToSvg()));
         // The PDF renderer skips symbols outside of defs too.
@@ -337,9 +411,9 @@ public sealed class CustomIconTest : IDisposable
         IconCatalog.UseCustomIcons(_root);
 
         Assert.True(IconCatalog.TryGetIcon("acme-styled-use", out var icon));
-        Assert.Contains(".acme-styled-use-scope :is(#acme-styled-use-shape, .acme-styled-use-shape--copy) { fill: red }", icon.Glyph.Body);
-        Assert.Contains(".acme-styled-use-scope #acme-styled-use-other { fill: blue }", icon.Glyph.Body);
-        Assert.Contains("<g><path d=\"M0 0h2v2z\" class=\"acme-styled-use-shape--copy\" /></g>", icon.Glyph.Body);
+        Assert.Contains(".acme-styled-use--scope :is(#acme-styled-use--shape, .acme-styled-use--shape--copy) { fill: red }", icon.Glyph.Body);
+        Assert.Contains(".acme-styled-use--scope #acme-styled-use--other { fill: blue }", icon.Glyph.Body);
+        Assert.Contains("<g><path d=\"M0 0h2v2z\" class=\"acme-styled-use--shape--copy\" /></g>", icon.Glyph.Body);
     }
 
     [Fact]
@@ -395,6 +469,8 @@ public sealed class CustomIconTest : IDisposable
     [Theory]
     [InlineData("logo.svg", "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\"/>", "folder named after their icon set")]
     [InlineData("acme/my logo.svg", "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\"/>", "may contain only")]
+    [InlineData("acme/arrow--left.svg", "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\"/>", "contain '--'")]
+    [InlineData("acme/arrow-.svg", "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\"/>", "end with '-'")]
     [InlineData("acme/logo.svg", "<svg xmlns=\"http://www.w3.org/2000/svg\"/>", "viewBox")]
     [InlineData("acme/logo.svg", "<html/>", "not an SVG file")]
     [InlineData("acme/logo.svg", "<svg", "not a valid SVG file")]

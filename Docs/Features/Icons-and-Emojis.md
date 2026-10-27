@@ -116,9 +116,10 @@ Some tips for the SVG files:
 - Use `currentColor` for fills and strokes, as in `fill="currentColor"`, so that the icon takes the color of the surrounding text and fits the light and dark theme. Colored logos keep their own colors.
 - Add a file ending in `.dark.svg` for a logo that needs other colors in the dark theme. MDU shows the variant that fits the theme.
 - The SVG needs a `viewBox`, or a `width` and `height`. MDU sizes the icon with the text, so the size in the file does not matter.
-- Icon and folder names may contain letters, digits, `-`, `_`, and `+`. A folder must not be named like a built-in icon set, for example `material` or `fontawesome`.
+- Icon and folder names may contain letters, digits, `-`, `_`, and `+`, but not `--`, and they may not start or end with `-`. A folder must not be named like a built-in icon set, for example `material` or `fontawesome`.
+- An invalid icon stops `mdu render` and `mdu pdf` with an error. `mdu serve` reports it and keeps running, so you can fix the file.
 
-MDU embeds the icons as inline SVG and cleans them up first: it removes scripts, event handlers, the metadata of drawing programs, and every reference to another file, including `@import` and `url(…)` in styles. Embedded images are kept only as `data:` URLs. Identifiers, animation names, and the classes of embedded style sheets get a prefix per icon, and the rules of a style sheet apply only to its own icon, so that several icons on one page do not affect each other. Shapes reused with `use` are copied into place, so they also appear in PDF files.
+MDU embeds the icons as inline SVG and cleans them up first: it keeps only SVG elements and turns links into plain groups, and it removes scripts, event handlers, animations of links and event handlers, the metadata of drawing programs, and every reference to another file, including `@import` and `url(…)` in styles. Embedded images are kept only as `data:` URLs. Identifiers, animation names, and the classes of embedded style sheets get a prefix per icon, and the rules of a style sheet apply only to its own icon, so that several icons on one page do not affect each other. Shapes reused with `use` are copied into place, so they also appear in PDF files.
 
 ### Where shortcodes work
 
