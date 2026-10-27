@@ -67,7 +67,8 @@ internal static class PdfSvgRenderer
             // Particles only exist to be animated along their edge and have no static position, so they are skipped.
             if (ClassContains(classes, "iso-particle")) continue;
             var name = element.LocalName.ToLowerInvariant();
-            if (name is "defs" or "clippath") continue;
+            // Symbols are templates that only use elements draw.
+            if (name is "defs" or "clippath" or "symbol") continue;
 
             var hasTransform = ApplyTransform(element.GetAttribute("transform"), output);
             var opacity = ParseLength(element.GetAttribute("opacity"), 1);

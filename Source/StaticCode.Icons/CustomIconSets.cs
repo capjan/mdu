@@ -121,7 +121,10 @@ internal static partial class SvgIconReader
         var hasStyleSheet = root.Descendants(Svg + "style").Any();
         var context = new CleanContext(prefix, hasStyleSheet, GetCopiedIds(root));
         var content = new XElement("g", root.Nodes().Select(node => Clean(node, context)).OfType<XNode>());
-        InlineUseReferences(content, context);
+        InlineUseReferences(content, context, width, height);
+        // The originals stay for the references into them, such as gradients, but are never drawn themselves.
+        foreach (var symbol in content.Descendants("symbol").Where(symbol => symbol.Ancestors("defs").FirstOrDefault() is null).ToArray())
+            symbol.ReplaceWith(new XElement("defs", symbol));
 
         // Presentation attributes of the root, such as fill="none" or stroke="currentColor", move to the group. An
         // icon with a style sheet always keeps the group, because its class limits the style sheet to this icon.
@@ -140,7 +143,7 @@ internal static partial class SvgIconReader
     /// neither <c>defs</c> nor <c>use</c>. A reference to a missing element or a chain of references deeper than
     /// <see cref="MaxUseDepth"/>, for example a cycle, is removed.
     /// </summary>
-    private static void InlineUseReferences(XElement content, CleanContext context)
+    private static void InlineUseReferences(XElement content, CleanContext context, double viewportWidth, double viewportHeight)
     {
         var elementsById = content.Descendants()
             .Where(element => element.Attribute("id") is not null)
@@ -172,7 +175,7 @@ internal static partial class SvgIconReader
                 if (copy.Name.LocalName == "symbol")
                 {
                     copy.Name = "g";
-                    var symbolTransform = SymbolTransform(copy, use);
+                    var symbolTransform = SymbolTransform(copy, use, viewportWidth, viewportHeight);
                     copy.Attribute("viewBox")?.Remove();
                     copy.Attribute("preserveAspectRatio")?.Remove();
                     copy.Attribute("width")?.Remove();
@@ -219,12 +222,13 @@ internal static partial class SvgIconReader
     /// Returns the transform that maps the view box of a symbol onto the size that the <c>use</c> element asks for,
     /// following <c>preserveAspectRatio</c>, or <c>null</c> when the symbol has no view box.
     /// </summary>
-    private static string? SymbolTransform(XElement symbol, XElement use)
+    private static string? SymbolTransform(XElement symbol, XElement use, double viewportWidth, double viewportHeight)
     {
         if (symbol.Attribute("viewBox") is null || ReadViewBox(symbol) is not { } viewBox) return null;
         var (viewLeft, viewTop, viewWidth, viewHeight) = viewBox;
-        var width = ReadLength(use, "width") ?? ReadLength(symbol, "width") ?? viewWidth;
-        var height = ReadLength(use, "height") ?? ReadLength(symbol, "height") ?? viewHeight;
+        // Sizes default to the whole viewport around the use, which is the view box of the icon.
+        var width = ReadSize(use, "width", viewportWidth) ?? ReadSize(symbol, "width", viewportWidth) ?? viewportWidth;
+        var height = ReadSize(use, "height", viewportHeight) ?? ReadSize(symbol, "height", viewportHeight) ?? viewportHeight;
 
         var aspectRatio = ((string?)symbol.Attribute("preserveAspectRatio") ?? "xMidYMid meet")
             .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
@@ -421,6 +425,16 @@ internal static partial class SvgIconReader
         }
 
         return ReadLength(root, "width") is { } width && ReadLength(root, "height") is { } height ? (0, 0, width, height) : null;
+    }
+
+    // Reads a length that may be a percentage of the viewport, such as width="50%".
+    private static double? ReadSize(XElement element, string name, double viewportSize)
+    {
+        var value = ((string?)element.Attribute(name))?.Trim();
+        if (value is null || !value.EndsWith('%')) return ReadLength(element, name);
+        return double.TryParse(value[..^1], NumberStyles.Float, CultureInfo.InvariantCulture, out var percent) && percent > 0
+            ? viewportSize * percent / 100
+            : null;
     }
 
     private static double? ReadLength(XElement root, string name)

@@ -201,7 +201,7 @@ public sealed class CustomIconTest : IDisposable
         Assert.True(IconCatalog.TryGetIcon("acme-reuse", out var icon));
         Assert.DoesNotContain("<use", icon.Glyph.Body);
         Assert.Contains(
-            "<g opacity=\".5\" transform=\"scale(2) translate(1 3)\"><g transform=\"translate(0 0) scale(1 1)\"><g><path fill=\"currentColor\" d=\"M0 0h2v2z\" /></g><g transform=\"translate(2 0)\"><path fill=\"currentColor\" d=\"M0 0h2v2z\" /></g></g></g>",
+            "<g opacity=\".5\" transform=\"scale(2) translate(1 3)\"><g transform=\"translate(0 2.5) scale(2.5 2.5)\"><g><path fill=\"currentColor\" d=\"M0 0h2v2z\" /></g><g transform=\"translate(2 0)\"><path fill=\"currentColor\" d=\"M0 0h2v2z\" /></g></g></g>",
             icon.Glyph.Body);
     }
 
@@ -221,6 +221,43 @@ public sealed class CustomIconTest : IDisposable
 
         Assert.True(IconCatalog.TryGetIcon("acme-symbol", out var icon));
         Assert.EndsWith($"<g><g transform=\"{transform}\"><rect width=\"100\" height=\"100\" /></g></g>", icon.Glyph.Body);
+    }
+
+    [Theory]
+    [InlineData("", "translate(0 0) scale(0.24 0.24)")]
+    [InlineData(" width=\"50%\" height=\"50%\"", "translate(0 0) scale(0.12 0.12)")]
+    public void SizesSymbolsWithoutSizeByTheIconViewBox(string size, string transform)
+    {
+        WriteIcon("acme/viewport.svg",
+            $"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><symbol id="big" viewBox="0 0 100 100"><rect width="100" height="100"/></symbol><use href="#big"{size}/></svg>""");
+
+        IconCatalog.UseCustomIcons(_root);
+
+        Assert.True(IconCatalog.TryGetIcon("acme-viewport", out var icon));
+        Assert.EndsWith($"<g><g transform=\"{transform}\"><rect width=\"100\" height=\"100\" /></g></g>", icon.Glyph.Body);
+    }
+
+    [Fact]
+    public void DrawsOnlyTheCopiesOfSymbolsInPdf()
+    {
+        WriteIcon("acme/symbol-pdf.svg",
+            """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><symbol id="big" viewBox="0 0 100 100"><rect fill="#000" width="100" height="100"/></symbol><use href="#big" width="10" height="10"/></svg>""");
+        IconCatalog.UseCustomIcons(_root);
+        Assert.True(IconCatalog.TryGetIcon("acme-symbol-pdf", out var icon));
+        Assert.StartsWith("<defs><symbol id=\"acme-symbol-pdf-big\"", icon.Glyph.Body);
+
+        Assert.Equal(1, CountPdfShapes(icon.Glyph.ToSvg()));
+        // The PDF renderer skips symbols outside of defs too.
+        Assert.Equal(0, CountPdfShapes("""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><symbol viewBox="0 0 10 10"><rect fill="#000" width="10" height="10"/></symbol></svg>"""));
+
+        static int CountPdfShapes(string svg)
+        {
+            var document = new System.Xml.XmlDocument();
+            document.LoadXml(svg);
+            var pdf = new System.Text.StringBuilder();
+            PdfSvgRenderer.Draw(document.DocumentElement!, pdf, 0, 0, 24, 24, 800);
+            return System.Text.RegularExpressions.Regex.Matches(pdf.ToString(), @" re\b|\bm\b").Count;
+        }
     }
 
     [Fact]
