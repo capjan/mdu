@@ -71,6 +71,15 @@ public class RenderCommand
             Console.Error.WriteLine($"Could not read the configured glossary: {exception.Message}");
             return 1;
         }
+        try
+        {
+            SiteConfigurationReader.UseCustomIcons(rootPath, siteConfiguration);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
+        {
+            Console.Error.WriteLine($"Could not load the custom icons: {exception.Message}");
+            return 1;
+        }
         MarkdownFile[] graph;
         try
         {

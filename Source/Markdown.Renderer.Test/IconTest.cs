@@ -6,6 +6,7 @@ using StaticCode.Icons;
 
 namespace Markdown.Renderer.Test;
 
+[Collection("Icon catalog")]
 public class IconTest
 {
     private static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder()

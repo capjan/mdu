@@ -15,7 +15,7 @@ public static class IconSearch
     public const string ScriptFileName = "icon-search.js";
     public const string IndexFileName = "icon-search-index.json";
 
-    private static readonly Lazy<byte[]> Index = new(CreateIndex);
+    private static CachedIndex? _index;
 
     public const string Html =
         """
@@ -42,18 +42,30 @@ public static class IconSearch
         var scriptPath = Path.Combine(scriptDirectory, ScriptFileName);
         File.WriteAllText(scriptPath, Resources.IconSearchScriptContent());
         var indexPath = Path.Combine(scriptDirectory, IndexFileName);
-        File.WriteAllBytes(indexPath, Index.Value);
+        File.WriteAllBytes(indexPath, GetIndex());
         return new[] { scriptPath, indexPath };
     }
 
-    private static byte[] CreateIndex()
+    // The index is created again only when the custom icon sets change.
+    private static byte[] GetIndex()
+    {
+        var sets = IconCatalog.Sets;
+        if (_index is { } cached && ReferenceEquals(cached.Sets, sets)) return cached.Index;
+        var index = CreateIndex(sets);
+        _index = new CachedIndex(sets, index);
+        return index;
+    }
+
+    private sealed record CachedIndex(IReadOnlyList<IconSet> Sets, byte[] Index);
+
+    private static byte[] CreateIndex(IReadOnlyList<IconSet> sets)
     {
         using var stream = new MemoryStream();
         using (var json = new Utf8JsonWriter(stream, new JsonWriterOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping }))
         {
             json.WriteStartObject();
             json.WriteStartArray("sets");
-            foreach (var set in IconCatalog.Sets)
+            foreach (var set in sets)
             {
                 json.WriteStartObject();
                 json.WriteString("prefix", set.ShortcodePrefix);

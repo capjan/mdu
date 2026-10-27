@@ -30,11 +30,14 @@ mdu render ./docs ./site --pattern "*.markdown" --editPageRoot "https://github.c
 
 An optional `mdu.yml` in the documentation folder sets the site name, light and dark logos, theme colors, and an optional shared glossary. If no favicon files are specified, MDU uses the light and dark logo files as favicons. MDU copies the referenced files into the output folder. A square logo mark is most legible in a browser tab; MDU uses the logo file as-is. See [Abbreviations](../Features/Abbreviations.md) for local and shared glossary definitions.
 
+An optional `icons:` value is the folder of your own icon sets. Without it, MDU uses the `.icons` folder of the documentation when there is one. See [Your own icons](../Features/Icons-and-Emojis.md#your-own-icons).
+
 An optional `favicon:` value can be a single asset path for both themes, or a mapping with separate `light` and `dark` paths. MDU emits a light favicon link without a `media` condition as a fallback, followed by a dark link with `media="(prefers-color-scheme: dark)"`. The browser selects the dark link when that condition matches, independently of the page theme; the unconditional light link also lets browsers that do not match the dark condition display a favicon. Alternatively, one SVG can switch its internal styles with `prefers-color-scheme`. Both approaches follow the browser's effective preference, which can come from an OS or user-agent setting, though support varies by browser. For separate paths, selection relies on browser support for the `media` attribute on favicon links; Safari behavior can vary by version, so verify the versions you support. Use PNG or ICO if a browser you support does not display SVG favicons.
 
 ```yaml title="docs/mdu.yml"
 site_name: Documentation
 glossary: includes/abbreviations.md
+icons: assets/icons
 logo:
   light: assets/logo-light.svg
   dark: assets/logo-dark.svg

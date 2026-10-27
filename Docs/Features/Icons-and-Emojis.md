@@ -85,6 +85,42 @@ The variants also have their own shortcodes, for example `:dashboard-github-ligh
 
 MDU includes the Dashboard Icons whose SVG files are at most 20 KB and contain no embedded images, scripts, or links, which are about nine out of ten.
 
+### Your own icons
+
+Use your own SVG files, such as a company logo or product symbols, as icons. Put them into a folder per icon set in the `.icons` folder of your documentation. The folder name becomes the prefix and the file name the icon name:
+
+```text
+docs/
+  .icons/
+    acme/
+      logo.svg            → :acme-logo:
+      logo.dark.svg       → dark variant of :acme-logo:
+      cloud/
+        server.svg        → :acme-cloud-server:
+```
+
+```markdown title="Markdown"
+Built by :acme-logo: on :acme-cloud-server:
+```
+
+This is the same layout as the custom icons of [Material for MkDocs](https://squidfunk.github.io/mkdocs-material/setup/changing-the-logo-and-icons/#additional-icons), so the shortcodes work there too. To keep the icons in another folder, set it in [`mdu.yml`](../Usage/render.md#site-configuration):
+
+```yaml title="docs/mdu.yml"
+icons: assets/icons
+```
+
+Your icons work everywhere the built-in icons do, including dashboards, diagrams, the icon search, and PDF files. `mdu serve` picks up new and changed icons in a folder inside the documentation without a restart.
+
+Some tips for the SVG files:
+
+- Use `currentColor` for fills and strokes, as in `fill="currentColor"`, so that the icon takes the color of the surrounding text and fits the light and dark theme. Colored logos keep their own colors.
+- Add a file ending in `.dark.svg` for a logo that needs other colors in the dark theme. MDU shows the variant that fits the theme.
+- The SVG needs a `viewBox`, or a `width` and `height`. MDU sizes the icon with the text, so the size in the file does not matter.
+- Icon and folder names may contain letters, digits, `-`, `_`, and `+`, but not `--`, and they may not start or end with `-`. A folder must not be named like a built-in icon set, for example `material` or `fontawesome`.
+- An invalid icon stops `mdu render` and `mdu pdf` with an error. `mdu serve` reports it and keeps running, so you can fix the file.
+
+MDU embeds the icons as inline SVG and cleans them up first: it keeps only SVG elements and turns links into plain groups, and it removes scripts, event handlers, animations of links and event handlers, the metadata of drawing programs, and every reference to another file, including `@import` and `url(…)` in styles. Embedded images are kept only as `data:` URLs. Identifiers, animation names, and the classes of embedded style sheets get a prefix per icon, and the rules of a style sheet apply only to its own icon, so that several icons on one page do not affect each other. Shapes reused with `use` are copied into place, so they also appear in PDF files.
+
 ### Where shortcodes work
 
 Shortcodes work anywhere in text, for example in paragraphs, lists, tables, links, and callouts. They are not replaced inside code spans and code blocks, so you can still write about them, as this page does. A shortcode that MDU does not know stays as it is.

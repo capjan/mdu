@@ -1,10 +1,13 @@
 using Markdown.Renderer.Res.Model;
+using StaticCode.Icons;
 using YamlDotNet.RepresentationModel;
 
 namespace Mdu.Service;
 
 public static class SiteConfigurationReader
 {
+    public const string DefaultIconsFolder = ".icons";
+
     public static SiteConfiguration Read(string rootPath)
     {
         var path = Path.Combine(rootPath, "mdu.yml");
@@ -18,6 +21,7 @@ public static class SiteConfigurationReader
         {
             SiteName = ReadScalar(root, "site_name") ?? "Documentation",
             Glossary = ReadGlossary(root),
+            Icons = ReadIcons(root),
             LogoLight = ReadAsset(root, "logo", "light"),
             LogoDark = ReadAsset(root, "logo", "dark"),
             FaviconLight = ReadAsset(root, "favicon", "light"),
@@ -69,6 +73,26 @@ public static class SiteConfigurationReader
         return path is null ? null : File.ReadAllText(path);
     }
 
+    /// <summary>
+    /// Returns the folder of the custom icon sets: the <c>icons</c> setting, or the <c>.icons</c> folder of the root
+    /// when it exists.
+    /// </summary>
+    public static string? GetIconsPath(string rootPath, SiteConfiguration configuration)
+    {
+        if (configuration.Icons is not null) return Path.GetFullPath(configuration.Icons, rootPath);
+        var defaultPath = Path.Combine(Path.GetFullPath(rootPath), DefaultIconsFolder);
+        return Directory.Exists(defaultPath) ? defaultPath : null;
+    }
+
+    /// <summary>Makes the custom icon sets of the site available to icon shortcodes.</summary>
+    public static void UseCustomIcons(string rootPath, SiteConfiguration configuration)
+    {
+        var path = GetIconsPath(rootPath, configuration);
+        if (path is not null && !Directory.Exists(path))
+            throw new InvalidOperationException($"Configured icons folder does not exist: {path}");
+        IconCatalog.UseCustomIcons(path);
+    }
+
     public static void CopyAssets(string rootPath, string outputPath, SiteConfiguration configuration)
     {
         foreach (var asset in new[] { configuration.LogoLight, configuration.LogoDark, configuration.FaviconLight, configuration.FaviconDark }
@@ -111,6 +135,14 @@ public static class SiteConfigurationReader
         if (!root.Children.TryGetValue(new YamlScalarNode("glossary"), out var node)) return null;
         if (node is not YamlScalarNode scalar || string.IsNullOrWhiteSpace(scalar.Value))
             throw new InvalidOperationException("The 'glossary' setting in mdu.yml must be a Markdown file path.");
+        return scalar.Value;
+    }
+
+    private static string? ReadIcons(YamlMappingNode root)
+    {
+        if (!root.Children.TryGetValue(new YamlScalarNode("icons"), out var node)) return null;
+        if (node is not YamlScalarNode scalar || string.IsNullOrWhiteSpace(scalar.Value))
+            throw new InvalidOperationException("The 'icons' setting in mdu.yml must be a folder path.");
         return scalar.Value;
     }
 

@@ -37,6 +37,16 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
 
         var defaultOutputName = singleFilePath is null ? "documentation.pdf" : $"{Path.GetFileNameWithoutExtension(singleFilePath)}.pdf";
         var outputPath = Path.GetFullPath(settings.OutputPath ?? Path.Combine(Environment.CurrentDirectory, defaultOutputName));
+        // Like mdu render, the PDF is not written without the custom icons that its pages use.
+        try
+        {
+            SiteConfigurationReader.UseCustomIcons(rootPath, SiteConfigurationReader.Read(rootPath));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException or YamlException)
+        {
+            Console.Error.WriteLine($"Could not load the custom icons: {exception.Message}");
+            return 1;
+        }
         MarkdownFile[] graph;
         try
         {
