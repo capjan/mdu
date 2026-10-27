@@ -193,6 +193,20 @@ public sealed class CustomIconTest : IDisposable
     }
 
     [Fact]
+    public void RenamesAnimationsInVendorPrefixedProperties()
+    {
+        WriteIcon("acme/legacy.svg",
+            """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><style>@-webkit-keyframes spin { to { opacity: 0 } } rect { -webkit-animation: spin 1s; -moz-animation-name: spin }</style><rect style="-webkit-animation-name: spin" width="10" height="10"/></svg>""");
+
+        IconCatalog.UseCustomIcons(_root);
+
+        Assert.True(IconCatalog.TryGetIcon("acme-legacy", out var icon));
+        Assert.Contains("@-webkit-keyframes acme-legacy-spin {", icon.Glyph.Body);
+        Assert.Contains("rect { -webkit-animation: acme-legacy-spin 1s; -moz-animation-name: acme-legacy-spin }", icon.Glyph.Body);
+        Assert.Contains("<rect style=\"-webkit-animation-name: acme-legacy-spin\"", icon.Glyph.Body);
+    }
+
+    [Fact]
     public void KeepsTheIdentifierOfTheRootSvg()
     {
         WriteIcon("acme/rooted.svg",

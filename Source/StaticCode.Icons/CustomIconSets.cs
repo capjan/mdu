@@ -532,10 +532,10 @@ internal static partial class SvgIconReader
     [GeneratedRegex(@"(?<![\w-])(?:-webkit-)?(?:image-set|image|cross-fade|element)\s*\(", RegexOptions.IgnoreCase)]
     private static partial Regex ImageFunction();
 
-    [GeneratedRegex(@"@(?:-webkit-|-moz-)?keyframes\s+(?<name>-?[_A-Za-z][\w-]*)", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"@(?:-webkit-|-moz-|-o-)?keyframes\s+(?<name>-?[_A-Za-z][\w-]*)", RegexOptions.IgnoreCase)]
     private static partial Regex KeyframesRule();
 
-    [GeneratedRegex(@"(?<property>(?<![\w-])animation(?:-name)?\s*:)(?<value>[^;{}]*)", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"(?<property>(?<![\w-])(?:-webkit-|-moz-|-o-)?animation(?:-name)?\s*:)(?<value>[^;{}]*)", RegexOptions.IgnoreCase)]
     private static partial Regex AnimationDeclaration();
 
     [GeneratedRegex(@"(?<![\w.#-])-?[_A-Za-z][\w-]*(?![\w-]|\()")]
