@@ -11,11 +11,12 @@ namespace Mdu.Service;
 /// </summary>
 public sealed class PageAnchors
 {
-    private static readonly Regex IdAttributeRegex = new(
-        "<[a-zA-Z][^>]*?\\s(?:id|name)\\s*=\\s*(?:\"(?<double>[^\"]*)\"|'(?<single>[^']*)')",
+    private static readonly Regex StartTagRegex = new(
+        "<(?<tag>[a-zA-Z][a-zA-Z0-9-]*)(?<attributes>(?:\"[^\"]*\"|'[^']*'|[^'\">])*)>",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
-    private static readonly Regex HeadingIdRegex = new(
-        "<h[1-6]\\b[^>]*?\\sid=\"(?<id>[^\"]*)\"",
+    // HTML attribute names ignore letter case, and values may be unquoted, as in <a ID=setup>.
+    private static readonly Regex AttributeRegex = new(
+        "(?<name>[^\\s\"'>/=]+)(?:\\s*=\\s*(?:\"(?<value>[^\"]*)\"|'(?<value>[^']*)'|(?<value>[^\\s\"'=<>`]+)))?",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private readonly HtmlRenderer _renderer = new();
@@ -35,9 +36,7 @@ public sealed class PageAnchors
         {
             var expanded = OpenApiMarkdownRenderer.ExpandCodeBlocks(markdown, filePath, sourceRootPath);
             var html = _renderer.RenderMarkdownFragment(expanded);
-            anchors = new Anchors(
-                ReadIds(IdAttributeRegex, html, "double", "single"),
-                ReadIds(HeadingIdRegex, html, "id"));
+            anchors = ReadAnchors(html);
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
@@ -48,12 +47,31 @@ public sealed class PageAnchors
         return anchors;
     }
 
-    private static HashSet<string> ReadIds(Regex regex, string html, params string[] groups) =>
-        regex.Matches(html)
-            .Select(match => groups.Select(group => match.Groups[group]).First(group => group.Success).Value)
-            .Select(WebUtility.HtmlDecode)
-            .Where(id => id.Length > 0)
-            .ToHashSet(StringComparer.Ordinal);
+    private static Anchors ReadAnchors(string html)
+    {
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        var headingIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (Match tag in StartTagRegex.Matches(html))
+        {
+            var tagName = tag.Groups["tag"].Value;
+            var isHeading = tagName.Length == 2 && char.ToLowerInvariant(tagName[0]) == 'h' && tagName[1] is >= '1' and <= '6';
+            // Browsers also scroll to <a name="...">, but the name of a form field is no anchor.
+            var isLink = tagName.Equals("a", StringComparison.OrdinalIgnoreCase);
+            foreach (Match attribute in AttributeRegex.Matches(tag.Groups["attributes"].Value))
+            {
+                var name = attribute.Groups["name"].Value;
+                var isId = name.Equals("id", StringComparison.OrdinalIgnoreCase);
+                if (!isId && !(isLink && name.Equals("name", StringComparison.OrdinalIgnoreCase))) continue;
+
+                var value = WebUtility.HtmlDecode(attribute.Groups["value"].Value);
+                if (value.Length == 0) continue;
+                ids.Add(value);
+                if (isId && isHeading) headingIds.Add(value);
+            }
+        }
+
+        return new Anchors(ids, headingIds);
+    }
 
     /// <param name="Ids">Every id and anchor name on the page.</param>
     /// <param name="HeadingIds">The heading ids, which same-page links reach in any letter case.</param>

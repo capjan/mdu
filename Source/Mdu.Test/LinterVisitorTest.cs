@@ -254,6 +254,8 @@ public class LinterVisitorTest
     [InlineData("[Security](#6-security)")]
     [InlineData("[Custom](#custom-id)")]
     [InlineData("[Raw](#raw-anchor)")]
+    [InlineData("[Upper](#upper-anchor)")]
+    [InlineData("[Legacy](#legacy-name)")]
     [InlineData("[Note](#fn:1)")]
     [InlineData("[Top](#top)")]
     [InlineData("[Text](#:~:text=Setup)")]
@@ -261,8 +263,20 @@ public class LinterVisitorTest
     public void SamePageFragmentsOfRenderedAnchorsPass(string link)
     {
         WithPage("Overview.md",
-            $"# Overview\n\n{link}\n\n## Setup\n\n## 6. Security\n\n## Named {{#custom-id}}\n\n<a id=\"raw-anchor\"></a>\n\nA note[^1].\n\n[^1]: Note.",
+            $"# Overview\n\n{link}\n\n## Setup\n\n## 6. Security\n\n## Named {{#custom-id}}\n\n<a id=\"raw-anchor\"></a>\n\n<a ID=upper-anchor></a> <a title=\"x\" NAME='legacy-name'></a>\n\nA note[^1].\n\n[^1]: Note.",
             "Overview", 0, errors => Assert.Empty(errors));
+    }
+
+    [Fact]
+    public void FormFieldNamesAndAttributeTextAreNoAnchors()
+    {
+        WithPage("Overview.md",
+            "# Overview\n\n[Email](#email)\n\n[Title](#hidden)\n\n<input name=\"email\">\n\n<a title=\"id=hidden\"></a>",
+            "Overview", 0, errors =>
+            {
+                Assert.Equal(2, errors.Count);
+                Assert.All(errors, error => Assert.Equal(RuleCodes.LocalFragmentExists, CodeOf(error)));
+            });
     }
 
     [Fact]
