@@ -27,6 +27,19 @@ public class PdfRendererTest
     }
 
     [Fact]
+    public void AppliesExplicitDashboardIconColorsInPdf()
+    {
+        using var output = new MemoryStream();
+
+        new PdfRenderer(new HtmlRenderer()).WritePdf(output, "Icon",
+            [new PdfSourceSection("Icon", "icon/index.html", "- :dashboard-files:{ style=\"color: #16803c\" } [Files](https://files.example.org)")],
+            includeFrontMatter: false);
+
+        var pdf = Encoding.Latin1.GetString(output.ToArray());
+        Assert.Contains("0.086 0.502 0.235 rg", pdf);
+    }
+
+    [Fact]
     public void SkipsIsometricParticlesInPdf()
     {
         const string withoutParticle = """

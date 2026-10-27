@@ -351,6 +351,15 @@ public class DashboardTest
     }
 
     [Fact]
+    public async Task AppliesAnExplicitIconColorInsideDashboardTiles()
+    {
+        var html = await RenderPage("## Tools\n\n- :dashboard-files:{ style=\"color: #16803c\" } [Files](https://files.example.org)\n", Options);
+
+        Assert.Contains("<span class=\"dashboard-icon\"><span class=\"icon\" style=\"color: #16803c\"><svg", html);
+        Assert.Contains("fill=\"#16803c\"", html);
+    }
+
+    [Fact]
     public async Task RendersAnIconForASingleLabelHostWithAPort()
     {
         var html = await RenderPage("## Tools\n\n- [Home Grafana](http://grafana:3000)\n", Options);

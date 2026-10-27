@@ -46,6 +46,85 @@ public class IconTest
     }
 
     [Fact]
+    public void TintsSolidDashboardIconPaintsForAnExplicitColor()
+    {
+        var html = Render(":dashboard-files:{ style=\"color: #16803c\" }");
+
+        Assert.StartsWith("<p><span class=\"icon\" style=\"color: #16803c\"><svg", html);
+        Assert.Contains("fill=\"#16803c\"", html);
+        Assert.DoesNotContain("#ffa000", html);
+        Assert.DoesNotContain("#ffca28", html);
+    }
+
+    [Fact]
+    public void ColorizesDashboardIconsWithXlinkReferences()
+    {
+        Assert.True(IconCatalog.TryGetIcon("dashboard-android-robot", out var icon));
+        Assert.Contains("xlink:href", icon.Glyph.Body);
+
+        var colored = IconSvgColorizer.Apply(icon.ToSvg(), "#16803c");
+        Assert.Contains("xmlns:xlink=\"http://www.w3.org/1999/xlink\"", colored);
+        new System.Xml.XmlDocument().LoadXml($"<wrapper>{colored}</wrapper>");
+
+        Assert.Contains("fill=\"#16803c\"", Render(":dashboard-android-robot:{ style=\"color: #16803c\" }"));
+    }
+
+    [Fact]
+    public void ReturnsTheOriginalSvgWhenItCannotBeParsed()
+    {
+        const string svg = "<svg><path></svg>";
+
+        Assert.Equal(svg, IconSvgColorizer.Apply(svg, "#16803c"));
+    }
+
+    [Fact]
+    public void UsesTheLastValidColorDeclaration()
+    {
+        var html = Render(":dashboard-files:{ style=\"color: red; color: #16803c\" }");
+
+        Assert.Contains("fill=\"#16803c\"", html);
+        Assert.DoesNotContain("fill=\"red\"", html);
+    }
+
+    [Fact]
+    public void KeepsStructuralAndSpecialPaintsWhileTintingSolidPaints()
+    {
+        const string svg = """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+              <defs><path fill="#123456" d="M0 0"/></defs>
+              <mask id="mask"><path fill="#123456" d="M0 0"/></mask>
+              <clipPath id="clip"><path fill="#123456" d="M0 0"/></clipPath>
+              <g fill="#123456">
+                <path style="fill:#123456;stroke:#654321" d="M0 0"/>
+                <path fill="#fff" d="M0 0"/>
+                <path fill="none" d="M0 0"/>
+                <path fill="transparent" d="M0 0"/>
+                <path fill="url(#gradient)" d="M0 0"/>
+                <path fill="#123456" opacity="0.5" d="M0 0"/>
+                <path style="fill:#123456;fill-opacity:0.5" d="M0 0"/>
+                <path fill="#12345680" d="M0 0"/>
+                <path fill="rgba(18,52,86,0.5)" d="M0 0"/>
+                <g filter="url(#shadow)"><path fill="#abcdef" d="M0 0"/></g>
+              </g>
+            </svg>
+            """;
+
+        var colored = IconSvgColorizer.Apply(svg, "#16803c");
+
+        Assert.Contains("style=\"fill:#16803c;stroke:#16803c\"", colored);
+        Assert.Contains("fill=\"#fff\"", colored);
+        Assert.Contains("fill=\"none\"", colored);
+        Assert.Contains("fill=\"transparent\"", colored);
+        Assert.Contains("fill=\"url(#gradient)\"", colored);
+        Assert.Contains("opacity=\"0.5\"", colored);
+        Assert.Contains("fill-opacity:0.5", colored);
+        Assert.Contains("fill=\"#12345680\"", colored);
+        Assert.Contains("fill=\"rgba(18,52,86,0.5)\"", colored);
+        Assert.Contains("fill=\"#abcdef\"", colored);
+        Assert.Equal(4, colored.Split("fill=\"#123456\"").Length - 1);
+    }
+
+    [Fact]
     public void RendersOneSvgPerThemeForIconsWithVariants()
     {
         Assert.True(IconCatalog.TryGetIcon("dashboard-github", out var icon));
