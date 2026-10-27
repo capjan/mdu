@@ -36,6 +36,13 @@
     const fold = (text) => text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/ß/g, "ss");
     const tokenize = (text) => fold(text).match(/[\p{L}\p{N}_]+/gu) || [];
 
+    // Only visible text counts, so screen reader notes such as "(opens in a new tab)" do not match every tile.
+    const visibleText = (element) => {
+        const copy = element.cloneNode(true);
+        copy.querySelectorAll(".visually-hidden").forEach(hidden => hidden.remove());
+        return copy.textContent;
+    };
+
     const tileEntries = tiles.map(tile => {
         const link = tile.querySelector("a");
         const group = tile.closest(".dashboard-group")?.querySelector("h2")?.textContent || "";
@@ -43,7 +50,7 @@
             tile,
             link,
             name: fold(tile.querySelector(".dashboard-name")?.textContent || ""),
-            text: fold(`${tile.textContent} ${link.href} ${group}`)
+            text: fold(`${visibleText(tile)} ${link.href} ${group}`)
         };
     });
 
