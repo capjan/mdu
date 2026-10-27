@@ -132,28 +132,32 @@ internal static class ShortcodeAttributes
     public static bool TryGetColor(Inline inline, out string color)
     {
         var properties = inline.TryGetAttributes()?.Properties;
-        if (properties is null)
-        {
-            color = string.Empty;
-            return false;
-        }
+        string? lastColor = null;
 
-        foreach (var (name, value) in properties)
+        if (properties is not null)
         {
-            if (!name.Equals("style", StringComparison.OrdinalIgnoreCase) || value is null) continue;
-            foreach (var declaration in value.Split(';'))
+            foreach (var (name, value) in properties)
             {
-                var separator = declaration.IndexOf(':');
-                if (separator <= 0 || !declaration[..separator].Trim().Equals("color", StringComparison.OrdinalIgnoreCase)) continue;
-                color = declaration[(separator + 1)..].Trim();
-                var important = color.LastIndexOf("!important", StringComparison.OrdinalIgnoreCase);
-                if (important >= 0) color = color[..important].TrimEnd();
-                if (color.Length > 0 && !color.Contains("url(", StringComparison.OrdinalIgnoreCase)) return true;
+                if (!name.Equals("style", StringComparison.OrdinalIgnoreCase) || value is null) continue;
+                foreach (var declaration in value.Split(';'))
+                {
+                    var separator = declaration.IndexOf(':');
+                    if (separator <= 0 || !declaration[..separator].Trim().Equals("color", StringComparison.OrdinalIgnoreCase)) continue;
+                    var candidate = StripImportant(declaration[(separator + 1)..].Trim());
+                    if (candidate.Length > 0 && !candidate.Contains("url(", StringComparison.OrdinalIgnoreCase))
+                        lastColor = candidate;
+                }
             }
         }
 
-        color = string.Empty;
-        return false;
+        color = lastColor ?? string.Empty;
+        return lastColor is not null;
+    }
+
+    private static string StripImportant(string value)
+    {
+        var important = value.LastIndexOf("!important", StringComparison.OrdinalIgnoreCase);
+        return important >= 0 ? value[..important].TrimEnd() : value;
     }
 
     public static HtmlAttributes With(Inline inline, string className)
@@ -167,6 +171,9 @@ internal static class ShortcodeAttributes
 
 internal static class IconSvgColorizer
 {
+    private const string XlinkNamespace = "http://www.w3.org/1999/xlink";
+    private const string XmlnsNamespace = "http://www.w3.org/2000/xmlns/";
+
     private static readonly HashSet<string> StructuralElements = new(StringComparer.OrdinalIgnoreCase)
     {
         "defs", "mask", "clippath", "filter", "lineargradient", "radialgradient", "pattern", "marker"
@@ -174,12 +181,31 @@ internal static class IconSvgColorizer
 
     public static string Apply(string svg, string color)
     {
-        var document = new XmlDocument { PreserveWhitespace = true, XmlResolver = null };
-        document.LoadXml($"<icon-root>{svg}</icon-root>");
-        foreach (var element in document.DocumentElement!.ChildNodes.OfType<XmlElement>())
-            Colorize(element, color);
-        return document.DocumentElement.InnerXml;
+        try
+        {
+            var document = new XmlDocument { PreserveWhitespace = true, XmlResolver = null };
+            document.LoadXml($"<icon-root xmlns:xlink=\"{XlinkNamespace}\">{svg}</icon-root>");
+            foreach (var element in document.DocumentElement!.ChildNodes.OfType<XmlElement>())
+            {
+                Colorize(element, color);
+                if (HasXlinkReference(element))
+                {
+                    var xlinkDeclaration = document.CreateAttribute("xmlns", "xlink", XmlnsNamespace);
+                    xlinkDeclaration.Value = XlinkNamespace;
+                    element.Attributes.SetNamedItem(xlinkDeclaration);
+                }
+            }
+            return document.DocumentElement.InnerXml;
+        }
+        catch (XmlException)
+        {
+            return svg;
+        }
     }
+
+    private static bool HasXlinkReference(XmlElement element) =>
+        element.HasAttribute("href", XlinkNamespace)
+        || element.ChildNodes.OfType<XmlElement>().Any(HasXlinkReference);
 
     private static void Colorize(XmlElement element, string color)
     {

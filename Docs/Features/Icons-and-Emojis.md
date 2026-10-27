@@ -111,7 +111,7 @@ Add an attribute list directly after a shortcode, without a space, to give the i
 
 :material-check-circle:{ style="color: #16803c" } Complete
 
-For Dashboard Icons, an explicit inline `color` style recolors solid, opaque fills and strokes; other brand colors in the logo become the requested color. White details, transparent and `none` paints, gradients, masks, and shapes with filters or partial opacity keep their original treatment. This applies to explicit shortcode icons; automatic dashboard icons retain their bundled colors. A CSS class that sets `color` does not replace an icon's embedded palette, so use the inline `style` attribute to recolor a logo. Hex colors such as `#16803c` are also used in PDF output.
+For Dashboard Icons, an explicit inline `color` style recolors solid, opaque fills and strokes; other brand colors in the logo become the requested color. White details, transparent and `none` paints, gradients, masks, and shapes with filters or partial opacity keep their original treatment. Shapes referenced from `<defs>` with `<use>` may keep their original colors, so some logos are only partly recolored. This applies to explicit shortcode icons; automatic dashboard icons retain their bundled colors. A CSS class that sets `color` does not replace an icon's embedded palette, so use the inline `style` attribute to recolor a logo. Hex colors such as `#16803c` are also used in PDF output.
 
 ## HTML output
 

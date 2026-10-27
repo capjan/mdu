@@ -57,6 +57,36 @@ public class IconTest
     }
 
     [Fact]
+    public void ColorizesDashboardIconsWithXlinkReferences()
+    {
+        Assert.True(IconCatalog.TryGetIcon("dashboard-android-robot", out var icon));
+        Assert.Contains("xlink:href", icon.Glyph.Body);
+
+        var colored = IconSvgColorizer.Apply(icon.ToSvg(), "#16803c");
+        Assert.Contains("xmlns:xlink=\"http://www.w3.org/1999/xlink\"", colored);
+        new System.Xml.XmlDocument().LoadXml($"<wrapper>{colored}</wrapper>");
+
+        Assert.Contains("fill=\"#16803c\"", Render(":dashboard-android-robot:{ style=\"color: #16803c\" }"));
+    }
+
+    [Fact]
+    public void ReturnsTheOriginalSvgWhenItCannotBeParsed()
+    {
+        const string svg = "<svg><path></svg>";
+
+        Assert.Equal(svg, IconSvgColorizer.Apply(svg, "#16803c"));
+    }
+
+    [Fact]
+    public void UsesTheLastValidColorDeclaration()
+    {
+        var html = Render(":dashboard-files:{ style=\"color: red; color: #16803c\" }");
+
+        Assert.Contains("fill=\"#16803c\"", html);
+        Assert.DoesNotContain("fill=\"red\"", html);
+    }
+
+    [Fact]
     public void KeepsStructuralAndSpecialPaintsWhileTintingSolidPaints()
     {
         const string svg = """
