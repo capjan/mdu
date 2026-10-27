@@ -36,6 +36,13 @@
     const fold = (text) => text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/ß/g, "ss");
     const tokenize = (text) => fold(text).match(/[\p{L}\p{N}_]+/gu) || [];
 
+    // Only visible text counts, so screen reader notes such as "(opens in a new tab)" do not match every tile.
+    const visibleText = (element) => {
+        const copy = element.cloneNode(true);
+        copy.querySelectorAll(".visually-hidden").forEach(hidden => hidden.remove());
+        return copy.textContent;
+    };
+
     const tileEntries = tiles.map(tile => {
         const link = tile.querySelector("a");
         const group = tile.closest(".dashboard-group")?.querySelector("h2")?.textContent || "";
@@ -43,7 +50,7 @@
             tile,
             link,
             name: fold(tile.querySelector(".dashboard-name")?.textContent || ""),
-            text: fold(`${tile.textContent} ${link.href} ${group}`)
+            text: fold(`${visibleText(tile)} ${link.href} ${group}`)
         };
     });
 
@@ -145,44 +152,30 @@
             const item = document.createElement("span");
             item.className = "dashboard-search-hint-item";
             for (const names of shortcuts) item.append(createKeys(names));
-            item.append(` ${text}`);
+            const label = document.createElement("span");
+            label.className = "dashboard-search-hint-text";
+            label.textContent = text;
+            item.append(label);
             hint.append(item);
         }
     };
 
-    // The selected tile or page is what Enter opens; the arrow keys move the selection.
-    let selected = null;
-    const selectable = () => [...dashboard.querySelectorAll(".dashboard-tile:not([hidden]) a.dashboard-link, a.dashboard-page")]
+    // The only highlight on the page is real focus. While the filter has focus, Enter opens the best match, which the
+    // hint names; the down arrow and Tab move focus to it.
+    let best = null;
+    const results = () => [...dashboard.querySelectorAll(".dashboard-tile:not([hidden]) a.dashboard-link, a.dashboard-page")]
         .filter(isVisibleInResults);
+    const nameOf = (link) => (link.querySelector(".dashboard-name, .dashboard-page-title")?.textContent || link.textContent).trim();
 
-    // The hints name actions, not results, so the row keeps its width while the arrow keys move the selection.
-    const renderHints = (items = selectable()) => {
+    const renderHints = () => {
         const query = input.value.trim();
         const hints = [];
-        if (selected) hints.push([[["enter"]], "open"]);
+        if (best) hints.push([[["enter"]], `open ${nameOf(best)}`]);
         else if (query && searchUrl) hints.push([[["enter"]], "search the web"]);
-        if (selected && items.length > 1) hints.push([[["arrow-up"], ["arrow-down"]], "select"]);
-        if (selected && query && searchUrl) hints.push([[[webSearchModifier, "enter"]], "search the web"]);
+        if (results().length > 0) hints.push([[["arrow-down"]], "results"]);
+        if (best && query && searchUrl) hints.push([[[webSearchModifier, "enter"]], "search the web"]);
         if (query) hints.push([[["escape"]], "clear"]);
         setHints(...hints);
-    };
-
-    const select = (link, reveal = false, items) => {
-        if (selected !== link && selected) {
-            selected.classList.remove("is-selected");
-            selected.closest('[role="gridcell"]').setAttribute("aria-selected", "false");
-        }
-        selected = link;
-        link?.classList.add("is-selected");
-        if (link) {
-            const cell = link.closest('[role="gridcell"]');
-            cell.setAttribute("aria-selected", "true");
-            input.setAttribute("aria-activedescendant", cell.id);
-        } else {
-            input.removeAttribute("aria-activedescendant");
-        }
-        if (link && reveal) link.scrollIntoView({ block: "nearest", inline: "nearest", behavior: prefersReducedMotion.matches ? "auto" : "smooth" });
-        renderHints(items);
     };
 
     // Starts the excerpt shortly before the first match so that the sheet shows why the page matched.
@@ -322,18 +315,12 @@
         for (const group of groups) group.hidden = !group.querySelector(".dashboard-tile:not([hidden]), .dashboard-note") && terms.length > 0;
         for (const row of rows) row.hidden = !row.querySelector(".dashboard-group:not([hidden])") && terms.length > 0;
 
-        const pages = rankPages(terms);
-        // Clear the reference before replacing page cells, including when the new result has the same ID.
-        if (selected?.classList.contains("dashboard-page")) {
-            selected.classList.remove("is-selected");
-            selected.closest('[role="gridcell"]')?.setAttribute("aria-selected", "false");
-            selected = null;
-            input.removeAttribute("aria-activedescendant");
-        }
-        renderPages(pages, terms);
+        renderPages(rankPages(terms), terms);
+        const pages = [...pagesList.querySelectorAll("a.dashboard-page")];
 
-        const items = selectable();
-        select(terms.length === 0 ? null : first?.link ?? pagesList.querySelector("a.dashboard-page"), false, items);
+        const items = results();
+        best = terms.length === 0 ? null : first?.link ?? pages[0] ?? null;
+        renderHints();
         resultsGrid.hidden = ![...resultsGrid.querySelectorAll('[role="rowgroup"]')].some(isVisibleInResults);
         input.setAttribute("aria-expanded", String(!resultsGrid.hidden));
 
@@ -345,7 +332,7 @@
                 ? searchUrl
                     ? `No links or pages match “${query}”. Press Enter to search the web.`
                     : `No links or pages match “${query}”.`
-                : `${count} ${count === 1 ? "match" : "matches"} for “${query}”.`;
+                : `${count} ${count === 1 ? "match" : "matches"} for “${query}”. Enter opens ${nameOf(best)}.`;
         status.setAttribute("aria-busy", String(waitingForIndex));
         if (waitingForIndex) status.textContent = "";
         else if (status.textContent !== message) status.textContent = message;
@@ -356,29 +343,123 @@
             : `No links or pages match “${query}”.`;
     };
 
-    // Pointing at a tile or page selects it, so the mouse and the arrow keys share one selection and Enter opens what
-    // the pointer is on. Only real pointer movement counts, so results that appear under a resting pointer while
-    // typing keep the best match selected.
-    const pointerTarget = (event) => event.target instanceof Element
+    const linkOf = (event) => event.target instanceof Element
         ? event.target.closest("a.dashboard-link, a.dashboard-page")
         : null;
 
-    dashboard.addEventListener("pointermove", event => {
+    // Whichever input was used last leads: moving the mouse hides the keyboard outline, and a key press hides the hover
+    // again. A resting pointer is ignored, so tiles that scroll or filter in under it do not light up.
+    const root = document.documentElement;
+    let pointer = null;
+    // The link under the moving pointer, and the one the first key press after the pointer continues from.
+    let hovered = null;
+    let handover = null;
+    const setInput = (mode) => {
+        if (root.dataset.input !== mode) root.dataset.input = mode;
+    };
+
+    document.addEventListener("pointermove", event => {
         if (event.pointerType !== "mouse") return;
-        const link = pointerTarget(event);
-        if (!link) return;
-        const bounds = link.getBoundingClientRect();
-        link.style.setProperty("--dashboard-pointer-x", `${event.clientX - bounds.left}px`);
-        link.style.setProperty("--dashboard-pointer-y", `${event.clientY - bounds.top}px`);
-        if (link !== selected) select(link);
+        if (pointer && pointer.x === event.screenX && pointer.y === event.screenY) return;
+        pointer = { x: event.screenX, y: event.screenY };
+        setInput("pointer");
+        // Focus on a tile or the page links below follows the pointer, so the arrow keys and Tab continue from there.
+        const followed = "a.dashboard-link, a.dashboard-page, a.page-pagination-link";
+        const link = event.target instanceof Element ? event.target.closest(followed) : null;
+        hovered = link;
+        if (link && link !== document.activeElement && document.activeElement?.matches?.(followed))
+            link.focus({ preventScroll: true });
     });
 
-    // Without a filter there is no best match to return to, so the selection ends with the pointer leaving the tile.
-    dashboard.addEventListener("pointerout", event => {
-        const link = pointerTarget(event);
-        if (!link || link !== selected || input.value.trim()) return;
-        if (event.relatedTarget instanceof Node && link.contains(event.relatedTarget)) return;
-        select(null);
+    window.addEventListener("keydown", event => {
+        if (["Shift", "Control", "Alt", "Meta"].includes(event.key)) return;
+        handover = root.dataset.input === "pointer" ? hovered : null;
+        setInput("keyboard");
+    }, true);
+
+    // The arrow keys move focus to the nearest control in their direction across the whole page: header, filter, tiles,
+    // result sheets, and the links below. Candidates that line up with the focused element win; others count by their gap.
+    const focusables = () => [...document.querySelectorAll('a[href], button, input, select, textarea, [tabindex]')]
+        .filter(element => element.tabIndex >= 0 && !element.disabled && element.getClientRects().length > 0 &&
+            getComputedStyle(element).visibility !== "hidden" && !element.closest("[inert]"));
+
+    const neighbor = (from, key, items) => {
+        const origin = from.getBoundingClientRect();
+        const vertical = key === "ArrowDown" || key === "ArrowUp";
+        let best = null;
+        let bestScore = Infinity;
+        for (const item of items) {
+            if (item === from || item.contains(from) || from.contains(item)) continue;
+            const bounds = item.getBoundingClientRect();
+            const along = key === "ArrowDown" ? bounds.top - origin.bottom : key === "ArrowUp" ? origin.top - bounds.bottom
+                : key === "ArrowRight" ? bounds.left - origin.right : origin.left - bounds.right;
+            if (along < -4) continue;
+            const gap = vertical
+                ? Math.max(0, bounds.left - origin.right, origin.left - bounds.right)
+                : Math.max(0, bounds.top - origin.bottom, origin.top - bounds.bottom);
+            const offset = vertical
+                ? Math.abs(bounds.left + bounds.width / 2 - origin.left - origin.width / 2)
+                : Math.abs(bounds.top + bounds.height / 2 - origin.top - origin.height / 2);
+            const score = Math.max(0, along) + gap * 2 + offset * 0.05 + (gap > 0 ? 10000 : 0);
+            if (score < bestScore) {
+                best = item;
+                bestScore = score;
+            }
+        }
+        return best;
+    };
+
+    const moveFocus = (element) => {
+        element.focus({ preventScroll: true });
+        element.scrollIntoView({ block: "nearest", inline: "nearest", behavior: prefersReducedMotion.matches ? "auto" : "smooth" });
+    };
+
+    document.addEventListener("keydown", event => {
+        if (event.defaultPrevented || event.altKey || event.metaKey || event.ctrlKey || event.shiftKey || event.isComposing) return;
+        if (!["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight"].includes(event.key)) return;
+        const from = document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+            ? document.activeElement
+            : null;
+        // Dialogs, menus, and other text fields keep their own arrow keys; the filter keeps left and right for its caret.
+        if (from?.closest("dialog, [role=dialog], [role=menu], [role=listbox], .search-dialog, .media-settings-dialog")) return;
+        if (from && from !== input && from.matches("input, textarea, select, [contenteditable]")) return;
+        if (from === input && (event.key === "ArrowLeft" || event.key === "ArrowRight")) return;
+
+        // The first arrow key after the mouse lands on the link under the pointer, even from the filter.
+        const resumed = handover && handover !== from && handover.isConnected && handover.getClientRects().length > 0
+            ? handover
+            : null;
+        const next = resumed ? resumed
+            : !from ? input
+            : from === input && event.key === "ArrowDown" ? best ?? results()[0]
+                : neighbor(from, event.key, focusables());
+        if (!next) return;
+        event.preventDefault();
+        moveFocus(next);
+    });
+
+    // Escape releases the focus anywhere on the page, so no outline stays behind; the filter clears itself first.
+    document.addEventListener("keydown", event => {
+        if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
+        const from = document.activeElement;
+        if (!(from instanceof HTMLElement) || from === document.body || from === input) return;
+        if (from.closest("dialog, [role=dialog], [role=menu], [role=listbox], .search-dialog, .media-settings-dialog")) return;
+        if (from.matches("input, textarea, select, [contenteditable]")) return;
+        from.blur();
+    });
+
+    // On a tile, Home and End jump to the first and last result, and typing continues in the filter.
+    dashboard.addEventListener("keydown", event => {
+        const link = linkOf(event);
+        if (!link || event.altKey || event.metaKey || event.ctrlKey) return;
+        const items = results();
+        if (event.key === "Home" || event.key === "End") {
+            event.preventDefault();
+            if (items.length) moveFocus(event.key === "Home" ? items[0] : items[items.length - 1]);
+        } else if (event.key.length === 1 && event.key !== " " && event.key !== "/") {
+            // The focused field receives the character.
+            input.focus();
+        }
     });
 
     const clear = () => {
@@ -395,6 +476,13 @@
     });
 
     input.addEventListener("keydown", event => {
+        // Tab continues at the best match, so the next Tab moves on from what the filter found.
+        if (event.key === "Tab" && !event.shiftKey && best) {
+            event.preventDefault();
+            moveFocus(best);
+            return;
+        }
+
         if (event.key === "Escape") {
             if (input.value) {
                 clear();
@@ -404,33 +492,22 @@
             return;
         }
 
-        if ((event.key === "ArrowDown" || event.key === "ArrowUp") && !event.isComposing) {
-            const items = selectable();
-            if (items.length === 0) return;
-            event.preventDefault();
-            const step = event.key === "ArrowDown" ? 1 : -1;
-            const index = items.indexOf(selected);
-            const next = index < 0
-                ? step > 0 ? 0 : items.length - 1
-                : (index + step + items.length) % items.length;
-            select(items[next], true, items);
-            return;
-        }
-
         if (event.key !== "Enter" || event.isComposing) return;
         const query = input.value.trim();
-        if (!query && !selected) return;
+        if (!query) return;
         event.preventDefault();
         const newTab = event.metaKey || event.ctrlKey;
-        if (selected && !(event.altKey && searchUrl && query)) {
-            if (newTab || opensNewTab(selected)) window.open(selected.href, "_blank", "noopener");
-            else window.location.href = selected.href;
-        } else if (searchUrl && query) {
+        if (best && !(event.altKey && searchUrl)) {
+            if (newTab || opensNewTab(best)) window.open(best.href, "_blank", "noopener");
+            else window.location.href = best.href;
+        } else if (searchUrl) {
             const url = searchUrl.replace("{query}", encodeURIComponent(query));
             if (newTab) window.open(url, "_blank", "noopener");
             else window.location.href = url;
         }
     });
+
+    renderHints();
 
     // On a dashboard, the slash key focuses the dashboard filter instead of opening the site search.
     window.addEventListener("keydown", event => {
