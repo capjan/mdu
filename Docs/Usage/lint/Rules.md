@@ -32,6 +32,7 @@ navigation:
 | `MDU019` | `DuplicateNavigationTitle` | Error | Visible sibling pages have unique navigation titles. | — |
 | `MDU020` | `UnusedFootnote` | Warning | Every footnote definition is reachable from a reference in page text. | — |
 | `MDU021` | `DuplicateFootnote` | Warning | A footnote label is defined only once per page. | — |
+| `MDU022` | `LocalFragmentExists` | Error | A link fragment matches an anchor on the target page. | — |
 
 ## MDU001: HeadingRequired
 
@@ -49,7 +50,7 @@ The path in a local link must use the same casing as its target on disk. This ca
 
 ## MDU004: LocalLinkExists
 
-Relative local links, image targets, destinations in supported Mermaid, context, and PlantUML node links, and `src`, `href`, and `poster` attributes in raw HTML (outside HTML comments) must point to an existing file or to a directory containing a `README.md`. Query strings and fragments are ignored when resolving the path. External URLs and fragment-only links are not checked by this rule.
+Relative local links, image targets, destinations in supported Mermaid, context, and PlantUML node links, and `src`, `href`, and `poster` attributes in raw HTML (outside HTML comments) must point to an existing file or to a directory containing a `README.md`. Query strings and fragments are ignored when resolving the path. External URLs and fragment-only links are not checked by this rule; `MDU022` checks fragments.
 
 Fix the destination or add the missing target. A casing mismatch for an existing target is reported as `MDU003` instead.
 
@@ -80,6 +81,14 @@ This warning points to each footnote definition that is not reachable from a ref
 ## MDU021: DuplicateFootnote
 
 This warning points to every later definition that repeats a footnote label. Markdig uses only the first definition, so remove the duplicate or give it a unique label.
+
+## MDU022: LocalFragmentExists
+
+The fragment of a link to the same page (`#setup`) or to another Markdown page (`Guide.md#setup`) must match an anchor on the rendered target page: a heading id, an explicit id such as `{#custom}`, a footnote, an `id` or `name` attribute in raw HTML, or an operation of an embedded OpenAPI specification. Heading ids keep leading numbers (`## 6. Security` gets `#6-security`) and are lowercase.
+
+A same-page link may differ from a heading id in letter case only; MDU points it at that heading. A link to another page must use the exact id, because browsers compare fragments case-sensitively. `#top` and text fragments (`#:~:text=`) always pass. Fragments of image links, of missing files (reported as `MDU004`), and of files other than Markdown pages are not checked.
+
+Fix the fragment, or add an explicit id to the heading when existing links must keep their spelling.
 
 ## Informational output
 

@@ -96,7 +96,7 @@ Reads what MDU needs to know about a page without rendering it: the YAML front m
 
 ## Markdown.Linter
 
-Contains the rule codes `MDU001`–`MDU021` and the validators that need only one page and the file system:
+Contains the rule codes `MDU001`–`MDU022` and the validators that need only one page and the file system:
 
 | Validator | Rule |
 | --- | --- |
@@ -104,7 +104,7 @@ Contains the rule codes `MDU001`–`MDU021` and the validators that need only on
 | `Rule3Validator` | `MDU003` LinkCasing |
 | `Rule4Validator` | `MDU004` LocalLinkExists |
 
-The validators use FluentValidation. Rules that need the whole page tree, such as duplicate pages, navigation placement, and MkDocs migration issues, are checked by the `LinterVisitor` in mdu. See the [rules reference](../Usage/lint/Rules.md) for every rule.
+The validators use FluentValidation. Rules that need the whole page tree, such as duplicate pages, navigation placement, and MkDocs migration issues, are checked by the `LinterVisitor` in mdu. For link fragments (`MDU022`), `PageAnchors` renders each target page once with the Renderer and reads its element ids. See the [rules reference](../Usage/lint/Rules.md) for every rule.
 
 ## Markdown.Renderer
 

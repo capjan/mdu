@@ -249,6 +249,80 @@ public class LinterVisitorTest
         });
     }
 
+    [Theory]
+    [InlineData("[Setup](#setup)")]
+    [InlineData("[Security](#6-security)")]
+    [InlineData("[Custom](#custom-id)")]
+    [InlineData("[Raw](#raw-anchor)")]
+    [InlineData("[Note](#fn:1)")]
+    [InlineData("[Top](#top)")]
+    [InlineData("[Text](#:~:text=Setup)")]
+    [InlineData("[Mixed](#SETUP)")]
+    public void SamePageFragmentsOfRenderedAnchorsPass(string link)
+    {
+        WithPage("Overview.md",
+            $"# Overview\n\n{link}\n\n## Setup\n\n## 6. Security\n\n## Named {{#custom-id}}\n\n<a id=\"raw-anchor\"></a>\n\nA note[^1].\n\n[^1]: Note.",
+            "Overview", 0, errors => Assert.Empty(errors));
+    }
+
+    [Fact]
+    public void MissingSamePageFragmentHasStableDiagnosticCodeAndSourceLine()
+    {
+        WithPage("Overview.md", "# Overview\n\n## Setup\n\n[Install](#install)", "Overview", 0, errors =>
+        {
+            var error = Assert.Single(errors);
+            Assert.Equal(5, error.LineNumber);
+            Assert.Equal(RuleCodes.LocalFragmentExists, CodeOf(error));
+            Assert.Contains("Link fragment '#install' does not match a heading or anchor on this page.", error.Message);
+        });
+    }
+
+    [Fact]
+    public void FragmentOnAnotherPageIsChecked()
+    {
+        WithPage(Path.Combine("docs", "Overview.md"),
+            "# Overview\n\n[Found](Guide/Setup.md#3-install)\n\n[Missing](Guide/Setup.md#uninstall)\n\n[Section](Guide/#guide)",
+            "Overview", 0, errors =>
+            {
+                var error = Assert.Single(errors);
+                Assert.Equal(5, error.LineNumber);
+                Assert.Equal(RuleCodes.LocalFragmentExists, CodeOf(error));
+                Assert.Contains("'#uninstall' does not match a heading or anchor in 'Guide/Setup.md'", error.Message);
+            }, setup: root =>
+            {
+                var guide = Path.Combine(root, "docs", "Guide");
+                Directory.CreateDirectory(guide);
+                File.WriteAllText(Path.Combine(guide, "README.md"), "# Guide");
+                File.WriteAllText(Path.Combine(guide, "Setup.md"), "---\ntitle: Setup\n---\n# Setup\n\n## 3. Install");
+            });
+    }
+
+    [Fact]
+    public void FragmentOnAnotherPageMustMatchLetterCase()
+    {
+        WithPage("Overview.md", "# Overview\n\n[Context](Api.md#app.authorization.AuthorizedAuditContext)", "Overview", 0, errors =>
+        {
+            var error = Assert.Single(errors);
+            Assert.Equal(RuleCodes.LocalFragmentExists, CodeOf(error));
+            Assert.Contains("letter case of heading id 'app.authorization.authorizedauditcontext' in 'Api.md'", error.Message);
+        }, setup: root => File.WriteAllText(Path.Combine(root, "Api.md"),
+            "# API\n\n## `app.authorization.AuthorizedAuditContext`"));
+    }
+
+    [Fact]
+    public void FragmentsOfMissingFilesAndOtherFilesAreNotChecked()
+    {
+        WithPage("Overview.md", "# Overview\n\n[Missing](missing.md#setup)\n\n[Site](site/index.html#setup)", "Overview", 0, errors =>
+        {
+            var error = Assert.Single(errors);
+            Assert.Equal(RuleCodes.LocalLinkExists, CodeOf(error));
+        }, setup: root =>
+        {
+            Directory.CreateDirectory(Path.Combine(root, "site"));
+            File.WriteAllText(Path.Combine(root, "site", "index.html"), "<html></html>");
+        });
+    }
+
     [Fact]
     public void ExistingImagePasses()
     {
