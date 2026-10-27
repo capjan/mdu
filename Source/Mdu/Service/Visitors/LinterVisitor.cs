@@ -17,6 +17,7 @@ public class LinterVisitor: IVisitor<MarkdownFile>
     private readonly Rule2Validator _rule2Validator = new();
     private readonly Rule3Validator _rule3Validator = new();
     private readonly Rule4Validator _rule4Validator = new();
+    private readonly PageAnchors _pageAnchors = new();
     private readonly List<MarkdownFile> _pages = new();
     private IReadOnlyList<MarkdownFile> _allPages = Array.Empty<MarkdownFile>();
     private readonly HashSet<string> _linkedPages = new(PathComparer);
@@ -203,9 +204,70 @@ public class LinterVisitor: IVisitor<MarkdownFile>
 
             var linkResult = _rule4Validator.Validate(new Rule4Input(entity.FileInfo.FullName, link.Destination));
             ProcessValidationResult(markdownFilePath, link.LineNumber, linkResult);
+
+            // A missing file already explains why its fragment cannot be found.
+            if (linkResult.IsValid && !link.IsImageLink) ReportMissingFragment(entity, link);
         }
         
         return true;
+    }
+
+    private void ReportMissingFragment(MarkdownFile source, IMarkdownLink link)
+    {
+        var destination = link.Destination;
+        var fragmentStart = destination.IndexOf('#');
+        if (fragmentStart < 0) return;
+
+        var fragment = UnescapeFragment(destination[(fragmentStart + 1)..]);
+        // Browsers scroll to the top for "#top", and "#:~:text=" is a text fragment, not an element id.
+        if (fragment.Length == 0 || fragment.Equals("top", StringComparison.OrdinalIgnoreCase) ||
+            fragment.StartsWith(":~:", StringComparison.Ordinal)) return;
+
+        var samePage = fragmentStart == 0;
+        var targetPath = source.FileInfo.FullName;
+        if (!samePage && (!TryResolvePageLink(source, destination, out targetPath) ||
+                          !IsMarkdownFile(Path.GetExtension(targetPath)))) return;
+
+        var anchors = ReadAnchors(targetPath, samePage ? source : FindPage(targetPath));
+        if (anchors is null || anchors.Ids.Contains(fragment)) return;
+
+        var headingId = anchors.FindHeadingIgnoringCase(fragment);
+        // The renderer points same-page links at the heading whose id differs only in letter case.
+        if (samePage && headingId is not null) return;
+
+        var location = samePage
+            ? "on this page"
+            : $"in '{Path.GetRelativePath(source.FileInfo.DirectoryName!, targetPath).Replace(Path.DirectorySeparatorChar, '/')}'";
+        var message = headingId is null
+            ? $"Link fragment '#{fragment}' does not match a heading or anchor {location}."
+            : $"Link fragment '#{fragment}' does not match the letter case of heading id '{headingId}' {location}.";
+        ErrorReceiver.Add(source.FileInfo.FullName, link.LineNumber,
+            $"{RuleCodes.LocalFragmentExists} {RuleCodes.LocalFragmentExistsName}: {message}");
+    }
+
+    private PageAnchors.Anchors? ReadAnchors(string filePath, MarkdownFile? page)
+    {
+        if (page is null) return _pageAnchors.Read(filePath, File.ReadAllText(filePath));
+
+        var markdown = page.ReadMarkdown();
+        if (!string.IsNullOrEmpty(page.FrontMatter) && markdown.StartsWith(page.FrontMatter, StringComparison.Ordinal))
+            markdown = markdown[page.FrontMatter.Length..].TrimStart('\r', '\n');
+        return _pageAnchors.Read(filePath, markdown, page.SourceRootPath);
+    }
+
+    private MarkdownFile? FindPage(string filePath) =>
+        _allPages.FirstOrDefault(page => PathComparer.Equals(Path.GetFullPath(page.FileInfo.FullName), filePath));
+
+    private static string UnescapeFragment(string fragment)
+    {
+        try
+        {
+            return Uri.UnescapeDataString(fragment);
+        }
+        catch (UriFormatException)
+        {
+            return fragment;
+        }
     }
 
     private void ReportFootnotes(string filePath, MarkdownDocumentAnalysis analysis)

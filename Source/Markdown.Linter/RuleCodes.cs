@@ -24,4 +24,6 @@ public static class RuleCodes
     public const string DuplicateNavigationTitle = "MDU019";
     public const string UnusedFootnote = "MDU020";
     public const string DuplicateFootnote = "MDU021";
+    public const string LocalFragmentExists = "MDU022";
+    public const string LocalFragmentExistsName = "LocalFragmentExists";
 }
