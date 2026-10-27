@@ -351,6 +351,9 @@
     // again. A resting pointer is ignored, so tiles that scroll or filter in under it do not light up.
     const root = document.documentElement;
     let pointer = null;
+    // The link under the moving pointer, and the one the first key press after the pointer continues from.
+    let hovered = null;
+    let handover = null;
     const setInput = (mode) => {
         if (root.dataset.input !== mode) root.dataset.input = mode;
     };
@@ -363,12 +366,15 @@
         // Focus on a tile or the page links below follows the pointer, so the arrow keys and Tab continue from there.
         const followed = "a.dashboard-link, a.dashboard-page, a.page-pagination-link";
         const link = event.target instanceof Element ? event.target.closest(followed) : null;
+        hovered = link;
         if (link && link !== document.activeElement && document.activeElement?.matches?.(followed))
             link.focus({ preventScroll: true });
     });
 
     window.addEventListener("keydown", event => {
-        if (!["Shift", "Control", "Alt", "Meta"].includes(event.key)) setInput("keyboard");
+        if (["Shift", "Control", "Alt", "Meta"].includes(event.key)) return;
+        handover = root.dataset.input === "pointer" ? hovered : null;
+        setInput("keyboard");
     }, true);
 
     // The arrow keys move focus to the nearest control in their direction across the whole page: header, filter, tiles,
@@ -419,7 +425,12 @@
         if (from && from !== input && from.matches("input, textarea, select, [contenteditable]")) return;
         if (from === input && (event.key === "ArrowLeft" || event.key === "ArrowRight")) return;
 
-        const next = !from ? input
+        // The first arrow key after the mouse lands on the link under the pointer, even from the filter.
+        const resumed = handover && handover !== from && handover.isConnected && handover.getClientRects().length > 0
+            ? handover
+            : null;
+        const next = resumed ? resumed
+            : !from ? input
             : from === input && event.key === "ArrowDown" ? best ?? results()[0]
                 : neighbor(from, event.key, focusables());
         if (!next) return;

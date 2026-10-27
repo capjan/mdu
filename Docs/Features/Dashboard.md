@@ -81,7 +81,7 @@ The filter field has the focus when the page opens, and ++slash++ returns to it.
 
 ## Keyboard
 
-The arrow keys move the focus to the nearest control in their direction across the whole page: from the header to the filter, through the columns of tiles and the matching pages, and on to the links below. In the filter field, ++arrow-left++ and ++arrow-right++ move the cursor. ++tab++ moves through the tiles in reading order. On a tile, ++home++ and ++end++ jump to the first and last tile, and typing continues in the filter. ++esc++ releases the focus anywhere on the page; in the filter, it clears the text first. Moving the mouse takes over from the keyboard, and the next key press hands control back.
+The arrow keys move the focus to the nearest control in their direction across the whole page: from the header to the filter, through the columns of tiles and the matching pages, and on to the links below. In the filter field, ++arrow-left++ and ++arrow-right++ move the cursor. ++tab++ moves through the tiles in reading order. On a tile or a matching page, ++home++ and ++end++ jump to the first and last result, and typing continues in the filter. ++esc++ releases the focus anywhere on the page; in the filter, it clears the text first. Moving the mouse takes over from the keyboard, and the next key press hands control back; the first arrow key continues from the tile under the pointer.
 
 ## Options
 
