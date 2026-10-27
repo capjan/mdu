@@ -67,6 +67,9 @@ public static class Dashboard
     private static readonly Regex AnchorTagRegex = new("</?a\\b[^>]*>", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex HeadingIdRegex = new("<h[1-6][^>]*\\bid=\"(?<id>[^\"]+)\"", RegexOptions.Compiled);
     private static readonly char[] WordSeparators = [' ', '@', '-', '_', '.', '/', '&', '+'];
+    // The arrow that fades in on hover and focus shows whether a tile leaves the site.
+    private const string ExternalArrow = "<span class=\"dashboard-go\" aria-hidden=\"true\"><svg viewBox=\"0 0 16 16\" focusable=\"false\"><path d=\"M5 11 11 5M6 5h5v5\"></path></svg></span>";
+    private const string InternalArrow = "<span class=\"dashboard-go\" aria-hidden=\"true\"><svg viewBox=\"0 0 16 16\" focusable=\"false\"><path d=\"M3.5 8h9M9 4.5 12.5 8 9 11.5\"></path></svg></span>";
 
     public static string Styles => Resources.DashboardCssContent();
     public static string Script => Resources.DashboardScriptContent();
@@ -102,7 +105,7 @@ public static class Dashboard
             ReadSearchUrl(options is null ? null : ReadScalar(options, "search")),
             ReadBoolean(options, "clock", true),
             ReadBoolean(options, "status", false),
-            !string.Equals(options is null ? null : ReadScalar(options, "open")?.Trim(), "same-tab", StringComparison.OrdinalIgnoreCase));
+            string.Equals(options is null ? null : ReadScalar(options, "open")?.Trim(), "new-tab", StringComparison.OrdinalIgnoreCase));
     }
 
     public static string Render(MarkdownDocument document, MarkdownPipeline pipeline, DashboardOptions options)
@@ -213,7 +216,8 @@ public static class Dashboard
         var placeholder = options.SearchUrl is null ? "Filter links and pages…" : "Filter links, pages, or search the web…";
         html.AppendLine($"<input id=\"dashboard-search-input\" type=\"search\" role=\"combobox\" aria-controls=\"dashboard-results\" aria-haspopup=\"grid\" aria-expanded=\"{hasGroups.ToString().ToLowerInvariant()}\" aria-autocomplete=\"list\" autocomplete=\"off\" spellcheck=\"false\" placeholder=\"{placeholder}\">");
         html.AppendLine("<span class=\"keys dashboard-search-key\" aria-hidden=\"true\"><kbd class=\"key-slash\"><span class=\"key-label\">/</span></kbd></span>");
-        html.AppendLine("<button class=\"dashboard-search-clear\" id=\"dashboard-search-clear\" type=\"button\" aria-label=\"Clear filter\" title=\"Clear filter\"><svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><path d=\"m4.5 4.5 7 7m0-7-7 7\"></path></svg></button>");
+        // Escape clears the filter, so Tab moves straight from the filter to its best match.
+        html.AppendLine("<button class=\"dashboard-search-clear\" id=\"dashboard-search-clear\" type=\"button\" tabindex=\"-1\" aria-label=\"Clear filter\" title=\"Clear filter (Esc)\"><svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><path d=\"m4.5 4.5 7 7m0-7-7 7\"></path></svg></button>");
         html.AppendLine("</div>");
         html.AppendLine("<p class=\"dashboard-search-hint\" id=\"dashboard-search-hint\"></p>");
         html.AppendLine("<p class=\"visually-hidden\" id=\"dashboard-search-status\" role=\"status\" aria-live=\"polite\" aria-atomic=\"true\"></p>");
@@ -261,7 +265,10 @@ public static class Dashboard
             html.Append($"<span class=\"dashboard-name\">{tile.NameHtml}</span>");
             if (subtitle.Length > 0) html.Append($"<span class=\"dashboard-description\">{subtitle}</span>");
             html.Append("</span>");
+            var newTab = external && options.NewTab;
+            if (newTab) html.Append("<span class=\"visually-hidden\"> (opens in a new tab)</span>");
             if (options.Status && external) html.Append("<span class=\"dashboard-status\" role=\"img\" aria-label=\"Status unknown\"></span>");
+            html.Append(external ? ExternalArrow : InternalArrow);
             html.Append("</a>");
             // Further paragraphs or nested lists of the item stay below the tile, outside its link.
             if (tile.MoreHtml.Length > 0) html.Append($"<div class=\"dashboard-tile-more\">{tile.MoreHtml}</div>");

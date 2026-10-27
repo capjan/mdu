@@ -45,7 +45,7 @@ layout: dashboard
 | `---` | Starts a new row of groups |
 | A list item without a link | A note between the tiles |
 
-Groups with subtitles use large tiles; groups without them use compact rows. Groups in a row share the width and wrap on narrow screens. Links to `.md` files point to the rendered pages, and links to other sites open in a new tab.
+Groups with subtitles use large tiles; groups without them use compact rows. Groups in a row share the width and wrap on narrow screens. Links to `.md` files point to the rendered pages, and all links open in the same tab unless you set `open: new-tab`.
 
 ## Icons
 
@@ -73,11 +73,15 @@ The filter field has the focus when the page opens, and ++slash++ returns to it.
 
 - Tiles that do not match the name, subtitle, address, or group disappear.
 - Matching documentation pages from the site search appear below the tiles.
-- ++enter++ opens the selected match, which has a blue ring. The best match is selected while you type. Without a match, it searches the web.
+- ++enter++ opens the best match, which the hint below the field names. Without a match, it searches the web.
 - ++option+enter++ on macOS or ++alt+enter++ on Windows and Linux searches the web directly, even when a link matches.
 - Hold ++cmd++ or ++ctrl++ as well to open the result in a new tab.
-- ++arrow-down++ and ++arrow-up++ move the selection through the tiles and pages while you keep typing; ++enter++ opens the selected one.
+- ++arrow-down++ or ++tab++ moves the focus to the best match.
 - ++esc++ or the × button in the field clears the filter.
+
+## Keyboard
+
+The arrow keys move the focus to the nearest control in their direction across the whole page: from the header to the filter, through the columns of tiles and the matching pages, and on to the links below. In the filter field, ++arrow-left++ and ++arrow-right++ move the cursor. ++tab++ moves through the tiles in reading order. On a tile, ++home++ and ++end++ jump to the first and last tile, and typing continues in the filter. ++esc++ releases the focus anywhere on the page; in the filter, it clears the text first. Moving the mouse takes over from the keyboard, and the next key press hands control back.
 
 ## Options
 
@@ -90,7 +94,7 @@ dashboard:
   search: duckduckgo
   clock: true
   status: false
-  open: new-tab
+  open: same-tab
 ---
 ```
 
@@ -99,7 +103,7 @@ dashboard:
 | `search` | `duckduckgo`, `google`, `bing`, `startpage`, `ecosia`, `none`, or a URL with `{query}` | `duckduckgo` | Web search for queries without a matching link. `none` turns it off. |
 | `clock` | `true`, `false` | `true` | Shows the time and date next to the filter field in the reader's language. |
 | `status` | `true`, `false` | `false` | Adds a dot to each tile that turns green when the browser reaches the site and red when it does not. |
-| `open` | `new-tab`, `same-tab` | `new-tab` | Where links to other sites open. |
+| `open` | `same-tab`, `new-tab` | `same-tab` | Where links to other sites open. Links within the site always open in the same tab. |
 
 ## Behavior
 

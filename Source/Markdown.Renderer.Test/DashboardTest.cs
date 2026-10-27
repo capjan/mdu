@@ -13,7 +13,7 @@ public class DashboardTest
         Assert.Null(Dashboard.ReadFrontMatter("---\nlayout: [unclosed\n---"));
 
         var defaults = Dashboard.ReadFrontMatter("---\nlayout: dashboard\n---");
-        Assert.Equal(new DashboardOptions("https://duckduckgo.com/?q={query}", true, false, true), defaults);
+        Assert.Equal(new DashboardOptions("https://duckduckgo.com/?q={query}", true, false, false), defaults);
 
         var options = Dashboard.ReadFrontMatter("""
             ---
@@ -22,10 +22,10 @@ public class DashboardTest
               search: https://search.example.org/?q={query}
               clock: false
               status: true
-              open: same-tab
+              open: new-tab
             ---
             """);
-        Assert.Equal(new DashboardOptions("https://search.example.org/?q={query}", false, true, false), options);
+        Assert.Equal(new DashboardOptions("https://search.example.org/?q={query}", false, true, true), options);
 
         Assert.Null(Dashboard.ReadFrontMatter("---\nlayout: dashboard\ndashboard:\n  search: none\n---")!.SearchUrl);
         Assert.Equal("https://www.google.com/search?q={query}",
@@ -77,6 +77,10 @@ public class DashboardTest
         Assert.Contains(">JD</span><span class=\"dashboard-text\"><span class=\"dashboard-name\">Jan@Dataport</span>", html);
         Assert.Contains("<li class=\"dashboard-note\" role=\"row\"><div role=\"gridcell\">Plain note without a link</div></li>", html);
         Assert.Equal(4, CountOf(html, "<span class=\"dashboard-status\""));
+        Assert.Equal(4, CountOf(html, "<span class=\"visually-hidden\"> (opens in a new tab)</span>"));
+        Assert.Equal(4, CountOf(html, "<path d=\"M5 11 11 5M6 5h5v5\"></path>"));
+        Assert.Contains("<span class=\"dashboard-go\" aria-hidden=\"true\"><svg viewBox=\"0 0 16 16\" focusable=\"false\"><path d=\"M3.5 8h9M9 4.5 12.5 8 9 11.5\"></path></svg></span></a>", html);
+        Assert.Contains("id=\"dashboard-search-clear\" type=\"button\" tabindex=\"-1\"", html);
 
         Assert.Contains("<style>/* Dashboard pages", html);
         Assert.DoesNotContain("class=\"on-this-page\"", html);

@@ -294,6 +294,7 @@ body {
     height: 32px;
     padding: 0.35rem;
     border: 0;
+    border-radius: 999px;
     background: transparent;
     color: var(--text-primary);
     cursor: pointer;
@@ -398,9 +399,14 @@ body {
 .search-dialog input:focus-visible,
 .media-settings-dialog button:focus-visible,
 .media-settings-dialog input:focus-visible,
-.search-result:focus-visible {
+.search-result:focus-visible,
+.site-brand:focus-visible {
     outline: 2px solid var(--link);
     outline-offset: 3px;
+}
+
+.site-brand:focus-visible {
+    border-radius: 6px;
 }
 
 .theme-toggle {
