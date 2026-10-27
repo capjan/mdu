@@ -94,7 +94,7 @@ internal static partial class SvgIconReader
     // Attributes of the root element that only size or identify the SVG; the others, such as fill or stroke, are kept.
     private static readonly HashSet<string> RootOnlyAttributes = new(StringComparer.Ordinal)
     {
-        "width", "height", "viewBox", "version", "baseProfile", "x", "y", "id", "preserveAspectRatio", "enable-background"
+        "width", "height", "viewBox", "version", "baseProfile", "x", "y", "preserveAspectRatio", "enable-background"
     };
 
     public static IconData Read(string path, string idPrefix)
@@ -119,7 +119,7 @@ internal static partial class SvgIconReader
 
         var prefix = Identifier().Replace(idPrefix, "_");
         var hasStyleSheet = root.Descendants(Svg + "style").Any();
-        var context = new CleanContext(prefix, hasStyleSheet, GetCopiedIds(root));
+        var context = new CleanContext(prefix, hasStyleSheet, GetCopiedIds(root), GetKeyframeNames(root), (string?)root.Attribute("id"));
         var content = new XElement("g", root.Nodes().Select(node => Clean(node, context)).OfType<XNode>());
         InlineUseReferences(content, context, width, height);
         // The originals stay for the references into them, such as gradients, but are never drawn themselves.
@@ -299,8 +299,57 @@ internal static partial class SvgIconReader
         "id" => context.Prefix + value,
         "href" when value.StartsWith('#') => "#" + context.Prefix + value[1..],
         "class" when context.PrefixClasses => string.Join(' ', value.Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(className => context.Prefix + className)),
-        _ => RewriteUrls(value, context)
+        _ => RewriteCss(value, context)
     };
+
+    /// <summary>
+    /// Rewrites CSS in a style sheet declaration or an attribute so that it loads nothing from other files and refers
+    /// only to this icon's identifiers and animations.
+    /// </summary>
+    private static string RewriteCss(string value, CleanContext context) =>
+        RewriteAnimationNames(RewriteUrls(RemoveImageFunctions(RemoveEscapes(value)), context), context);
+
+    // Escapes such as @\69mport or u\72l( would hide imports and URLs from the checks, so they are decoded first. A
+    // backslash left after that, for example one written as \5C, is removed so that it cannot start a new escape.
+    private static string RemoveEscapes(string css) =>
+        CssEscape().Replace(css, match =>
+        {
+            if (!match.Groups["hex"].Success) return match.Groups["character"].Value;
+            var code = int.Parse(match.Groups["hex"].Value, NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+            return code is > 0 and <= 0x10FFFF and not (>= 0xD800 and <= 0xDFFF) ? char.ConvertFromUtf32(code) : "�";
+        }).Replace("\\", string.Empty, StringComparison.Ordinal);
+
+    // image-set() and image() load files from plain strings, without url().
+    private static string RemoveImageFunctions(string css)
+    {
+        for (var match = ImageFunction().Match(css); match.Success; match = ImageFunction().Match(css))
+        {
+            var depth = 0;
+            var end = match.Index + match.Length - 1;
+            for (; end < css.Length; end++)
+            {
+                if (css[end] == '(') depth++;
+                else if (css[end] == ')' && --depth == 0) break;
+            }
+
+            css = css[..match.Index] + "none" + css[Math.Min(end + 1, css.Length)..];
+        }
+
+        return css;
+    }
+
+    private static string RewriteAnimationNames(string css, CleanContext context) =>
+        context.KeyframeNames.Count == 0
+            ? css
+            : AnimationDeclaration().Replace(css, declaration =>
+                declaration.Groups["property"].Value + CssIdentifier().Replace(declaration.Groups["value"].Value, name =>
+                    context.KeyframeNames.Contains(name.Value) ? context.Prefix + name.Value : name.Value));
+
+    private static HashSet<string> GetKeyframeNames(XElement root) =>
+        root.Descendants(Svg + "style")
+            .SelectMany(style => KeyframesRule().Matches(CssComment().Replace(RemoveEscapes(style.Value), string.Empty)))
+            .Select(match => match.Groups["name"].Value)
+            .ToHashSet(StringComparer.Ordinal);
 
     // References to the icon's own elements get the prefix; references to other files become none, so that the page
     // loads nothing from elsewhere. Embedded images stay.
@@ -314,7 +363,7 @@ internal static partial class SvgIconReader
 
     private static string RewriteStyleSheet(string css, CleanContext context)
     {
-        css = CssImport().Replace(CssComment().Replace(css, string.Empty), string.Empty);
+        css = CssImport().Replace(CssComment().Replace(RemoveEscapes(css), string.Empty), string.Empty);
         var parts = CssBlockSeparator().Split(css);
         var result = new StringBuilder(css.Length);
         // What each open block holds: rules, nested rules of a grouping at-rule, or the frames of @keyframes.
@@ -340,10 +389,14 @@ internal static partial class SvgIconReader
                 else if (prelude.StartsWith('@'))
                 {
                     var keyword = prelude.Split((char[]?)null, 2)[0].ToLowerInvariant();
-                    blocks.Push(keyword.EndsWith("keyframes", StringComparison.Ordinal) ? CssBlock.Keyframes
+                    var isKeyframes = keyword.EndsWith("keyframes", StringComparison.Ordinal);
+                    blocks.Push(isKeyframes ? CssBlock.Keyframes
                         : keyword is "@media" or "@supports" or "@container" or "@layer" ? CssBlock.Group
                         : CssBlock.Rule);
-                    result.Append(part);
+                    // Animation names are global, so each icon gets its own.
+                    result.Append(isKeyframes
+                        ? KeyframesRule().Replace(part, match => match.Value[..^match.Groups["name"].Length] + context.Prefix + match.Groups["name"].Value)
+                        : part);
                 }
                 else
                 {
@@ -355,7 +408,7 @@ internal static partial class SvgIconReader
             }
             else
             {
-                result.Append(RewriteUrls(part, context));
+                result.Append(RewriteCss(part, context));
             }
         }
 
@@ -379,9 +432,17 @@ internal static partial class SvgIconReader
                 return context.CopiedIds.Contains(match.Groups[2].Value) ? $":is(#{name}, .{CopyClass(name)})" : "#" + name;
             });
             var root = CssRootSelector().Match(selector);
-            return root.Success ? scope + selector[root.Length..] : $"{scope} {selector}";
+            if (root.Success) return scope + selector[root.Length..];
+            // The identifier of the root svg belongs to the group, which also carries the scope class.
+            var rootId = context.RootId is null ? null : "#" + context.Prefix + context.RootId;
+            return rootId is not null && selector.StartsWith(rootId, StringComparison.Ordinal) &&
+                   (selector.Length == rootId.Length || !IsNameCharacter(selector[rootId.Length]))
+                ? scope + selector
+                : $"{scope} {selector}";
         }));
     }
+
+    private static bool IsNameCharacter(char character) => char.IsAsciiLetterOrDigit(character) || character is '-' or '_';
 
     // Splits a selector list at commas outside of parentheses, such as the one in :is(a, b).
     private static IEnumerable<string> SplitSelectors(string selectors)
@@ -446,7 +507,9 @@ internal static partial class SvgIconReader
     }
 
     /// <param name="CopiedIds">The identifiers, without prefix, of the elements that <c>use</c> references copy.</param>
-    private sealed record CleanContext(string Prefix, bool PrefixClasses, IReadOnlySet<string> CopiedIds)
+    /// <param name="KeyframeNames">The names of the animations that the icon's style sheets define.</param>
+    /// <param name="RootId">The identifier of the root svg, without prefix.</param>
+    private sealed record CleanContext(string Prefix, bool PrefixClasses, IReadOnlySet<string> CopiedIds, IReadOnlySet<string> KeyframeNames, string? RootId)
     {
         public string ScopeClass => Prefix + "scope";
     }
@@ -462,6 +525,21 @@ internal static partial class SvgIconReader
 
     [GeneratedRegex(@"^(?:svg|:root)(?![\w-])", RegexOptions.IgnoreCase)]
     private static partial Regex CssRootSelector();
+
+    [GeneratedRegex(@"\\(?:(?<hex>[0-9A-Fa-f]{1,6})(?:\r\n|[ \t\r\n\f])?|(?<character>[^\r\n\f]))")]
+    private static partial Regex CssEscape();
+
+    [GeneratedRegex(@"(?<![\w-])(?:-webkit-)?(?:image-set|image|cross-fade|element)\s*\(", RegexOptions.IgnoreCase)]
+    private static partial Regex ImageFunction();
+
+    [GeneratedRegex(@"@(?:-webkit-|-moz-)?keyframes\s+(?<name>-?[_A-Za-z][\w-]*)", RegexOptions.IgnoreCase)]
+    private static partial Regex KeyframesRule();
+
+    [GeneratedRegex(@"(?<property>(?<![\w-])animation(?:-name)?\s*:)(?<value>[^;{}]*)", RegexOptions.IgnoreCase)]
+    private static partial Regex AnimationDeclaration();
+
+    [GeneratedRegex(@"(?<![\w.#-])-?[_A-Za-z][\w-]*(?![\w-]|\()")]
+    private static partial Regex CssIdentifier();
 
     [GeneratedRegex(@"/\*.*?\*/", RegexOptions.Singleline)]
     private static partial Regex CssComment();

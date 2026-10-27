@@ -154,6 +154,60 @@ public sealed class CustomIconTest : IDisposable
     }
 
     [Fact]
+    public void RemovesEscapedImportsAndUrlsAndImageFunctions()
+    {
+        WriteIcon("acme/escaped.svg",
+            """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
+              <style>@\69mport "https://example.com/a.css";
+                rect { fill: u\72l(https://example.com/p.svg#g); background: image-set("https://example.com/a.png" 1x, url(x.png) 2x) }</style>
+              <rect style="background: -webkit-image-set('https://example.com/b.png' 1x)" fill="u\72l(https://example.com/c.svg#g)" width="10" height="10"/>
+            </svg>
+            """);
+
+        IconCatalog.UseCustomIcons(_root);
+
+        Assert.True(IconCatalog.TryGetIcon("acme-escaped", out var icon));
+        Assert.DoesNotContain("example.com", icon.Glyph.Body);
+        Assert.DoesNotContain("import", icon.Glyph.Body, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("background: none }", icon.Glyph.Body);
+        Assert.Contains("<rect style=\"background: none\"", icon.Glyph.Body);
+    }
+
+    [Fact]
+    public void GivesEachIconItsOwnAnimationNames()
+    {
+        const string spinning = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><style>@keyframes spin { to { transform: rotate(1turn) } } rect { animation: spin 1s linear infinite } circle { animation-name: spin, fade }</style><rect width="10" height="10"/><circle style="animation: 2s spin" r="1"/></svg>""";
+        WriteIcon("acme/one.svg", spinning);
+        WriteIcon("acme/two.svg", spinning);
+
+        IconCatalog.UseCustomIcons(_root);
+
+        Assert.True(IconCatalog.TryGetIcon("acme-one", out var one));
+        Assert.True(IconCatalog.TryGetIcon("acme-two", out var two));
+        Assert.Contains("@keyframes acme-one-spin {", one.Glyph.Body);
+        Assert.Contains("rect { animation: acme-one-spin 1s linear infinite }", one.Glyph.Body);
+        Assert.Contains("circle { animation-name: acme-one-spin, fade }", one.Glyph.Body);
+        Assert.Contains("<circle style=\"animation: 2s acme-one-spin\"", one.Glyph.Body);
+        Assert.Contains("@keyframes acme-two-spin {", two.Glyph.Body);
+    }
+
+    [Fact]
+    public void KeepsTheIdentifierOfTheRootSvg()
+    {
+        WriteIcon("acme/rooted.svg",
+            """<svg xmlns="http://www.w3.org/2000/svg" id="logo" viewBox="0 0 10 10"><style>#logo path { fill: red } svg#logo { color: blue } #logo-part { fill: green }</style><path id="logo-part" d="M0 0"/></svg>""");
+
+        IconCatalog.UseCustomIcons(_root);
+
+        Assert.True(IconCatalog.TryGetIcon("acme-rooted", out var icon));
+        Assert.StartsWith("<g id=\"acme-rooted-logo\" class=\"acme-rooted-scope\">", icon.Glyph.Body);
+        Assert.Contains(".acme-rooted-scope#acme-rooted-logo path { fill: red }", icon.Glyph.Body);
+        Assert.Contains(".acme-rooted-scope#acme-rooted-logo { color: blue }", icon.Glyph.Body);
+        Assert.Contains(".acme-rooted-scope #acme-rooted-logo-part { fill: green }", icon.Glyph.Body);
+    }
+
+    [Fact]
     public void LimitsStyleSheetsToTheirIcon()
     {
         WriteIcon("acme/styled.svg",
@@ -175,7 +229,7 @@ public sealed class CustomIconTest : IDisposable
         Assert.Contains(".acme-styled-scope path, .acme-styled-scope &gt; circle:is(.acme-styled-a, .acme-styled-b) { fill: red }", icon.Glyph.Body);
         Assert.Contains(".acme-styled-scope { color: blue }", icon.Glyph.Body);
         Assert.Contains("@media (prefers-color-scheme: dark) { .acme-styled-scope path { fill: blue } }", icon.Glyph.Body);
-        Assert.Contains("@keyframes spin { from { opacity: 0 } 50% { opacity: .5 } }", icon.Glyph.Body);
+        Assert.Contains("@keyframes acme-styled-spin { from { opacity: 0 } 50% { opacity: .5 } }", icon.Glyph.Body);
         Assert.StartsWith("<g class=\"acme-styled-dark-scope\"><style>.acme-styled-dark-scope path { fill: white }</style>", icon.DarkGlyph!.Body);
     }
 
