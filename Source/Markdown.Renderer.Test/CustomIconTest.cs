@@ -121,11 +121,104 @@ public sealed class CustomIconTest : IDisposable
 
         Assert.True(IconCatalog.TryGetIcon("acme-gradient", out var icon));
         Assert.Equal(
-            "<defs><style> .acme-gradient-cls-1 { fill: url(#acme-gradient-fade); opacity: .5 }  #acme-gradient-dot &gt; .acme-gradient-cls-1 { fill: #f00 } </style>" +
+            "<g class=\"acme-gradient-scope\">" +
+            "<defs><style> .acme-gradient-scope .acme-gradient-cls-1 { fill: url(#acme-gradient-fade); opacity: .5 }  .acme-gradient-scope #acme-gradient-dot &gt; .acme-gradient-cls-1 { fill: #f00 } </style>" +
             "<linearGradient id=\"acme-gradient-fade\"><stop offset=\"0\" /></linearGradient></defs>" +
-            "<rect id=\"acme-gradient-dot\" class=\"acme-gradient-cls-1 acme-gradient-cls-2\" style=\"fill: url('#acme-gradient-fade')\" width=\"10\" height=\"10\" />" +
-            "<use href=\"#acme-gradient-dot\" />",
+            "<rect id=\"acme-gradient-dot\" class=\"acme-gradient-cls-1 acme-gradient-cls-2\" style=\"fill: url(#acme-gradient-fade)\" width=\"10\" height=\"10\" />" +
+            "<g><rect class=\"acme-gradient-cls-1 acme-gradient-cls-2\" style=\"fill: url(#acme-gradient-fade)\" width=\"10\" height=\"10\" /></g></g>",
             icon.Glyph.Body);
+    }
+
+    [Fact]
+    public void RemovesReferencesToOtherFilesFromStylesAndAttributes()
+    {
+        WriteIcon("acme/external.svg",
+            """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
+              <style>@import url("https://example.com/theme.css"); @import 'https://example.com/other.css';
+                rect { fill: url(https://example.com/paint.svg#gradient); stroke: URL( "#line" ) }
+                @font-face { font-family: X; src: url(https://example.com/x.woff2) }</style>
+              <rect fill="url(https://example.com/paint.svg#gradient)" style="background: url('//example.com/a.png')" width="10" height="10"/>
+              <circle fill="url(data:image/png;base64,AAAA)" r="1"/>
+            </svg>
+            """);
+
+        IconCatalog.UseCustomIcons(_root);
+
+        Assert.True(IconCatalog.TryGetIcon("acme-external", out var icon));
+        Assert.DoesNotContain("example.com", icon.Glyph.Body);
+        Assert.DoesNotContain("@import", icon.Glyph.Body);
+        Assert.Contains(".acme-external-scope rect { fill: none; stroke: url(#acme-external-line) }", icon.Glyph.Body);
+        Assert.Contains("<rect fill=\"none\" style=\"background: none\"", icon.Glyph.Body);
+        Assert.Contains("<circle fill=\"url(data:image/png;base64,AAAA)\"", icon.Glyph.Body);
+    }
+
+    [Fact]
+    public void LimitsStyleSheetsToTheirIcon()
+    {
+        WriteIcon("acme/styled.svg",
+            """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" fill="none">
+              <style>path, svg > circle:is(.a, .b) { fill: red } :root { color: blue }
+                @media (prefers-color-scheme: dark) { path { fill: blue } }
+                @keyframes spin { from { opacity: 0 } 50% { opacity: .5 } }</style>
+              <path d="M0 0h10"/>
+            </svg>
+            """);
+        WriteIcon("acme/styled.dark.svg",
+            """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><style>path { fill: white }</style><path d="M0 0h10"/></svg>""");
+
+        IconCatalog.UseCustomIcons(_root);
+
+        Assert.True(IconCatalog.TryGetIcon("acme-styled", out var icon));
+        Assert.StartsWith("<g fill=\"none\" class=\"acme-styled-scope\"><style>", icon.Glyph.Body);
+        Assert.Contains(".acme-styled-scope path, .acme-styled-scope &gt; circle:is(.acme-styled-a, .acme-styled-b) { fill: red }", icon.Glyph.Body);
+        Assert.Contains(".acme-styled-scope { color: blue }", icon.Glyph.Body);
+        Assert.Contains("@media (prefers-color-scheme: dark) { .acme-styled-scope path { fill: blue } }", icon.Glyph.Body);
+        Assert.Contains("@keyframes spin { from { opacity: 0 } 50% { opacity: .5 } }", icon.Glyph.Body);
+        Assert.StartsWith("<g class=\"acme-styled-dark-scope\"><style>.acme-styled-dark-scope path { fill: white }</style>", icon.DarkGlyph!.Body);
+    }
+
+    [Fact]
+    public void ReplacesUseReferencesWithCopies()
+    {
+        WriteIcon("acme/reuse.svg",
+            """
+            <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 10 10">
+              <defs>
+                <path id="shape" fill="currentColor" d="M0 0h2v2z"/>
+                <symbol id="pair" viewBox="0 0 4 2"><use href="#shape"/><use href="#shape" x="2"/></symbol>
+                <g id="loop"><use href="#loop"/></g>
+              </defs>
+              <use xlink:href="#pair" x="1" y="3" transform="scale(2)" opacity=".5"/>
+              <use href="#missing"/>
+              <use href="#loop"/>
+            </svg>
+            """);
+
+        IconCatalog.UseCustomIcons(_root);
+
+        Assert.True(IconCatalog.TryGetIcon("acme-reuse", out var icon));
+        Assert.DoesNotContain("<use", icon.Glyph.Body);
+        Assert.Contains(
+            "<g opacity=\".5\" transform=\"scale(2) translate(1 3)\"><g><g><path fill=\"currentColor\" d=\"M0 0h2v2z\" /></g><g transform=\"translate(2 0)\"><path fill=\"currentColor\" d=\"M0 0h2v2z\" /></g></g></g>",
+            icon.Glyph.Body);
+    }
+
+    [Fact]
+    public void DrawsIconsWithUseReferencesInPdf()
+    {
+        WriteIcon("acme/reuse.svg",
+            """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><defs><path id="shape" fill="#000" d="M0 0h2v2z"/></defs><use href="#shape"/></svg>""");
+        IconCatalog.UseCustomIcons(_root);
+        Assert.True(IconCatalog.TryGetIcon("acme-reuse", out var icon));
+        var document = new System.Xml.XmlDocument();
+        document.LoadXml(icon.Glyph.ToSvg());
+
+        var pdf = new System.Text.StringBuilder();
+        PdfSvgRenderer.Draw(document.DocumentElement!, pdf, 0, 0, 24, 24, 800);
+
+        Assert.Contains("0 0 m", pdf.ToString());
     }
 
     [Fact]

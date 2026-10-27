@@ -76,9 +76,10 @@ internal static partial class CustomIconSets
 }
 
 /// <summary>
-/// Turns an SVG file into the body of an inline icon. Scripts, event handlers, external references, and metadata of
-/// editors are removed. Identifiers get a prefix, and so do class names when the SVG has its own style sheet, so that
-/// several icons on one page do not affect each other.
+/// Turns an SVG file into the body of an inline icon. Scripts, event handlers, references to other files, and metadata
+/// of editors are removed, and <c>use</c> references are replaced with copies. Identifiers get a prefix, and so do class
+/// names when the SVG has its own style sheet, whose selectors are limited to the icon, so that several icons on one
+/// page do not affect each other.
 /// </summary>
 internal static partial class SvgIconReader
 {
@@ -117,18 +118,74 @@ internal static partial class SvgIconReader
             ?? throw new InvalidOperationException($"The custom icon needs a viewBox or a width and height: {path}");
 
         var prefix = Identifier().Replace(idPrefix, "_");
-        var prefixClasses = root.Descendants(Svg + "style").Any();
-        var context = new CleanContext(prefix, prefixClasses);
-        var children = root.Nodes().Select(node => Clean(node, context)).OfType<XNode>().ToArray();
+        var hasStyleSheet = root.Descendants(Svg + "style").Any();
+        var context = new CleanContext(prefix, hasStyleSheet);
+        var content = new XElement("g", root.Nodes().Select(node => Clean(node, context)).OfType<XNode>());
+        InlineUseReferences(content);
 
-        // Presentation attributes of the root, such as fill="none" or stroke="currentColor", move to a group.
-        var rootAttributes = CleanAttributes(root, context, isRoot: true).ToArray();
-        var body = rootAttributes.Length == 0
-            ? string.Concat(children.Select(Serialize))
-            : Serialize(new XElement("g", rootAttributes, children));
+        // Presentation attributes of the root, such as fill="none" or stroke="currentColor", move to the group. An
+        // icon with a style sheet always keeps the group, because its class limits the style sheet to this icon.
+        content.Add(CleanAttributes(root, context, isRoot: true));
+        if (hasStyleSheet)
+            content.SetAttributeValue("class", string.Join(' ', new[] { context.ScopeClass, (string?)content.Attribute("class") }.OfType<string>()));
+        var body = content.HasAttributes
+            ? Serialize(content)
+            : string.Concat(content.Nodes().Select(Serialize));
 
         return new IconData { Body = body, Left = left, Top = top, Width = width, Height = height };
     }
+
+    /// <summary>
+    /// Replaces every <c>use</c> element with a copy of the element it refers to, because the PDF renderer draws
+    /// neither <c>defs</c> nor <c>use</c>. A reference to a missing element or a chain of references deeper than
+    /// <see cref="MaxUseDepth"/>, for example a cycle, is removed.
+    /// </summary>
+    private static void InlineUseReferences(XElement content)
+    {
+        var elementsById = content.Descendants()
+            .Where(element => element.Attribute("id") is not null)
+            .GroupBy(element => (string)element.Attribute("id")!, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+
+        for (var depth = 0; depth <= MaxUseDepth; depth++)
+        {
+            var uses = content.Descendants("use").ToArray();
+            if (uses.Length == 0) return;
+            foreach (var use in uses)
+            {
+                var href = (string?)use.Attribute("href");
+                if (depth == MaxUseDepth || href is null || !href.StartsWith('#') || !elementsById.TryGetValue(href[1..], out var target))
+                {
+                    use.Remove();
+                    continue;
+                }
+
+                var copy = new XElement(target);
+                foreach (var element in copy.DescendantsAndSelf()) element.Attribute("id")?.Remove();
+                if (copy.Name.LocalName == "symbol")
+                {
+                    copy.Name = "g";
+                    copy.Attribute("viewBox")?.Remove();
+                    copy.Attribute("preserveAspectRatio")?.Remove();
+                }
+
+                var transform = string.Join(' ', new[]
+                {
+                    (string?)use.Attribute("transform"),
+                    use.Attribute("x") is null && use.Attribute("y") is null
+                        ? null
+                        : $"translate({(string?)use.Attribute("x") ?? "0"} {(string?)use.Attribute("y") ?? "0"})"
+                }.OfType<string>());
+                var group = new XElement("g", use.Attributes().Where(attribute =>
+                    attribute.Name.LocalName is not ("href" or "x" or "y" or "width" or "height" or "transform")));
+                if (transform.Length > 0) group.SetAttributeValue("transform", transform);
+                group.Add(copy);
+                use.ReplaceWith(group);
+            }
+        }
+    }
+
+    private const int MaxUseDepth = 8;
 
     private static string Serialize(XNode node) => node.ToString(SaveOptions.DisableFormatting);
 
@@ -179,27 +236,107 @@ internal static partial class SvgIconReader
         _ => RewriteUrls(value, context)
     };
 
+    // References to the icon's own elements get the prefix; references to other files become none, so that the page
+    // loads nothing from elsewhere. Embedded images stay.
     private static string RewriteUrls(string value, CleanContext context) =>
-        UrlReference().Replace(value, match => match.Groups[1].Value + context.Prefix);
+        UrlFunction().Replace(value, match =>
+        {
+            var target = match.Groups["target"].Value.Trim();
+            if (target.StartsWith('#')) return $"url(#{context.Prefix}{target[1..]})";
+            return target.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase) ? match.Value : "none";
+        });
 
     private static string RewriteStyleSheet(string css, CleanContext context)
     {
-        css = CssComment().Replace(css, string.Empty);
+        css = CssImport().Replace(CssComment().Replace(css, string.Empty), string.Empty);
         var parts = CssBlockSeparator().Split(css);
         var result = new StringBuilder(css.Length);
+        // What each open block holds: rules, nested rules of a grouping at-rule, or the frames of @keyframes.
+        var blocks = new Stack<CssBlock>();
         for (var index = 0; index < parts.Length; index++)
         {
             var part = parts[index];
-            // Text before an opening brace is a selector or an at-rule prelude; everything else holds declarations.
-            if (part is "{" or "}")
+            if (part == "{" || part == "}")
+            {
+                if (part == "}" && blocks.Count > 0) blocks.Pop();
                 result.Append(part);
+            }
             else if (index + 1 < parts.Length && parts[index + 1] == "{")
-                result.Append(CssSelectorName().Replace(part, match => match.Groups[1].Value + context.Prefix + match.Groups[2].Value));
+            {
+                // Text before an opening brace is a selector or an at-rule prelude.
+                var prelude = part.Trim();
+                var enclosing = blocks.Count > 0 ? blocks.Peek() : CssBlock.Group;
+                if (enclosing == CssBlock.Keyframes)
+                {
+                    blocks.Push(CssBlock.Rule);
+                    result.Append(part);
+                }
+                else if (prelude.StartsWith('@'))
+                {
+                    var keyword = prelude.Split((char[]?)null, 2)[0].ToLowerInvariant();
+                    blocks.Push(keyword.EndsWith("keyframes", StringComparison.Ordinal) ? CssBlock.Keyframes
+                        : keyword is "@media" or "@supports" or "@container" or "@layer" ? CssBlock.Group
+                        : CssBlock.Rule);
+                    result.Append(part);
+                }
+                else
+                {
+                    blocks.Push(CssBlock.Rule);
+                    result.Append(part[..(part.Length - part.TrimStart().Length)])
+                        .Append(ScopeSelectors(prelude, context))
+                        .Append(part[part.TrimEnd().Length..]);
+                }
+            }
             else
+            {
                 result.Append(RewriteUrls(part, context));
+            }
         }
 
         return result.ToString();
+    }
+
+    /// <summary>
+    /// Limits every selector to the group around the icon and prefixes its identifiers and classes, so that
+    /// <c>path { fill: red }</c> colors only this icon. The root <c>svg</c> and <c>:root</c> stand for that group.
+    /// </summary>
+    private static string ScopeSelectors(string selectors, CleanContext context)
+    {
+        var scope = "." + context.ScopeClass;
+        return string.Join(", ", SplitSelectors(selectors).Select(selector =>
+        {
+            selector = CssSelectorName().Replace(selector.Trim(), match => match.Groups[1].Value + context.Prefix + match.Groups[2].Value);
+            var root = CssRootSelector().Match(selector);
+            return root.Success ? scope + selector[root.Length..] : $"{scope} {selector}";
+        }));
+    }
+
+    // Splits a selector list at commas outside of parentheses, such as the one in :is(a, b).
+    private static IEnumerable<string> SplitSelectors(string selectors)
+    {
+        var depth = 0;
+        var start = 0;
+        for (var index = 0; index < selectors.Length; index++)
+        {
+            switch (selectors[index])
+            {
+                case '(': depth++; break;
+                case ')': depth = Math.Max(0, depth - 1); break;
+                case ',' when depth == 0:
+                    yield return selectors[start..index];
+                    start = index + 1;
+                    break;
+            }
+        }
+
+        yield return selectors[start..];
+    }
+
+    private enum CssBlock
+    {
+        Group,
+        Rule,
+        Keyframes
     }
 
     private static (double Left, double Top, double Width, double Height)? ReadViewBox(XElement root)
@@ -226,13 +363,22 @@ internal static partial class SvgIconReader
         return double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var length) && length > 0 ? length : null;
     }
 
-    private sealed record CleanContext(string Prefix, bool PrefixClasses);
+    private sealed record CleanContext(string Prefix, bool PrefixClasses)
+    {
+        public string ScopeClass => Prefix + "scope";
+    }
 
     [GeneratedRegex("[^A-Za-z0-9_-]")]
     private static partial Regex Identifier();
 
-    [GeneratedRegex(@"(url\(\s*['""]?#)")]
-    private static partial Regex UrlReference();
+    [GeneratedRegex(@"url\(\s*(?<quote>['""]?)(?<target>.*?)\k<quote>\s*\)", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex UrlFunction();
+
+    [GeneratedRegex(@"@import\b[^;]*;?", RegexOptions.IgnoreCase)]
+    private static partial Regex CssImport();
+
+    [GeneratedRegex(@"^(?:svg|:root)(?![\w-])", RegexOptions.IgnoreCase)]
+    private static partial Regex CssRootSelector();
 
     [GeneratedRegex(@"/\*.*?\*/", RegexOptions.Singleline)]
     private static partial Regex CssComment();

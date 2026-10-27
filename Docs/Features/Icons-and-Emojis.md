@@ -118,7 +118,7 @@ Some tips for the SVG files:
 - The SVG needs a `viewBox`, or a `width` and `height`. MDU sizes the icon with the text, so the size in the file does not matter.
 - Icon and folder names may contain letters, digits, `-`, `_`, and `+`. A folder must not be named like a built-in icon set, for example `material` or `fontawesome`.
 
-MDU embeds the icons as inline SVG and cleans them up first: it removes scripts, event handlers, links to other files, and the metadata of drawing programs, and it gives identifiers and the classes of embedded style sheets a prefix per icon, so that several icons on one page do not affect each other. Embedded images are kept only as `data:` URLs.
+MDU embeds the icons as inline SVG and cleans them up first: it removes scripts, event handlers, the metadata of drawing programs, and every reference to another file, including `@import` and `url(…)` in styles. Embedded images are kept only as `data:` URLs. Identifiers and the classes of embedded style sheets get a prefix per icon, and the rules of a style sheet apply only to its own icon, so that several icons on one page do not affect each other. Shapes reused with `use` are copied into place, so they also appear in PDF files.
 
 ### Where shortcodes work
 
