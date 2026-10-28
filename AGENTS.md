@@ -53,6 +53,6 @@ Every focusable element in the rendered site shows keyboard focus the same way, 
   dotnet tool list --global
   ```
   Increment `N` for repeated local builds on the same date. For a first-time installation, replace `dotnet tool update` with `dotnet tool install`. Restart any running `mdu serve` process to use the updated build.
-- Run `dotnet doctor fix` to install this repository's local Git hooks. Use `dotnet doctor diagnose all` to check the hook setup; commit messages must follow Conventional Commits.
+- Run `dotnet doctor fix` to install this repository's local Git hooks. Use `dotnet doctor diagnose all` to check the hook setup. Every commit message and pull request title must follow Conventional Commits (`<type>[optional scope][!]: <description>`), regardless of the tool or workflow used.
 - Open `mdu serve` previews at `http://127.0.0.1:<port>/`, not `localhost`. The preview server listens on IPv4 `127.0.0.1` only, while `localhost` can resolve to IPv6 `::1`, where another listener answers with a bare `Not Found (Not Found)`. Use the same host in URLs given to the user and in browser checks.
 - Keep CLI output plain-text and dependency-light. `System.CommandLine` is the command parser; do not reintroduce Spectre.Console.
