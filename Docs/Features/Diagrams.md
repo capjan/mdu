@@ -77,7 +77,7 @@ flowchart LR
 | Accessible title | `accTitle: Text` | Sets the accessible title |
 | Comments | `%% comment` | Ignores the line |
 
-Longer links made by adding dashes, dots, or equals signs span more layout ranks. MDU does not support every Mermaid flowchart shape or statement. Node links are covered under [Clickable nodes](#clickable-nodes).
+Longer links made by adding dashes, dots, or equals signs span more layout ranks. Labelled self-links reserve room for their text. Compared with earlier MDU versions, flowcharts with these links can be wider or taller, and multiple self-links can be spaced farther apart. MDU does not support every Mermaid flowchart shape or statement. Node links are covered under [Clickable nodes](#clickable-nodes).
 
 ## Sequence diagrams
 

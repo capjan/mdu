@@ -20,7 +20,7 @@ public static class MermaidRenderer
         source = PrepareSource(source);
         if (source.TrimStart().StartsWith("classDiagram", StringComparison.Ordinal)) return ClassDiagramRenderer.Render(source);
         if (FlowchartParser.CanParse(source)) return FlowchartSvgWriter.Write(FlowchartParser.Parse(source));
-        if (StateParser.CanParse(source)) return StateSvgWriter.Write(StateParser.Parse(source), $"state-{DiagramRenderer.StableHash(source):x8}-{instance.ToString(CultureInfo.InvariantCulture)}");
+        if (StateParser.CanParse(source)) return StateSvgWriter.Write(StateParser.Parse(source), $"state-{DiagramRenderer.StableHash(source.TrimStart('\n')):x8}-{instance.ToString(CultureInfo.InvariantCulture)}");
         if (SequenceParser.CanParse(source)) return SequenceSvgWriter.Write(SequenceParser.Parse(source));
         throw new DiagramSyntaxException("Unsupported Mermaid diagram syntax.", 1);
     }
@@ -48,7 +48,12 @@ public static class MermaidRenderer
         if (start < lines.Length && lines[start].Trim() == "---")
         {
             for (var end = start + 1; end < lines.Length; end++)
-                if (lines[end].Trim() == "---") return string.Join('\n', lines.Skip(end + 1));
+                if (lines[end].Trim() == "---")
+                {
+                    // Preserve source line numbers while removing front matter and its leading comments.
+                    Array.Fill(lines, string.Empty, 0, end + 1);
+                    return string.Join('\n', lines);
+                }
         }
 
         return source;

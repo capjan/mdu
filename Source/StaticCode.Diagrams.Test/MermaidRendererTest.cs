@@ -29,6 +29,25 @@ public class MermaidRendererTest
         Assert.Equal(MermaidRenderer.RenderSvg(source), MermaidRenderer.RenderSvg(withFrontMatter));
     }
 
+    [Theory]
+    [InlineData("stateDiagram-v2\nA -->")]
+    [InlineData("flowchart LR\nA -->")]
+    [InlineData("sequenceDiagram\nnot a message")]
+    public void ReportsOriginalErrorLinesAfterFrontMatter(string source)
+    {
+        const string prefix = "\n%% Example\n  \n---\ntitle: Ignored options\n---\n";
+        foreach (var lineEnding in new[] { "\n", "\r\n" })
+        {
+            var original = (prefix + source).ReplaceLineEndings(lineEnding);
+            var error = Assert.Throws<DiagramSyntaxException>(() => MermaidRenderer.RenderSvg(original));
+            Assert.Equal(8, error.Line);
+            Assert.StartsWith("Line 8: ", error.Message);
+            Assert.False(MermaidRenderer.TryRenderSvg(original, out var svg));
+            Assert.Null(svg);
+            Assert.Equal(2, Assert.Throws<DiagramSyntaxException>(() => MermaidRenderer.RenderSvg(source)).Line);
+        }
+    }
+
     [Fact]
     public void RendersWellFormedSvg()
     {

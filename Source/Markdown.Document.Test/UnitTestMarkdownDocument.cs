@@ -98,6 +98,7 @@ public class UnitTestMarkdownDocument
 
         Assert.Empty(MarkdownDocument.ReadLinks(markdown));
     }
+
     [Theory]
     [InlineData("stateDiagram")]
     [InlineData("stateDiagram-v2")]
@@ -141,6 +142,7 @@ public class UnitTestMarkdownDocument
         var link = Assert.Single(MarkdownDocument.ReadLinks($"```mermaid\n{header}\nclick A href \"guide.md\"\n```"));
         Assert.Equal("guide.md", link.Destination);
     }
+
     [Fact]
     public void ReadLinksIncludesUnquotedStateLinksAfterCommentsAndFrontMatter()
     {
@@ -149,6 +151,4 @@ public class UnitTestMarkdownDocument
         Assert.Equal("guide.md#state", link.Destination);
         Assert.Equal(8, link.LineNumber);
     }
-
-
 }
