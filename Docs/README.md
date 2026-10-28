@@ -11,7 +11,7 @@ actions:
     link: ./Features/README.md
 ```
 
-MDU is a .NET tool that turns a folder of ordinary Markdown files into a documentation site. Your pages stay plain Markdown that reads well on GitHub; MDU adds navigation, search, diagrams, and a polished theme when it renders them.
+MDU (Markdown Documentation Utility) is a tool that turns a folder of ordinary Markdown files into a documentation site. Your pages stay plain Markdown that reads well on GitHub; MDU adds navigation, search, diagrams, and a polished theme when it renders them.
 
 ## Get started
 
