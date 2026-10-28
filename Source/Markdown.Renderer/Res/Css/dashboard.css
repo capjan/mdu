@@ -1,10 +1,5 @@
 /* Dashboard pages: a start page of link tiles grouped by second-level headings. */
 
-/* A start page uses more of a wide screen than an article; the header and navigation widen with it. */
-:root:has(.site-layout.is-dashboard) {
-    --page-max-width: 1840px;
-}
-
 .site-layout.is-dashboard .content-layout {
     display: block;
 }
