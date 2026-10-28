@@ -416,8 +416,10 @@ body {
     border-radius: 2px;
 }
 
-/* The inline-link rule above would flatten the pagination cards, so their own radius is restored for focus. */
+/* The page footer sits in .markdown-content, whose inline-link focus rule is more specific, so the cards restore
+   their own offset and radius here. */
 .markdown-content .page-pagination-link:focus-visible {
+    outline-offset: 3px;
     border-radius: 15px;
 }
 
@@ -4596,11 +4598,11 @@ th, td {
     color: var(--link);
 }
 
-/* The on-this-page list scrolls and clips its overflow, so the outline sits inside the link. */
+/* The on-this-page list scrolls and clips its overflow, so the outline sits inside the link. Its radius stays as
+   set on .toc-link. */
 .toc-link:focus-visible {
     outline: 2px solid var(--link);
     outline-offset: -2px;
-    border-radius: 6px;
 }
 
 .back-to-top {
