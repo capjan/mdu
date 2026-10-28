@@ -8,6 +8,39 @@ namespace Mdu.Test;
 public class LinterVisitorTest
 {
     [Fact]
+    public void SupportedStateDiagramWithExistingStateLinkPasses()
+    {
+        WithPage("Overview.md", "# Overview\n\n```mermaid\nstateDiagram-v2\n[*] --> A\nclick A href \"Guide.md\"\n```", "Overview", 0,
+            errors => Assert.Empty(errors),
+            setup: root => File.WriteAllText(Path.Combine(root, "Guide.md"), "# Guide"),
+            assertWarnings: Assert.Empty);
+    }
+
+    [Theory]
+    [InlineData("missing.md", RuleCodes.LocalLinkExists)]
+    [InlineData("guide.md", RuleCodes.LinkCasing)]
+    public void StateLinksAreCheckedForMissingDestinationsAndLetterCase(string destination, string code)
+    {
+        WithPage("Overview.md", $"# Overview\n\n```mermaid\nstateDiagram-v2\nA\nclick A href \"{destination}\"\n```", "Overview", 0,
+            errors =>
+            {
+                var error = Assert.Single(errors);
+                Assert.Equal(code, CodeOf(error));
+                Assert.Equal(6, error.LineNumber);
+            },
+            setup: root => File.WriteAllText(Path.Combine(root, "Guide.md"), "# Guide"));
+    }
+
+    [Fact]
+    public void UnsupportedStateDiagramReportsMdu010AtTheCodeFence()
+    {
+        var issues = MarkdownCompatibility.FindIssues("# Overview\n\n```mermaid\nstateDiagram-v2\nA\nnote right of A: Unsupported\n```");
+        var issue = Assert.Single(issues);
+        Assert.Equal(RuleCodes.UnsupportedMermaid, issue.Code);
+        Assert.Equal(3, issue.LineNumber);
+    }
+
+    [Fact]
     public void MissingTitleHasStableDiagnosticCode()
     {
         WithPage("Overview.md", "Plain text without a heading", string.Empty, 0, errors =>

@@ -32,6 +32,31 @@ public class DiagramTest
         Assert.DoesNotContain("<pre", html);
     }
 
+    [Theory]
+    [InlineData("stateDiagram")]
+    [InlineData("stateDiagram-v2")]
+    public void RendersMermaidStateDiagramsAndClickableStatesAsInlineSvg(string header)
+    {
+        var html = Render($"```mermaid\n{header}\n[*] --> A\nclick A href \"guide.md#state\"\n```\n");
+
+        Assert.Contains("class=\"diagram-state\"", html);
+        Assert.Contains("class=\"diagram-link\" href=\"guide.html#state\"", html);
+        Assert.DoesNotContain("<pre", html);
+    }
+
+    [Theory]
+    [InlineData("A -->")]
+    [InlineData("state A {\nB")]
+    [InlineData("state A {\nB\n--\nC\n}")]
+    [InlineData("A\nnote right of A: Unsupported")]
+    public void KeepsInvalidAndUnsupportedStateDiagramsAsCode(string statements)
+    {
+        var html = Render($"```mermaid\nstateDiagram-v2\n{statements}\n```\n");
+
+        Assert.Contains("<pre", html);
+        Assert.DoesNotContain("<figure class=\"diagram\"", html);
+    }
+
     [Fact]
     public void RendersContextDiagramsAsInlineSvg()
     {

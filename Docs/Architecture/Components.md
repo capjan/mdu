@@ -120,7 +120,7 @@ A small lexer with lightweight grammars for C#, JavaScript, Swift, TypeScript, P
 
 ## StaticCode.Diagrams
 
-Parses diagram sources and writes SVG. `DiagramRenderer.TryRenderSvg` handles Mermaid flowcharts, sequence and class diagrams, PlantUML component diagrams, and MDU's own context diagrams.
+Parses diagram sources and writes SVG. `DiagramRenderer.TryRenderSvg` handles Mermaid flowcharts, sequence, state, and class diagrams, PlantUML component diagrams, and MDU's own context diagrams.
 
 - Flowcharts use their own layered (Sugiyama) layout in `Layout/LayeredLayout.cs`.
 - PlantUML containers are laid out from the inside out, so nested packages size to their content.

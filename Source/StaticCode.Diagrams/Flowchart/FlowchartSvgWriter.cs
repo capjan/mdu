@@ -121,7 +121,7 @@ internal static class FlowchartSvgWriter
     }
 
     /// <summary>Moves an edge end from the node's bounding box onto its actual outline.</summary>
-    private static Point SnapToShape(NodeBox box, Point center, Point point, Point axis, Point cross, bool horizontal)
+    internal static Point SnapToShape(NodeBox box, Point center, Point point, Point axis, Point cross, bool horizontal)
     {
         var offset = point - center;
         var along = offset.Dot(axis);
@@ -136,7 +136,7 @@ internal static class FlowchartSvgWriter
     /// Draws a smooth cubic Hermite spline through the route. Interior tangents follow Catmull-Rom;
     /// the ends leave and enter nodes along the flow direction.
     /// </summary>
-    private static void WriteRoute(StringBuilder svg, FlowchartEdge edge, List<Point> points, Point axis)
+    internal static void WriteRoute(StringBuilder svg, FlowchartEdge edge, List<Point> points, Point axis)
     {
         var startDirection = axis * Math.Sign((points[1] - points[0]).Dot(axis));
         var endDirection = axis * Math.Sign((points[^1] - points[^2]).Dot(axis));
@@ -166,7 +166,7 @@ internal static class FlowchartSvgWriter
         svg.Append('\n');
     }
 
-    private static Point? WriteSelfLoop(
+    internal static Point? WriteSelfLoop(
         StringBuilder svg, FlowchartEdge edge, NodeBox box, Point center, double size, LabelBox? label, Point axis, Point cross, bool horizontal)
     {
         var halfAlong = (horizontal ? box.Width : box.Height) / 2;

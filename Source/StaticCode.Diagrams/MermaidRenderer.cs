@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using StaticCode.Diagrams.Flowchart;
 using StaticCode.Diagrams.Sequence;
+using StaticCode.Diagrams.State;
 
 namespace StaticCode.Diagrams;
 
@@ -15,6 +16,7 @@ public static class MermaidRenderer
         source = PrepareSource(source);
         if (source.TrimStart().StartsWith("classDiagram", StringComparison.Ordinal)) return ClassDiagramRenderer.Render(source);
         if (FlowchartParser.CanParse(source)) return FlowchartSvgWriter.Write(FlowchartParser.Parse(source));
+        if (StateParser.CanParse(source)) return StateSvgWriter.Write(StateParser.Parse(source));
         if (SequenceParser.CanParse(source)) return SequenceSvgWriter.Write(SequenceParser.Parse(source));
         throw new DiagramSyntaxException("Unsupported Mermaid diagram syntax.", 1);
     }
