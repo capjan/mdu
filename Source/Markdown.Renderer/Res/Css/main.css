@@ -400,13 +400,24 @@ body {
 .media-settings-dialog button:focus-visible,
 .media-settings-dialog input:focus-visible,
 .search-result:focus-visible,
-.site-brand:focus-visible {
+.site-brand:focus-visible,
+.page-meta a:focus-visible,
+.page-pagination-link:focus-visible {
     outline: 2px solid var(--link);
     outline-offset: 3px;
 }
 
 .site-brand:focus-visible {
     border-radius: 6px;
+}
+
+.page-meta a:focus-visible {
+    border-radius: 2px;
+}
+
+/* The inline-link rule above would flatten the pagination cards, so their own radius is restored for focus. */
+.markdown-content .page-pagination-link:focus-visible {
+    border-radius: 15px;
 }
 
 .theme-toggle {
@@ -580,6 +591,13 @@ body {
     border-bottom-color: var(--link);
 }
 
+/* The bar clips what lies outside it, so the outline sits inside the link like the sidebar toggle's. */
+.top-nav-link:focus-visible {
+    outline: 2px solid var(--link);
+    outline-offset: -2px;
+    border-radius: 6px;
+}
+
 /* Reserves the width of the bold label so tabs keep their places when the current tab changes. */
 .top-nav-link::after {
     content: attr(data-label);
@@ -723,6 +741,10 @@ body {
     line-height: 1.45;
     overflow-wrap: anywhere;
     transition: color 120ms ease, border-color 120ms ease;
+}
+
+.site-nav-link:focus-visible {
+    border-radius: 6px;
 }
 
 .site-nav-link:hover {
@@ -2814,11 +2836,6 @@ th, td {
     text-decoration: none;
 }
 
-.page-pagination-link:focus-visible {
-    outline: 2px solid var(--link);
-    outline-offset: 2px;
-}
-
 .page-pagination-link.is-next {
     grid-column: 2;
     align-items: flex-end;
@@ -4574,9 +4591,11 @@ th, td {
     color: var(--link);
 }
 
+/* The on-this-page list scrolls and clips its overflow, so the outline sits inside the link. */
 .toc-link:focus-visible {
     outline: 2px solid var(--link);
-    outline-offset: 3px;
+    outline-offset: -2px;
+    border-radius: 6px;
 }
 
 .back-to-top {
