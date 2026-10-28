@@ -78,7 +78,11 @@ public sealed class StateParser
                 diagram.Title = MermaidText.Clean(line[9..]);
                 continue;
             }
-            if (line.StartsWith("accDescr:", StringComparison.Ordinal)) continue;
+            if (line.StartsWith("accDescr:", StringComparison.Ordinal))
+            {
+                diagram.Description = MermaidText.Clean(line[9..]);
+                continue;
+            }
             if (Regex.IsMatch(line, @"^(?:classDef|class|style)\b")) continue;
 
             var click = Click.Match(line);

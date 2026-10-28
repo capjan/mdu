@@ -13,17 +13,22 @@ internal static class StateSvgWriter
     private const double Padding = 18;
     private const double CanvasPadding = 4;
 
-    public static string Write(StateDiagram diagram)
+    public static string Write(StateDiagram diagram, string idPrefix)
     {
         var scene = Arrange(diagram);
         var width = scene.Layout.Width + 2 * CanvasPadding;
         var height = scene.Layout.Height + 2 * CanvasPadding;
+        var descriptionId = idPrefix + "-desc";
+        var hasDescription = !string.IsNullOrWhiteSpace(diagram.Description);
         var svg = new StringBuilder();
         svg.Append("<svg xmlns=\"http://www.w3.org/2000/svg\" class=\"diagram-state\"")
             .Append($" viewBox=\"{-CanvasPadding} {-CanvasPadding} {F(width)} {F(height)}\"")
             .Append($" width=\"{F(width)}\" height=\"{F(height)}\"")
-            .Append($" font-size=\"{F(TextMetrics.FontSize)}\" role=\"group\" aria-label=\"{Escape(diagram.Title ?? "State diagram")}\">\n");
-        WriteScene(svg, scene, new Point(0, 0));
+            .Append($" font-size=\"{F(TextMetrics.FontSize)}\" role=\"group\" aria-label=\"{Escape(diagram.Title ?? "State diagram")}\"");
+        if (hasDescription) svg.Append($" aria-describedby=\"{descriptionId}\"");
+        svg.Append(">\n");
+        if (hasDescription) svg.Append($"<desc id=\"{descriptionId}\">{Escape(diagram.Description!)}</desc>\n");
+        WriteScene(svg, scene, new Point(0, 0), idPrefix);
         svg.Append("</svg>");
         return svg.ToString();
     }
@@ -67,7 +72,7 @@ internal static class StateSvgWriter
         };
     }
 
-    private static void WriteScene(StringBuilder svg, Scene scene, Point origin)
+    private static void WriteScene(StringBuilder svg, Scene scene, Point origin, string idPrefix)
     {
         var horizontal = scene.Diagram.Direction is FlowDirection.LeftToRight or FlowDirection.RightToLeft;
         var axis = horizontal ? new Point(1, 0) : new Point(0, 1);
@@ -104,7 +109,7 @@ internal static class StateSvgWriter
             var child = scene.Children[index];
             if (child != null)
             {
-                WriteComposite(svg, node, box, center, child);
+                WriteComposite(svg, node, box, center, child, idPrefix);
             }
             else if (node.Kind == StateKind.State)
             {
@@ -118,12 +123,18 @@ internal static class StateSvgWriter
         svg.Append("</g>\n");
     }
 
-    private static void WriteComposite(StringBuilder svg, StateNode node, NodeBox box, Point center, Scene child)
+    private static void WriteComposite(StringBuilder svg, StateNode node, NodeBox box, Point center, Scene child, string idPrefix)
     {
         var left = center.X - box.Width / 2;
         var top = center.Y - box.Height / 2;
         var header = TextMetrics.Measure(box.Lines).Height + 20;
-        svg.Append("<g class=\"diagram-state-composite\">");
+        var descriptionId = idPrefix + "-" + node.Id + "-desc";
+        var hasDescription = !string.IsNullOrWhiteSpace(child.Diagram.Description);
+        svg.Append("<g class=\"diagram-state-composite\"");
+        if (hasDescription)
+            svg.Append($" role=\"group\" aria-label=\"{Escape(node.Label)}\" aria-describedby=\"{descriptionId}\"");
+        svg.Append('>');
+        if (hasDescription) svg.Append($"<desc id=\"{descriptionId}\">{Escape(child.Diagram.Description!)}</desc>");
         var href = SafeHref(node.Href);
         if (href != null)
             svg.Append($"<a class=\"diagram-link\" href=\"{href}\" data-pdf-bounds=\"{F(left)} {F(top)} {F(box.Width)} {F(box.Height)}\">");
@@ -131,7 +142,7 @@ internal static class StateSvgWriter
             .Append($"<path class=\"diagram-container-detail\" d=\"M{F(left)} {F(top + header)}h{F(box.Width)}\"/>");
         WriteText(svg, box.Lines, new Point(center.X, top + header / 2), "diagram-container-label");
         if (href != null) svg.Append("</a>");
-        WriteScene(svg, child, new Point(left + (box.Width - child.Layout.Width) / 2, top + header + Padding));
+        WriteScene(svg, child, new Point(left + (box.Width - child.Layout.Width) / 2, top + header + Padding), idPrefix);
         svg.Append("</g>\n");
     }
 

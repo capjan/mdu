@@ -42,6 +42,44 @@ public class StateRendererTest
         Assert.Equal("State diagram", XElement.Parse(MermaidRenderer.RenderSvg("stateDiagram\nA")).Attribute("aria-label")?.Value);
     }
 
+    [Fact]
+    public void AssociatesEscapedAccessibleDescriptionsWithTheDiagramAndComposite()
+    {
+        var root = XElement.Parse(MermaidRenderer.RenderSvg("""
+            stateDiagram-v2
+            accTitle: Lifecycle
+            accDescr: Draft < review & publish #quot;document#quot;
+            state Review {
+                accDescr: Reviewers <approve> & reject.
+                Pending
+            }
+            click Pending href pending.md
+            """));
+        var ns = root.Name.Namespace;
+        var rootDescription = Assert.Single(root.Elements(ns + "desc"));
+        Assert.Equal("Draft < review & publish \"document\"", rootDescription.Value);
+        Assert.Equal(rootDescription.Attribute("id")?.Value, root.Attribute("aria-describedby")?.Value);
+        Assert.Equal("Lifecycle", root.Attribute("aria-label")?.Value);
+        Assert.Equal("group", root.Attribute("role")?.Value);
+        var composite = Assert.Single(WithClass(root, "diagram-state-composite"));
+        var compositeDescription = Assert.Single(composite.Elements(ns + "desc"));
+        Assert.Equal("Reviewers <approve> & reject.", compositeDescription.Value);
+        Assert.Equal(compositeDescription.Attribute("id")?.Value, composite.Attribute("aria-describedby")?.Value);
+        Assert.NotEqual(rootDescription.Attribute("id")?.Value, compositeDescription.Attribute("id")?.Value);
+        Assert.Equal("pending.html", Assert.Single(WithClass(root, "diagram-link")).Attribute("href")?.Value);
+        Assert.DoesNotContain(root.Descendants(), element => element.Name.LocalName == "approve");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("accDescr:  \n")]
+    public void OmitsEmptyAccessibleDescriptions(string description)
+    {
+        var root = XElement.Parse(MermaidRenderer.RenderSvg($"stateDiagram-v2\n{description}A"));
+        Assert.Null(root.Attribute("aria-describedby"));
+        Assert.Empty(root.Descendants(root.Name.Namespace + "desc"));
+    }
+
     [Theory]
     [InlineData("TD", 1, false)]
     [InlineData("BT", -1, false)]

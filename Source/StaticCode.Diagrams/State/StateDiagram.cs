@@ -33,6 +33,7 @@ public sealed class StateDiagram
 {
     public FlowDirection Direction { get; set; } = FlowDirection.TopToBottom;
     public string? Title { get; set; }
+    public string? Description { get; set; }
     public List<StateNode> Nodes { get; } = new();
     public List<FlowchartEdge> Edges { get; } = new();
 }

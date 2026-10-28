@@ -83,6 +83,22 @@ public class StateParserTest
     }
 
     [Fact]
+    public void PreservesAccessibleDescriptionsAtTheirDiagramScope()
+    {
+        var diagram = StateParser.Parse("""
+            stateDiagram-v2
+            accDescr:  Drafts & reviews #quot;described#quot; %% Comment
+            state Review {
+                accDescr: Reviewers approve or reject a document.
+                Pending
+            }
+            """);
+
+        Assert.Equal("Drafts & reviews \"described\"", diagram.Description);
+        Assert.Equal("Reviewers approve or reject a document.", Assert.Single(diagram.Nodes).Content!.Description);
+    }
+
+    [Fact]
     public void ParsesChoiceForkJoinAndIgnoresThemeOverrides()
     {
         var diagram = StateParser.Parse("""

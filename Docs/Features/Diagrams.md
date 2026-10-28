@@ -145,6 +145,7 @@ Use `stateDiagram-v2` or `stateDiagram` in a `mermaid` code block to show a syst
 ```mermaid
 stateDiagram-v2
     accTitle: Document lifecycle
+    accDescr: Draft documents are reviewed before publication; revisions return to draft.
     [*] --> Draft
     state "In review" as Review {
         [*] --> Pending
@@ -164,6 +165,7 @@ stateDiagram-v2
 ```mermaid
 stateDiagram-v2
     accTitle: Document lifecycle
+    accDescr: Draft documents are reviewed before publication; revisions return to draft.
     [*] --> Draft
     state "In review" as Review {
         [*] --> Pending
@@ -235,6 +237,7 @@ stateDiagram-v2
 | Links | `click Idle href details.md`, `click Idle "https://example.com/"` | Links a state or composite frame; see [Clickable nodes](#clickable-nodes) |
 | Line breaks | `<br>` or `\n` in labels | Starts a new line |
 | Accessible title | `accTitle: Text` | Names the diagram for assistive technology |
+| Accessible description | `accDescr: Text` | Provides a single-line description through SVG `desc` and `aria-describedby`; inside a composite, describes that composite |
 | Comments | `%% comment` | Ignores the rest of the line, outside quotes |
 
 Write one statement per line, optionally followed by a semicolon. State IDs use letters, digits, underscores, and hyphens and must be unique across the diagram. Transitions stay within a composite's scope; connect the composite states themselves to cross their boundaries. State links accept quoted destinations or unquoted destinations after `href`, and an optional ignored tooltip. A linked composite has the same full-frame click area in HTML and PDF; its child links retain their own destinations. Mermaid front matter may follow leading blank lines and `%%` comments. Custom styles and `:::` class suffixes are ignored so states follow the page theme.

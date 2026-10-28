@@ -38,13 +38,16 @@ public static class DiagramRenderer
     /// Returns <c>false</c> for other languages and for diagrams outside the supported syntax. Isometric diagrams are
     /// HTML rather than SVG, so they come from <see cref="TryRenderHtml"/> instead.
     /// </summary>
-    public static bool TryRenderSvg(string language, string source, [NotNullWhen(true)] out string? svg)
+    public static bool TryRenderSvg(string language, string source, [NotNullWhen(true)] out string? svg) =>
+        TryRenderSvg(language, source, 0, out svg);
+
+    private static bool TryRenderSvg(string language, string source, int instance, [NotNullWhen(true)] out string? svg)
     {
         try
         {
             svg = language.ToLowerInvariant() switch
             {
-                "mermaid" => MermaidRenderer.RenderSvg(source),
+                "mermaid" => MermaidRenderer.RenderSvg(source, instance),
                 "context" => RenderContextSvg(source),
                 "plantuml" or "puml" => RenderPlantUmlSvg(source),
                 _ => null
@@ -69,7 +72,7 @@ public static class DiagramRenderer
     public static bool TryRenderHtml(string language, string source, int instance, [NotNullWhen(true)] out string? html)
     {
         if (!language.Equals(IsometricLanguage, StringComparison.OrdinalIgnoreCase))
-            return TryRenderSvg(language, source, out html);
+            return TryRenderSvg(language, source, instance, out html);
 
         try
         {
@@ -84,7 +87,7 @@ public static class DiagramRenderer
     }
 
     /// <summary>FNV-1a, which unlike <see cref="string.GetHashCode()"/> stays the same between runs.</summary>
-    private static uint StableHash(string text)
+    internal static uint StableHash(string text)
     {
         var hash = 2166136261u;
         foreach (var character in text) hash = (hash ^ character) * 16777619u;
