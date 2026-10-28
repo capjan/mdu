@@ -14,7 +14,7 @@
 
 /* Tiles are quiet rows on the page background; only the icon chip carries a surface. The colors mix from the site
    palette, so a custom palette keeps its character. Secondary text keeps a contrast of at least 7:1 on every row state
-   (WCAG AAA). Keyboard focus uses the site's focus outline; a faint tint of the primary color marks what Enter opens. */
+   (WCAG AAA). Keyboard focus uses the site's focus outline and the same quiet surface as hover. */
 .dashboard {
     --dashboard-surface: color-mix(in srgb, var(--text-primary) 3%, var(--page-background));
     --dashboard-hover: color-mix(in srgb, var(--text-primary) 5%, var(--page-background));
@@ -22,7 +22,6 @@
     --dashboard-line: color-mix(in srgb, var(--text-primary) 10%, var(--page-background));
     --dashboard-line-strong: color-mix(in srgb, var(--text-primary) 24%, var(--page-background));
     --dashboard-muted: color-mix(in srgb, var(--text-primary) 80%, var(--page-background));
-    --dashboard-tint: color-mix(in srgb, var(--link) 7%, var(--page-background));
     --dashboard-radius: 10px;
 }
 
@@ -32,7 +31,6 @@
     --dashboard-chip: color-mix(in srgb, var(--text-primary) 9%, var(--page-background));
     --dashboard-line: color-mix(in srgb, var(--text-primary) 12%, var(--page-background));
     --dashboard-line-strong: color-mix(in srgb, var(--text-primary) 28%, var(--page-background));
-    --dashboard-tint: color-mix(in srgb, var(--link) 13%, var(--page-background));
 }
 
 @media (prefers-color-scheme: dark) {
@@ -42,7 +40,6 @@
         --dashboard-chip: color-mix(in srgb, var(--text-primary) 9%, var(--page-background));
         --dashboard-line: color-mix(in srgb, var(--text-primary) 12%, var(--page-background));
         --dashboard-line-strong: color-mix(in srgb, var(--text-primary) 28%, var(--page-background));
-        --dashboard-tint: color-mix(in srgb, var(--link) 13%, var(--page-background));
     }
 }
 
@@ -335,9 +332,12 @@
 /* One mark at a time: the tile under a moving pointer, or keyboard focus with the site's focus outline. The script sets
    data-input to the input used last, so a resting pointer never competes with the keyboard and the outline does not
    stay behind while the mouse leads. Text fields keep their outline, since typing goes there. */
-:root[data-input="pointer"] .markdown-content a.dashboard-link:hover,
+:root[data-input="pointer"] .markdown-content a.dashboard-link:hover {
+    background: var(--dashboard-hover);
+}
+
 :root:not([data-input="pointer"]) .markdown-content a.dashboard-link:focus-visible {
-    background: var(--dashboard-tint);
+    background: var(--dashboard-hover);
 }
 
 :root:not([data-input="pointer"]) .markdown-content :is(a.dashboard-link, a.dashboard-page):focus-visible {
@@ -571,7 +571,14 @@
 :root[data-input="pointer"] .markdown-content a.dashboard-page:hover,
 :root:not([data-input="pointer"]) .markdown-content a.dashboard-page:focus-visible {
     border-color: var(--dashboard-line-strong);
-    background: var(--dashboard-tint);
+}
+
+:root[data-input="pointer"] .markdown-content a.dashboard-page:hover {
+    background: var(--dashboard-hover);
+}
+
+:root:not([data-input="pointer"]) .markdown-content a.dashboard-page:focus-visible {
+    background: var(--dashboard-hover);
 }
 
 /* The page links below keep their hover look from the site, but only while the pointer leads. */
