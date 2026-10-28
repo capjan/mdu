@@ -4,6 +4,28 @@ on:
   push:
 
 jobs:
+  conventional-commits:
+    name: Conventional commits
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout pull request commits
+      uses: actions/checkout@v7
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+        fetch-depth: 0
+
+    - name: Check commit messages
+      env:
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      run: |
+        invalid=$(git log --format=%s "$BASE_SHA..HEAD" | grep -Ev '^[[:lower:]][[:lower:][:digit:]-]*(\([^()]+\))?!?: [^[:space:]].*$' || true)
+        if [ -n "$invalid" ]; then
+          echo "::error::Commit messages must follow Conventional Commits: <type>[optional scope][!]: <description>"
+          printf '%s\n' "$invalid"
+          exit 1
+        fi
+
   build-and-test:
     runs-on: ubuntu-latest
 
