@@ -18,6 +18,17 @@ public class MermaidRendererTest
             Log <--> Log
         """;
 
+    [Theory]
+    [InlineData("stateDiagram-v2\nA --> B")]
+    [InlineData("flowchart LR\nA --> B")]
+    [InlineData("sequenceDiagram\nA->>B: Hello")]
+    [InlineData("classDiagram\nA --> B")]
+    public void RemovesFrontMatterAfterLeadingCommentsAndBlankLines(string source)
+    {
+        var withFrontMatter = "\n%% Example\n  \n---\ntitle: Ignored options\n---\n" + source;
+        Assert.Equal(MermaidRenderer.RenderSvg(source), MermaidRenderer.RenderSvg(withFrontMatter));
+    }
+
     [Fact]
     public void RendersWellFormedSvg()
     {

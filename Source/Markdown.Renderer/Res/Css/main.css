@@ -2417,6 +2417,10 @@ pre code {
     stroke: var(--link);
 }
 
+.diagram-link:is(:hover, :focus-visible) .diagram-state-symbol {
+    fill: var(--link);
+}
+
 .diagram-link:is(:hover, :focus-visible) text {
     fill: var(--link);
 }

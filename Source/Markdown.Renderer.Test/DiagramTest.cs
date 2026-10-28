@@ -32,6 +32,17 @@ public class DiagramTest
         Assert.DoesNotContain("<pre", html);
     }
 
+    [Fact]
+    public void RendersStateLinksAndDescriptionsAfterCommentsAndFrontMatter()
+    {
+        var html = Render("```mermaid\n%% Lifecycle\n---\ntitle: Options\n---\nstateDiagram-v2\nstate \"In review\" as Review\nReview: Waiting for approval\nclick Review href guide.md#state;\n```\n");
+        Assert.Contains("class=\"diagram-state\"", html);
+        Assert.Contains("href=\"guide.html#state\"", html);
+        Assert.Contains("In review", html);
+        Assert.Contains("Waiting for approval", html);
+        Assert.DoesNotContain("<pre", html);
+    }
+
     [Theory]
     [InlineData("stateDiagram")]
     [InlineData("stateDiagram-v2")]

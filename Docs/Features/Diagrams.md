@@ -152,11 +152,12 @@ stateDiagram-v2
         Pending --> Pending: request changes
         Approved --> [*]
     }
+    Review: Waiting for approval
     Draft --> Review: submit
     Review --> Draft: revise
     Review --> Published: publish
     Published --> [*]
-    click Published href "../Usage/render.md"
+    click Published href ../Usage/render.md
 ```
 ~~~
 
@@ -170,14 +171,15 @@ stateDiagram-v2
         Pending --> Pending: request changes
         Approved --> [*]
     }
+    Review: Waiting for approval
     Draft --> Review: submit
     Review --> Draft: revise
     Review --> Published: publish
     Published --> [*]
-    click Published href "../Usage/render.md"
+    click Published href ../Usage/render.md
 ```
 
-Composite states contain their own diagram. Their frames grow around their contents, and transitions between composites connect to their frames. The Published state links to the render command documentation.
+Composite states contain their own diagram. Their frames grow around their contents, and transitions between composites connect to their frames. The description below the display name adds context to the review state. The Published state links to the render command documentation using an unquoted `href` destination.
 
 Choice nodes show conditional paths; fork and join bars split and merge transitions:
 
@@ -223,19 +225,19 @@ stateDiagram-v2
 | --- | --- | --- |
 | Header | `stateDiagram-v2`, `stateDiagram` | Starts a state diagram |
 | States | `Idle`, `state Idle`, `state "Waiting for input" as Idle` | Declares a state, optionally with a display label; transitions also introduce states |
-| Descriptions | `Idle: Waiting for input` | Sets the label; repeated descriptions add lines |
+| Descriptions | `Idle: Waiting for input` | Sets the label, or appends to an explicit display name; repeated descriptions add lines |
 | Transitions | `Idle --> Active`, `Active --> Active: retry` | Draws an arrow, optionally with a label; self-transitions and cycles are supported |
 | Start and end | `[*] --> Idle`, `Active --> [*]` | Draws a start circle or final double circle, local to each composite |
 | Composite states | `state Active {` … `}` | Groups states; composites may be nested and may use quoted aliases |
 | Choice | `state Decision <<choice>>` | Draws a diamond; conditions can be written in transition labels |
 | Fork and join | `state Split <<fork>>`, `state Merge <<join>>` | Draws a bar perpendicular to the flow direction |
 | Direction | `direction TB`, `direction BT`, `direction LR`, `direction RL` | Sets the direction of the current diagram or composite; `TD` is an alias for `TB`; each scope defaults to top to bottom |
-| Links | `click Idle href "details.md"`, `click Idle "https://example.com/"` | Links a state or composite frame; see [Clickable nodes](#clickable-nodes) |
+| Links | `click Idle href details.md`, `click Idle "https://example.com/"` | Links a state or composite frame; see [Clickable nodes](#clickable-nodes) |
 | Line breaks | `<br>` or `\n` in labels | Starts a new line |
 | Accessible title | `accTitle: Text` | Names the diagram for assistive technology |
 | Comments | `%% comment` | Ignores the rest of the line, outside quotes |
 
-Write one statement per line, optionally followed by a semicolon. State IDs use letters, digits, underscores, and hyphens and must be unique across the diagram. Transitions stay within a composite's scope; connect the composite states themselves to cross their boundaries. State links accept quoted destinations and an optional ignored tooltip. Custom styles and `:::` class suffixes are ignored so states follow the page theme.
+Write one statement per line, optionally followed by a semicolon. State IDs use letters, digits, underscores, and hyphens and must be unique across the diagram. Transitions stay within a composite's scope; connect the composite states themselves to cross their boundaries. State links accept quoted destinations or unquoted destinations after `href`, and an optional ignored tooltip. A linked composite has the same full-frame click area in HTML and PDF; its child links retain their own destinations. Mermaid front matter may follow leading blank lines and `%%` comments. Custom styles and `:::` class suffixes are ignored so states follow the page theme.
 
 Notes, concurrent regions (`--`), history states, JavaScript callbacks, and multiline `accDescr` blocks are not supported. These statements keep the whole diagram as a code block and produce `MDU010` during linting.
 

@@ -141,5 +141,14 @@ public class UnitTestMarkdownDocument
         var link = Assert.Single(MarkdownDocument.ReadLinks($"```mermaid\n{header}\nclick A href \"guide.md\"\n```"));
         Assert.Equal("guide.md", link.Destination);
     }
+    [Fact]
+    public void ReadLinksIncludesUnquotedStateLinksAfterCommentsAndFrontMatter()
+    {
+        const string markdown = "```mermaid\n%% Lifecycle\n---\ntitle: Options\n---\nstateDiagram-v2\nA\nclick A href guide.md#state; %% Link\n```";
+        var link = Assert.Single(MarkdownDocument.ReadLinks(markdown));
+        Assert.Equal("guide.md#state", link.Destination);
+        Assert.Equal(8, link.LineNumber);
+    }
+
 
 }

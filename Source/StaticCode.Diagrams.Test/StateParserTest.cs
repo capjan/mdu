@@ -120,6 +120,25 @@ public class StateParserTest
     }
 
     [Theory]
+    [InlineData("details.md")]
+    [InlineData("../guide.md#details")]
+    [InlineData("https://example.com/?a=1&b=2")]
+    public void ParsesUnquotedHrefDestinations(string destination)
+    {
+        var diagram = StateParser.Parse($"stateDiagram-v2\nA\nclick A href {destination}; %% link");
+        Assert.Equal(destination, Assert.Single(diagram.Nodes).Href);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" {\nPending\n}")]
+    public void AppendsDescriptionsToExplicitDisplayNames(string content)
+    {
+        var diagram = StateParser.Parse($"stateDiagram-v2\nstate \"In review\" as Review{content}\nReview: Waiting for approval\nReview: Please respond");
+        Assert.Equal("In review\nWaiting for approval\nPlease respond", Assert.Single(diagram.Nodes).Label);
+    }
+
+    [Theory]
     [InlineData("stateDiagram-v3\nA", 1)]
     [InlineData("stateDiagram-v2\nA -->", 2)]
     [InlineData("stateDiagram-v2\nA --> B --> C", 2)]

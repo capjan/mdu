@@ -19,7 +19,7 @@ public class MarkdownDocumentReader : IMarkdownDocumentReader
         @"^(?:(?:flowchart|graph)(?:[ \t]+(?:TB|TD|BT|LR|RL))?[ \t]*(?:;.*)?|stateDiagram(?:-v2)?[ \t]*;?)[ \t]*(?:%%.*)?$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex MermaidNodeLinkRegex = new(
-        "^click[ \\t]+(?<id>[\\p{L}\\p{N}_-]+)[ \\t]+(?:href[ \\t]+)?(?:\"(?<doubleUrl>[^\"]*)\"|'(?<singleUrl>[^']*)'|(?<bareUrl>[^ \\t]+))(?:[ \\t]+\"[^\"]*\")?[ \\t]*;?[ \\t]*(?:%%.*)?$",
+        "^click[ \\t]+(?<id>[\\p{L}\\p{N}_-]+)[ \\t]+(?:href[ \\t]+)?(?:\"(?<doubleUrl>[^\"]*)\"|'(?<singleUrl>[^']*)'|(?<bareUrl>[^ \\t]+?))(?:[ \\t]+\"[^\"]*\")?[ \\t]*;?[ \\t]*(?:%%.*)?$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex PlantUmlNodeLinkRegex = new(
         "^url[ \\t]+of[ \\t]+(?<id>[\\p{L}\\p{N}_.]+)[ \\t]+is[ \\t]+\\[\\[(?<url>[^\\]]+)\\]\\][ \\t]*$",

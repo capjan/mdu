@@ -18,12 +18,12 @@ public sealed class StateParser
     private static readonly Regex BareState = new(@"^(?<id>" + Id + @")(?:\:\:\:[\w-]+)?$", RegexOptions.Compiled);
     private static readonly Regex Direction = new(@"^direction\s+(?<value>TB|TD|BT|LR|RL)$", RegexOptions.Compiled);
     private static readonly Regex Click = new(
-        "^click\\s+(?<id>" + Id + ")\\s+(?:href\\s+)?(?:\"(?<doubleUrl>[^\"]*)\"|'(?<singleUrl>[^']*)')(?:\\s+\"[^\"]*\")?$", RegexOptions.Compiled);
+        "^click\\s+(?<id>" + Id + ")\\s+(?=href\\s|[\"'])(?:href\\s+)?(?:\"(?<doubleUrl>[^\"]*)\"|'(?<singleUrl>[^']*)'|(?<bareUrl>[^ \\t\"']+?))(?:\\s+\"[^\"]*\")?;?$", RegexOptions.Compiled);
 
     private readonly string[] _lines;
     private readonly Dictionary<string, (StateNode Node, StateDiagram Scope)> _nodes = new(StringComparer.Ordinal);
     private readonly List<(string Id, string Href, int Line)> _links = new();
-    private readonly HashSet<StateNode> _described = new();
+    private readonly HashSet<StateNode> _labelled = new();
     private int _line;
 
     private StateParser(string source) => _lines = source.ReplaceLineEndings("\n").Split('\n');
@@ -84,7 +84,9 @@ public sealed class StateParser
             var click = Click.Match(line);
             if (click.Success)
             {
-                var url = click.Groups["doubleUrl"].Success ? click.Groups["doubleUrl"].Value : click.Groups["singleUrl"].Value;
+                var url = click.Groups["doubleUrl"].Success ? click.Groups["doubleUrl"].Value
+                    : click.Groups["singleUrl"].Success ? click.Groups["singleUrl"].Value
+                    : click.Groups["bareUrl"].Value;
                 _links.Add((click.Groups["id"].Value, url, _line + 1));
                 continue;
             }
@@ -101,7 +103,11 @@ public sealed class StateParser
             if (declaration.Success)
             {
                 var node = GetNode(diagram, declaration.Groups["id"].Value);
-                if (declaration.Groups["label"].Success) node.Label = Clean(declaration.Groups["label"].Value);
+                if (declaration.Groups["label"].Success)
+                {
+                    node.Label = Clean(declaration.Groups["label"].Value);
+                    _labelled.Add(node);
+                }
                 if (declaration.Groups["kind"].Success)
                 {
                     if (node.Content != null) throw Error("A composite state cannot be a choice, fork, or join.");
@@ -125,7 +131,7 @@ public sealed class StateParser
             {
                 var node = GetNode(diagram, description.Groups["id"].Value);
                 var label = Clean(description.Groups["label"].Value);
-                node.Label = _described.Add(node) ? label : node.Label + "\n" + label;
+                node.Label = _labelled.Add(node) ? label : node.Label + "\n" + label;
                 continue;
             }
             var bare = BareState.Match(line);

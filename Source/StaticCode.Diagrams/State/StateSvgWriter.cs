@@ -35,24 +35,9 @@ internal static class StateSvgWriter
         var boxes = diagram.Nodes.Select((node, index) => CreateBox(node, children[index], horizontal)).ToArray();
         var labels = diagram.Edges.Select(edge => edge.Label == null ? null : NodeShapes.CreateLabel(edge.Label)).ToArray();
         var indices = diagram.Nodes.Select((node, index) => (node.Id, index)).ToDictionary(item => item.Id, item => item.index);
-        var margins = new double[boxes.Length];
-        var loops = new double[diagram.Edges.Count];
-        var loopExtents = new double[boxes.Length];
-        var alongSizes = boxes.Select(box => horizontal ? box.Width : box.Height).ToArray();
-        for (var index = 0; index < diagram.Edges.Count; index++)
-        {
-            var edge = diagram.Edges[index];
-            if (edge.From != edge.To) continue;
-            var node = indices[edge.From];
-            loops[index] = 22 + loopExtents[node];
-            var label = labels[index];
-            var labelExtent = label == null ? 0 : horizontal ? label.Height : label.Width;
-            alongSizes[node] = Math.Max(alongSizes[node], label == null ? 0 : horizontal ? label.Width : label.Height);
-            loopExtents[node] += 10 + labelExtent / 1.1;
-            margins[node] = Math.Max(margins[node], loops[index] * 1.1 + labelExtent + 10);
-        }
+        var (nodes, loops) = SvgGraphEdges.SizeNodes(boxes, diagram.Edges, labels, indices, horizontal);
         var layout = new LayeredLayout().Compute(
-            boxes.Select((box, index) => new LayoutNode(horizontal ? alongSizes[index] : box.Width, horizontal ? box.Height : alongSizes[index], margins[index])).ToArray(),
+            nodes,
             diagram.Edges.Select((edge, index) => new LayoutEdge(indices[edge.From], indices[edge.To],
                 LabelWidth: labels[index]?.Width ?? 0, LabelHeight: labels[index]?.Height ?? 0)).ToArray(),
             diagram.Direction switch
@@ -97,14 +82,14 @@ internal static class StateSvgWriter
             var to = scene.Indices[edge.To];
             if (from == to)
             {
-                labelCenters[index] = FlowchartSvgWriter.WriteSelfLoop(svg, edge, scene.Boxes[from], centers[from],
+                labelCenters[index] = SvgGraphEdges.WriteSelfLoop(svg, edge, scene.Boxes[from], centers[from],
                     scene.Loops[index], scene.Labels[index], axis, cross, horizontal);
                 continue;
             }
             var points = scene.Layout.Edges[index].Points.Select(point => point + origin).ToList();
-            points[0] = FlowchartSvgWriter.SnapToShape(scene.Boxes[from], centers[from], points[0], axis, cross, horizontal);
-            points[^1] = FlowchartSvgWriter.SnapToShape(scene.Boxes[to], centers[to], points[^1], axis, cross, horizontal);
-            FlowchartSvgWriter.WriteRoute(svg, edge, points, axis);
+            points[0] = SvgGraphEdges.SnapToShape(scene.Boxes[from], centers[from], points[0], axis, cross, horizontal);
+            points[^1] = SvgGraphEdges.SnapToShape(scene.Boxes[to], centers[to], points[^1], axis, cross, horizontal);
+            SvgGraphEdges.WriteRoute(svg, edge, points, axis);
             if (scene.Layout.Edges[index].LabelCenter is { } label) labelCenters[index] = label + origin;
         }
         svg.Append("</g>\n<g class=\"diagram-edge-labels\">\n");
@@ -141,7 +126,7 @@ internal static class StateSvgWriter
         svg.Append("<g class=\"diagram-state-composite\">");
         var href = SafeHref(node.Href);
         if (href != null)
-            svg.Append($"<a class=\"diagram-link\" href=\"{href}\" data-pdf-bounds=\"{F(left)} {F(top)} {F(box.Width)} {F(header)}\">");
+            svg.Append($"<a class=\"diagram-link\" href=\"{href}\" data-pdf-bounds=\"{F(left)} {F(top)} {F(box.Width)} {F(box.Height)}\">");
         svg.Append($"<rect class=\"diagram-container-shape\" x=\"{F(left)}\" y=\"{F(top)}\" width=\"{F(box.Width)}\" height=\"{F(box.Height)}\" rx=\"12\"/>")
             .Append($"<path class=\"diagram-container-detail\" d=\"M{F(left)} {F(top + header)}h{F(box.Width)}\"/>");
         WriteText(svg, box.Lines, new Point(center.X, top + header / 2), "diagram-container-label");

@@ -38,11 +38,13 @@ public static class MermaidRenderer
     private static string PrepareSource(string source)
     {
         source = source.ReplaceLineEndings("\n");
-        if (source.TrimStart().StartsWith("---\n", StringComparison.Ordinal))
+        var lines = source.Split('\n');
+        var start = 0;
+        while (start < lines.Length && (lines[start].Trim().Length == 0 || lines[start].TrimStart().StartsWith("%%", StringComparison.Ordinal))) start++;
+        if (start < lines.Length && lines[start].Trim() == "---")
         {
-            var start = source.IndexOf("---\n", StringComparison.Ordinal);
-            var end = source.IndexOf("\n---", start + 4, StringComparison.Ordinal);
-            if (end >= 0) source = source.Remove(start, end + 4 - start).TrimStart('\n');
+            for (var end = start + 1; end < lines.Length; end++)
+                if (lines[end].Trim() == "---") return string.Join('\n', lines.Skip(end + 1));
         }
 
         return source;

@@ -218,6 +218,33 @@ public class StateRendererTest
         Assert.Equal("https://example.com/?a=1&b=2", Assert.Single(WithClass(root, "diagram-link")).Attribute("href")?.Value);
     }
 
+    [Fact]
+    public void CompositePdfBoundsCoverTheFrameAndRetainSeparateChildLinks()
+    {
+        var root = XElement.Parse(MermaidRenderer.RenderSvg(Sample));
+        var composite = Assert.Single(WithClass(root, "diagram-state-composite"));
+        var frame = composite.Descendants().Single(element => HasClass(element, "diagram-container-shape"));
+        var link = composite.Elements().Single(element => HasClass(element, "diagram-link"));
+        var bounds = Bounds(frame);
+        Assert.Equal(new[] { bounds.X, bounds.Y, bounds.Width, bounds.Height },
+            link.Attribute("data-pdf-bounds")!.Value.Split(' ').Select(value => double.Parse(value, CultureInfo.InvariantCulture)));
+        Assert.Equal("https://example.com/reviews", composite.Descendants().Single(element => element.Attribute("href")?.Value.StartsWith("https:") == true).Attribute("href")?.Value);
+    }
+
+    [Theory]
+    [InlineData("TD")]
+    [InlineData("BT")]
+    [InlineData("LR")]
+    [InlineData("RL")]
+    public void SharesFlowchartEdgeAndSelfLoopGeometry(string direction)
+    {
+        var state = XElement.Parse(MermaidRenderer.RenderSvg($"stateDiagram-v2\ndirection {direction}\nA --> A: Retry the current operation\nA --> A: wait\nA --> B"));
+        var flowchart = XElement.Parse(MermaidRenderer.RenderSvg($"flowchart {direction}\nA(A) -->|Retry the current operation| A\nA -->|wait| A\nA --> B(B)"));
+        foreach (var cssClass in new[] { "diagram-edges", "diagram-edge-labels" })
+            Assert.Equal(Assert.Single(WithClass(flowchart, cssClass)).ToString(), Assert.Single(WithClass(state, cssClass)).ToString());
+        AssertInsideViewBox(flowchart);
+    }
+
     private static IEnumerable<XElement> WithClass(XElement root, string cssClass) => root.Descendants().Where(element => HasClass(element, cssClass));
     private static bool HasClass(XElement element, string cssClass) => element.Attribute("class")?.Value.Split(' ').Contains(cssClass) == true;
     private static double Number(XElement element, string name) => double.Parse(element.Attribute(name)!.Value, CultureInfo.InvariantCulture);

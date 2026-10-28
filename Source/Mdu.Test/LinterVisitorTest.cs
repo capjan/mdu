@@ -7,10 +7,13 @@ namespace Mdu.Test;
 
 public class LinterVisitorTest
 {
-    [Fact]
-    public void SupportedStateDiagramWithExistingStateLinkPasses()
+    [Theory]
+    [InlineData("\"Guide.md\"")]
+    [InlineData("Guide.md")]
+    [InlineData("Guide.md;")]
+    public void SupportedStateDiagramWithExistingStateLinkPasses(string destination)
     {
-        WithPage("Overview.md", "# Overview\n\n```mermaid\nstateDiagram-v2\n[*] --> A\nclick A href \"Guide.md\"\n```", "Overview", 0,
+        WithPage("Overview.md", $"# Overview\n\n```mermaid\n%% Lifecycle\n---\ntitle: Options\n---\nstateDiagram-v2\n[*] --> A\nclick A href {destination}\n```", "Overview", 0,
             errors => Assert.Empty(errors),
             setup: root => File.WriteAllText(Path.Combine(root, "Guide.md"), "# Guide"),
             assertWarnings: Assert.Empty);
