@@ -24,7 +24,7 @@ The repository button links to the repository root and is named after its path. 
 
 Web IDE URLs work too. `https://code.example.com/-/ide/project/group/subgroup/project/edit/main/-/docs/` gives a GitLab button linking to `https://code.example.com/group/subgroup/project`, including on self-hosted instances. A `github.dev` URL such as `https://github.dev/example/project/blob/main/docs/` gives a GitHub button linking to `https://github.com/example/project`. The page's edit link keeps the original Web IDE URL in both cases.
 
-The button shows the GitLab logo for GitLab's `/-/edit/` route and for hosts whose name contains `gitlab`, and the GitHub logo for hosts whose name contains `github`, such as GitHub Enterprise. Other hosts with the GitHub-style `/owner/repository/edit/` route get a general repository icon. On a GitLab instance served under a path, such as `https://example.com/gitlab/`, that path is part of the button name.
+The button shows the GitLab logo for GitLab's `/-/edit/` route and for hosts whose name contains `gitlab`, and the GitHub logo for hosts whose name contains `github`, such as GitHub Enterprise. Other hosts with the GitHub-style `/owner/repository/edit/` route get a general repository icon. On a GitLab instance served under a path, such as `https://example.com/gitlab/`, that path is part of the button name and repository URL, including for Web IDE links. For example, `https://example.com/gitlab/-/ide/project/group/project/edit/main/-/docs/` gives `gitlab/group/project` and links to `https://example.com/gitlab/group/project`.
 
 ## Examples
 
