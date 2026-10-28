@@ -416,10 +416,14 @@ body {
     border-radius: 2px;
 }
 
-/* The page footer sits in .markdown-content, whose inline-link focus rule is more specific, so the cards restore
-   their own offset and radius here. */
+/* The page footer sits in .markdown-content, whose inline-link focus rule is more specific. The footer links and
+   pagination cards restore the shared offset here, and the cards keep their own radius. */
+.markdown-content .page-meta a:focus-visible,
 .markdown-content .page-pagination-link:focus-visible {
     outline-offset: 3px;
+}
+
+.markdown-content .page-pagination-link:focus-visible {
     border-radius: 15px;
 }
 
