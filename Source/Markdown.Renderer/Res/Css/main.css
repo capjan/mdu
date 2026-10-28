@@ -1768,7 +1768,7 @@ blockquote {
 
 .markdown-content a:focus-visible {
     outline: 2px solid var(--link);
-    outline-offset: 2px;
+    outline-offset: 3px;
     border-radius: 2px;
 }
 
