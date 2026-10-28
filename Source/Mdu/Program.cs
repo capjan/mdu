@@ -108,7 +108,7 @@ var outputPath = new Argument<string?>("outpath")
 };
 var editPageRoot = new Option<string>("--editPageRoot")
 {
-    Description = "Root GitHub edit URL for Markdown files. Adds per-page edit links and a repository button.",
+    Description = "Root GitHub or GitLab edit URL for Markdown files. Adds per-page edit links and a repository button.",
     DefaultValueFactory = _ => string.Empty
 };
 renderCommand.Arguments.Add(renderRootPath);
@@ -172,7 +172,7 @@ var noBrowser = new Option<bool>("--no-browser")
 };
 var serveEditPageRoot = new Option<string>("--editPageRoot")
 {
-    Description = "Root GitHub edit URL for Markdown files. Adds per-page edit links and a repository button.",
+    Description = "Root GitHub or GitLab edit URL for Markdown files. Adds per-page edit links and a repository button.",
     DefaultValueFactory = _ => string.Empty
 };
 serveCommand.Arguments.Add(serveRootPath);

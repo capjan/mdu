@@ -11,6 +11,7 @@ using Markdig.Syntax.Inlines;
 using Markdown.Renderer.MarkdigExtension;
 using Markdown.Renderer.Res.Model;
 using StaticCode.Diagrams;
+using StaticCode.Icons;
 
 namespace Markdown.Renderer;
 
@@ -269,7 +270,7 @@ public class HtmlRenderer
             ["PAGE_TOC"] = dashboard is null ? RenderOnThisPage(tocHeadings) : string.Empty,
             ["PAGE_FOOTER"] = RenderPageFooter(model.NavigationItems, editPageLink, !editLinkInserted, lastModified) + dashboardFootnotes,
             ["BACK_TO_TOP"] = "<a class=\"back-to-top\" id=\"back-to-top\" href=\"#top\" aria-label=\"Back to top\" title=\"Back to top\"><svg viewBox=\"0 0 20 20\" aria-hidden=\"true\"><path d=\"M10 16V4m-5 5 5-5 5 5\"></path></svg><span>Back to top</span></a>",
-            ["GITHUB_REPOSITORY_LINK"] = RenderGitHubRepositoryLink(editPageLink),
+            ["REPOSITORY_LINK"] = RenderRepositoryLink(editPageLink),
             ["PAGE_SCRIPTS"] =
                 (hasIconSearch
                     ? $"<script defer src=\"{HtmlEncoder.Default.Encode(prefix + "js/" + IconSearch.ScriptFileName)}\"></script>{Environment.NewLine}"
@@ -372,22 +373,68 @@ public class HtmlRenderer
         }
     }
 
-    private static string RenderGitHubRepositoryLink(string editPageLink)
+    private sealed record RepositoryProvider(string Label, string IconShortcode);
+
+    private static readonly RepositoryProvider GitHubProvider = new("GitHub repository", "simple-github");
+    private static readonly RepositoryProvider GitLabProvider = new("GitLab repository", "simple-gitlab");
+    private static readonly RepositoryProvider OtherProvider = new("Repository", "octicons-repo-16");
+
+    // The edit link is all the renderer knows about the repository. GitLab puts its routes after a "-" segment, so
+    // everything before "/-/edit/" is the project path, nested groups included. The GitHub route
+    // /owner/repository/edit/ is used by other hosts too, so its host name decides the label and icon. Like the
+    // repository imports, a host name containing "gitlab" counts as GitLab.
+    internal static string RenderRepositoryLink(string editPageLink)
     {
         if (!Uri.TryCreate(editPageLink, UriKind.Absolute, out var editPageUri) ||
             (editPageUri.Scheme != Uri.UriSchemeHttp && editPageUri.Scheme != Uri.UriSchemeHttps))
             return string.Empty;
 
         var pathSegments = editPageUri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        if (pathSegments.Length < 4 || !pathSegments[2].Equals("edit", StringComparison.OrdinalIgnoreCase))
+        var isGitLabHost = editPageUri.Host.Contains("gitlab", StringComparison.OrdinalIgnoreCase);
+        var hasEditRoute = pathSegments.Length >= 4 && pathSegments[1] != "-" &&
+                           pathSegments[2].Equals("edit", StringComparison.OrdinalIgnoreCase);
+        var gitLabEditIndex = FindGitLabEditRoute(pathSegments);
+
+        RepositoryProvider provider;
+        string[] repositorySegments;
+        // A GitHub file path may contain "-/edit" folders, so the GitLab route only wins over the GitHub route on a
+        // GitLab host.
+        if (gitLabEditIndex >= 2 && (isGitLabHost || !hasEditRoute))
+        {
+            provider = GitLabProvider;
+            repositorySegments = pathSegments[..gitLabEditIndex];
+        }
+        else if (hasEditRoute)
+        {
+            provider = isGitLabHost ? GitLabProvider
+                : editPageUri.Host.Contains("github", StringComparison.OrdinalIgnoreCase) ? GitHubProvider
+                : OtherProvider;
+            repositorySegments = pathSegments[..2];
+        }
+        else
             return string.Empty;
 
-        var repositoryName = $"{pathSegments[0]}/{pathSegments[1]}";
-        var repositoryUrl = $"{editPageUri.GetLeftPart(UriPartial.Authority)}/{repositoryName}";
+        if (!IconCatalog.TryGetIcon(provider.IconShortcode, out var icon)) return string.Empty;
+
+        var repositoryName = string.Join('/', repositorySegments.Select(Uri.UnescapeDataString));
+        var repositoryUrl = $"{editPageUri.GetLeftPart(UriPartial.Authority)}/{string.Join('/', repositorySegments)}";
         var encodedRepositoryUrl = HtmlEncoder.Default.Encode(repositoryUrl);
+        var encodedLabel = HtmlEncoder.Default.Encode($"{provider.Label}: {repositoryName}");
         var encodedRepositoryName = HtmlEncoder.Default.Encode(repositoryName);
 
-        return $"<a class=\"repository-link\" href=\"{encodedRepositoryUrl}\" target=\"_blank\" rel=\"noopener noreferrer\" title=\"GitHub repository: {encodedRepositoryName}\" aria-label=\"GitHub repository: {encodedRepositoryName}\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M12 .5C5.65.5.5 5.65.5 12c0 5.1 3.31 9.28 7.94 10.78.58.11.79-.25.79-.56v-2.02c-3.23.7-3.91-1.37-3.91-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.71.08-.71 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.58-.29-5.29-1.29-5.29-5.75 0-1.27.45-2.31 1.19-3.13-.12-.29-.52-1.48.11-3.08 0 0 .97-.31 3.17 1.19a11.1 11.1 0 0 1 5.77 0c2.2-1.5 3.17-1.19 3.17-1.19.63 1.6.23 2.79.11 3.08.74.82 1.19 1.86 1.19 3.13 0 4.47-2.72 5.45-5.31 5.74.42.36.78 1.07.78 2.16v3.2c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z\"></path></svg><span>{encodedRepositoryName}</span></a>";
+        return $"<a class=\"repository-link\" href=\"{encodedRepositoryUrl}\" target=\"_blank\" rel=\"noopener noreferrer\" title=\"{encodedLabel}\" aria-label=\"{encodedLabel}\">{icon.ToSvg()}<span>{encodedRepositoryName}</span></a>";
+
+        // The index of the "-" segment of a "/-/edit/<branch>" route, or -1.
+        static int FindGitLabEditRoute(string[] segments)
+        {
+            for (var index = 0; index < segments.Length - 2; index++)
+            {
+                if (segments[index] == "-" && segments[index + 1].Equals("edit", StringComparison.OrdinalIgnoreCase))
+                    return index;
+            }
+
+            return -1;
+        }
     }
 
     private static string RenderNavigationItems(IReadOnlyList<NavigationItem> navigationItems)
