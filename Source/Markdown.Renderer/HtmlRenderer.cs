@@ -380,7 +380,9 @@ public class HtmlRenderer
     private static readonly RepositoryProvider OtherProvider = new("Repository", "octicons-repo-16");
 
     // The edit link is all the renderer knows about the repository. GitLab puts its routes after a "-" segment, so
-    // everything before "/-/edit/" is the project path, nested groups included. The GitHub route
+    // everything before "/-/edit/" is the project path, nested groups included. Its Web IDE instead puts the
+    // project path between "/-/ide/project/" and "/edit/"; any instance path prefix stays part of the repository URL.
+    // The GitHub route
     // /owner/repository/edit/ is used by other hosts too, so its host name decides the label and icon. Like the
     // repository imports, a host name containing "gitlab" counts as GitLab.
     internal static string RenderRepositoryLink(string editPageLink)
@@ -391,15 +393,32 @@ public class HtmlRenderer
 
         var pathSegments = editPageUri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
         var isGitLabHost = editPageUri.Host.Contains("gitlab", StringComparison.OrdinalIgnoreCase);
+        var isGitHubDev = editPageUri.Host.Equals("github.dev", StringComparison.OrdinalIgnoreCase);
         var hasEditRoute = pathSegments.Length >= 4 && pathSegments[1] != "-" &&
                            pathSegments[2].Equals("edit", StringComparison.OrdinalIgnoreCase);
         var gitLabEditIndex = FindGitLabEditRoute(pathSegments);
+        var webIdeRouteIndex = FindGitLabWebIdeRoute(pathSegments);
 
         RepositoryProvider provider;
         string[] repositorySegments;
+        var repositoryAuthority = editPageUri.GetLeftPart(UriPartial.Authority);
+        if (webIdeRouteIndex >= 0 && !isGitHubDev && (isGitLabHost || !hasEditRoute))
+        {
+            var webIdeEditIndex = FindGitLabWebIdeEditRoute(pathSegments, webIdeRouteIndex);
+            if (webIdeEditIndex < 0) return string.Empty;
+            provider = GitLabProvider;
+            repositorySegments = pathSegments[..webIdeRouteIndex]
+                .Concat(pathSegments[(webIdeRouteIndex + 3)..webIdeEditIndex]).ToArray();
+        }
+        else if (isGitHubDev && pathSegments.Length >= 2)
+        {
+            provider = GitHubProvider;
+            repositorySegments = pathSegments[..2];
+            repositoryAuthority = "https://github.com";
+        }
         // A GitHub file path may contain "-/edit" folders, so the GitLab route only wins over the GitHub route on a
         // GitLab host.
-        if (gitLabEditIndex >= 2 && (isGitLabHost || !hasEditRoute))
+        else if (gitLabEditIndex >= 2 && (isGitLabHost || !hasEditRoute))
         {
             provider = GitLabProvider;
             repositorySegments = pathSegments[..gitLabEditIndex];
@@ -417,12 +436,36 @@ public class HtmlRenderer
         if (!IconCatalog.TryGetIcon(provider.IconShortcode, out var icon)) return string.Empty;
 
         var repositoryName = string.Join('/', repositorySegments.Select(Uri.UnescapeDataString));
-        var repositoryUrl = $"{editPageUri.GetLeftPart(UriPartial.Authority)}/{string.Join('/', repositorySegments)}";
+        var repositoryUrl = $"{repositoryAuthority}/{string.Join('/', repositorySegments)}";
         var encodedRepositoryUrl = HtmlEncoder.Default.Encode(repositoryUrl);
         var encodedLabel = HtmlEncoder.Default.Encode($"{provider.Label}: {repositoryName}");
         var encodedRepositoryName = HtmlEncoder.Default.Encode(repositoryName);
 
         return $"<a class=\"repository-link\" href=\"{encodedRepositoryUrl}\" target=\"_blank\" rel=\"noopener noreferrer\" title=\"{encodedLabel}\" aria-label=\"{encodedLabel}\">{icon.ToSvg()}<span>{encodedRepositoryName}</span></a>";
+
+        static int FindGitLabWebIdeRoute(string[] segments)
+        {
+            for (var index = 0; index < segments.Length - 2; index++)
+            {
+                if (segments[index] == "-" && segments[index + 1] == "ide" && segments[index + 2] == "project")
+                    return index;
+            }
+
+            return -1;
+        }
+
+        // At least a group and project follow the Web IDE route before "/edit/<branch>/-/".
+        static int FindGitLabWebIdeEditRoute(string[] segments, int routeIndex)
+        {
+            for (var index = routeIndex + 5; index < segments.Length - 2; index++)
+            {
+                if (segments[index].Equals("edit", StringComparison.OrdinalIgnoreCase) &&
+                    segments[index + 1] != "-" && segments[index + 2] == "-")
+                    return index;
+            }
+
+            return -1;
+        }
 
         // The index of the "-" segment of a "/-/edit/<branch>" route, or -1.
         static int FindGitLabEditRoute(string[] segments)
