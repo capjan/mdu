@@ -1,6 +1,6 @@
 # Callouts
 
-Callouts, also called admonitions or alerts, highlight information that readers should not miss. MDU uses the syntax of [GitHub alerts](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-syntax#alerts), so your files look right on GitHub and in the rendered site.
+Callouts, also called admonitions or alerts, highlight information that readers should not miss. MDU uses the syntax of __GitHub alerts__, so your files look right on GitHub and in the rendered site.
 
 ## Syntax
 
