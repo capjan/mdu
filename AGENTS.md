@@ -27,6 +27,16 @@ MDU (Markdown Documentation Utility) is a .NET command-line tool distributed as 
 - The release workflow validates the Apple signing configuration in `prepare-release`, before tests and platform builds: repository secrets `APPLE_DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64` (base64-encoded Developer ID Application `.p12`), `APPLE_DEVELOPER_ID_APPLICATION_CERTIFICATE_PASSWORD`, and `APPLE_NOTARIZATION_PRIVATE_KEY` (App Store Connect API key `.p8`); and repository variables `APPLE_NOTARIZATION_KEY_ID` and `APPLE_NOTARIZATION_ISSUER_ID`. The API key must have the Developer role or higher. Create the Developer ID Application certificate in the Apple Developer account and create the API key under App Store Connect **Users and Access → Integrations**.
 - Docker Hub publishing requires repository secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` (an access token with read and write permissions) and the public Docker Hub repository `capjan/mdu`. Releases publish the multi-architecture image there.
 
+## Keyboard focus style
+
+Every focusable element in the rendered site shows keyboard focus the same way, so a Tab through the top bar, the sidebar, the header, the page footer, and the content looks uniform. Pointer focus never shows a ring; only `:focus-visible` gets the style.
+
+- Default: `outline: 2px solid var(--link); outline-offset: 3px;` on `:focus-visible`, in the shared focus rule at the top of the site styles in `Source/Markdown.Renderer/Res/Css/main.css`.
+- Rounding: the outline follows the element's own `border-radius`. If the element has no radius, add a `border-radius` on `:focus-visible` that matches the element's shape: 6px for sidebar and top-bar links and the site brand, 2px for inline text links (`.markdown-content a`, `.page-meta a`). Pills keep their own radius, such as the search button and the page pagination links.
+- Inset ring: where an ancestor clips overflow (any element with `overflow` other than `visible`, such as the top navigation bar or the on-this-page list), use `outline-offset: -2px` so the ring is not cut off on any side.
+- Never remove an outline without a visible replacement, and never style `:focus` where `:focus-visible` is meant.
+- Check a new or changed control by tabbing to it with the keyboard in a served page, not by reading the CSS alone.
+
 ## Working in this repository
 
 - Restore and build with `dotnet restore Mdu.sln` and `dotnet build Mdu.sln`.
@@ -44,4 +54,5 @@ MDU (Markdown Documentation Utility) is a .NET command-line tool distributed as 
   ```
   Increment `N` for repeated local builds on the same date. For a first-time installation, replace `dotnet tool update` with `dotnet tool install`. Restart any running `mdu serve` process to use the updated build.
 - Run `dotnet doctor fix` to install this repository's local Git hooks. Use `dotnet doctor diagnose all` to check the hook setup; commit messages must follow Conventional Commits.
+- Open `mdu serve` previews at `http://127.0.0.1:<port>/`, not `localhost`. The preview server listens on IPv4 `127.0.0.1` only, while `localhost` can resolve to IPv6 `::1`, where another listener answers with a bare `Not Found (Not Found)`. Use the same host in URLs given to the user and in browser checks.
 - Keep CLI output plain-text and dependency-light. `System.CommandLine` is the command parser; do not reintroduce Spectre.Console.
