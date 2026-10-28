@@ -402,6 +402,7 @@ body {
 .search-result:focus-visible,
 .site-brand:focus-visible,
 .page-meta a:focus-visible,
+.made-with-mdu a:focus-visible,
 .page-pagination-link:focus-visible {
     outline: 2px solid var(--link);
     outline-offset: 3px;
@@ -2785,6 +2786,10 @@ th, td {
 .made-with-mdu a:hover {
     color: var(--link);
     text-decoration-color: currentColor;
+}
+
+.made-with-mdu a:focus-visible {
+    border-radius: 2px;
 }
 
 .page-meta {
