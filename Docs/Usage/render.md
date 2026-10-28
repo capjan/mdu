@@ -16,7 +16,13 @@ The alias `mdu r` runs the same command. See [Paths and file search](README.md#p
 
 | Option | Effect |
 | --- | --- |
-| `--editPageRoot <url>` | GitHub edit URL of the documentation folder. Adds an edit icon beside each page's level-one heading, or an **Edit this page** link in the footer when there is none, and a repository button with the `owner/repository` name to the header. |
+| `--editPageRoot <url>` | GitHub or GitLab edit URL of the documentation folder. Adds an edit icon beside each page's level-one heading, or an **Edit this page** link in the footer when there is none, and a [repository button](#repository-button) to the header. |
+
+### Repository button
+
+The repository button links to the repository root and is named after its path. A GitHub edit URL such as `https://github.com/example/project/edit/main/docs` gives `example/project`. A GitLab edit URL such as `https://gitlab.com/group/subgroup/project/-/edit/main/docs` keeps nested groups and gives `group/subgroup/project`.
+
+The button shows the GitLab logo for GitLab's `/-/edit/` route and for hosts whose name contains `gitlab`, and the GitHub logo for hosts whose name contains `github`, such as GitHub Enterprise. Other hosts with the GitHub-style `/owner/repository/edit/` route get a general repository icon. On a GitLab instance served under a path, such as `https://example.com/gitlab/`, that path is part of the button name.
 
 ## Examples
 
