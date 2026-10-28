@@ -15,11 +15,11 @@ public class MarkdownDocumentReader : IMarkdownDocumentReader
 {
     private static readonly MarkdownPipeline LinkParsingPipeline =
         new MarkdownPipelineBuilder().UseFootnotes().UsePreciseSourceLocation().Build();
-    private static readonly Regex MermaidFlowchartHeaderRegex = new(
-        @"^(?:flowchart|graph)(?:[ \t]+(?:TB|TD|BT|LR|RL))?[ \t]*(?:;.*)?$",
+    private static readonly Regex MermaidLinkedDiagramHeaderRegex = new(
+        @"^(?:(?:flowchart|graph)(?:[ \t]+(?:TB|TD|BT|LR|RL))?[ \t]*(?:;.*)?|stateDiagram(?:-v2)?[ \t]*;?)[ \t]*(?:%%.*)?$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex MermaidNodeLinkRegex = new(
-        "^click[ \\t]+(?<id>[\\p{L}\\p{N}_]+)[ \\t]+(?:href[ \\t]+)?(?:\"(?<doubleUrl>[^\"]*)\"|'(?<singleUrl>[^']*)'|(?<bareUrl>[^ \\t]+))(?:[ \\t]+\"[^\"]*\")?[ \\t]*;?$",
+        "^click[ \\t]+(?<id>[\\p{L}\\p{N}_-]+)[ \\t]+(?:href[ \\t]+)?(?:\"(?<doubleUrl>[^\"]*)\"|'(?<singleUrl>[^']*)'|(?<bareUrl>[^ \\t]+?))(?:[ \\t]+\"[^\"]*\")?[ \\t]*;?[ \\t]*(?:%%.*)?$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex PlantUmlNodeLinkRegex = new(
         "^url[ \\t]+of[ \\t]+(?<id>[\\p{L}\\p{N}_.]+)[ \\t]+is[ \\t]+\\[\\[(?<url>[^\\]]+)\\]\\][ \\t]*$",
@@ -168,7 +168,7 @@ public class MarkdownDocumentReader : IMarkdownDocumentReader
     private static IEnumerable<IMarkdownLink> ReadDiagramLinks(FencedCodeBlock block)
     {
         var language = block.Info?.Trim().Split([' ', '\t'], 2)[0]?.ToLowerInvariant();
-        if (language == "mermaid" && !IsFlowchart(block)) yield break;
+        if (language == "mermaid" && !HasMermaidNodeLinks(block)) yield break;
 
         var linkRegex = language switch
         {
@@ -193,15 +193,28 @@ public class MarkdownDocumentReader : IMarkdownDocumentReader
         }
     }
 
-    private static bool IsFlowchart(FencedCodeBlock block)
+    private static bool HasMermaidNodeLinks(FencedCodeBlock block)
     {
         if (block.Lines.Lines == null) return false;
 
-        foreach (var line in block.Lines.Lines)
+        var first = true;
+        var frontMatter = false;
+        foreach (var line in block.Lines.Lines.Take(block.Lines.Count))
         {
             var text = line.Slice.ToString().Trim();
             if (text.Length == 0 || text.StartsWith("%%", StringComparison.Ordinal)) continue;
-            return MermaidFlowchartHeaderRegex.IsMatch(text);
+            if (first && text == "---")
+            {
+                frontMatter = true;
+                first = false;
+                continue;
+            }
+            if (frontMatter)
+            {
+                if (text == "---") frontMatter = false;
+                continue;
+            }
+            return MermaidLinkedDiagramHeaderRegex.IsMatch(text);
         }
 
         return false;

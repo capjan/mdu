@@ -1,6 +1,8 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using StaticCode.Diagrams.Flowchart;
 using StaticCode.Diagrams.Sequence;
+using StaticCode.Diagrams.State;
 
 namespace StaticCode.Diagrams;
 
@@ -10,11 +12,15 @@ namespace StaticCode.Diagrams;
 public static class MermaidRenderer
 {
     /// <exception cref="DiagramSyntaxException">The source is not a supported diagram.</exception>
-    public static string RenderSvg(string source)
+    public static string RenderSvg(string source) => RenderSvg(source, 0);
+
+    /// <summary>Renders Mermaid SVG with a page-local instance number for unique accessibility references.</summary>
+    public static string RenderSvg(string source, int instance)
     {
         source = PrepareSource(source);
         if (source.TrimStart().StartsWith("classDiagram", StringComparison.Ordinal)) return ClassDiagramRenderer.Render(source);
         if (FlowchartParser.CanParse(source)) return FlowchartSvgWriter.Write(FlowchartParser.Parse(source));
+        if (StateParser.CanParse(source)) return StateSvgWriter.Write(StateParser.Parse(source), $"state-{DiagramRenderer.StableHash(source.TrimStart('\n')):x8}-{instance.ToString(CultureInfo.InvariantCulture)}");
         if (SequenceParser.CanParse(source)) return SequenceSvgWriter.Write(SequenceParser.Parse(source));
         throw new DiagramSyntaxException("Unsupported Mermaid diagram syntax.", 1);
     }
@@ -36,11 +42,18 @@ public static class MermaidRenderer
     private static string PrepareSource(string source)
     {
         source = source.ReplaceLineEndings("\n");
-        if (source.TrimStart().StartsWith("---\n", StringComparison.Ordinal))
+        var lines = source.Split('\n');
+        var start = 0;
+        while (start < lines.Length && (lines[start].Trim().Length == 0 || lines[start].TrimStart().StartsWith("%%", StringComparison.Ordinal))) start++;
+        if (start < lines.Length && lines[start].Trim() == "---")
         {
-            var start = source.IndexOf("---\n", StringComparison.Ordinal);
-            var end = source.IndexOf("\n---", start + 4, StringComparison.Ordinal);
-            if (end >= 0) source = source.Remove(start, end + 4 - start).TrimStart('\n');
+            for (var end = start + 1; end < lines.Length; end++)
+                if (lines[end].Trim() == "---")
+                {
+                    // Preserve source line numbers while removing front matter and its leading comments.
+                    Array.Fill(lines, string.Empty, 0, end + 1);
+                    return string.Join('\n', lines);
+                }
         }
 
         return source;

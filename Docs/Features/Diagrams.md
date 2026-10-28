@@ -14,6 +14,7 @@ Write diagrams as text; MDU turns supported code blocks into static SVG in the r
 | --- | --- | --- | --- |
 | [Flowchart](#flowcharts) | Processes and decisions | `mermaid` | Mermaid, GitHub |
 | [Sequence](#sequence-diagrams) | Interactions over time | `mermaid` | Mermaid, GitHub |
+| [State](#state-diagrams) | States and transitions | `mermaid` | Mermaid, GitHub |
 | [Class](#class-diagrams) | Types and relationships | `mermaid` | Mermaid, GitHub |
 | [Component](#component-diagrams) | Architecture building blocks | `plantuml` | PlantUML |
 | [Context](#context-diagrams) | A system in its environment | `context` | MDU exclusive |
@@ -76,7 +77,7 @@ flowchart LR
 | Accessible title | `accTitle: Text` | Sets the accessible title |
 | Comments | `%% comment` | Ignores the line |
 
-Longer links made by adding dashes, dots, or equals signs span more layout ranks. MDU does not support every Mermaid flowchart shape or statement. Node links are covered under [Clickable nodes](#clickable-nodes).
+Longer links made by adding dashes, dots, or equals signs span more layout ranks. Labelled self-links reserve room for their text. Compared with earlier MDU versions, flowcharts with these links can be wider or taller, and multiple self-links can be spaced farther apart. MDU does not support every Mermaid flowchart shape or statement. Node links are covered under [Clickable nodes](#clickable-nodes).
 
 ## Sequence diagrams
 
@@ -135,6 +136,113 @@ sequenceDiagram
 | Comments | `%% comment` | Ignores the line |
 
 Blocks end with `end`. `rect` draws a highlighted area, but its color argument is ignored. `box`, `create`, `destroy`, and participant links are not supported.
+
+## State diagrams
+
+Use `stateDiagram-v2` or `stateDiagram` in a `mermaid` code block to show a system's states and transitions. MDU draws both headers with its own static SVG renderer.
+
+~~~markdown title="Markdown"
+```mermaid
+stateDiagram-v2
+    accTitle: Document lifecycle
+    accDescr: Draft documents are reviewed before publication; revisions return to draft.
+    [*] --> Draft
+    state "In review" as Review {
+        [*] --> Pending
+        Pending --> Approved: approve
+        Pending --> Pending: request changes
+        Approved --> [*]
+    }
+    Review: Waiting for approval
+    Draft --> Review: submit
+    Review --> Draft: revise
+    Review --> Published: publish
+    Published --> [*]
+    click Published href ../Usage/render.md
+```
+~~~
+
+```mermaid
+stateDiagram-v2
+    accTitle: Document lifecycle
+    accDescr: Draft documents are reviewed before publication; revisions return to draft.
+    [*] --> Draft
+    state "In review" as Review {
+        [*] --> Pending
+        Pending --> Approved: approve
+        Pending --> Pending: request changes
+        Approved --> [*]
+    }
+    Review: Waiting for approval
+    Draft --> Review: submit
+    Review --> Draft: revise
+    Review --> Published: publish
+    Published --> [*]
+    click Published href ../Usage/render.md
+```
+
+Composite states contain their own diagram. Their frames grow around their contents, and transitions between composites connect to their frames. The description below the display name adds context to the review state. The Published state links to the render command documentation using an unquoted `href` destination.
+
+Choice nodes show conditional paths; fork and join bars split and merge transitions:
+
+~~~markdown title="Markdown"
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> Split
+    state Split <<fork>>
+    state Decision <<choice>>
+    state Merge <<join>>
+    Split --> Validate
+    Split --> Decision
+    Decision --> Archive: [keep copy]
+    Decision --> Skip: [otherwise]
+    Validate --> Merge
+    Archive --> Merge
+    Skip --> Merge
+    Merge --> [*]
+```
+~~~
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> Split
+    state Split <<fork>>
+    state Decision <<choice>>
+    state Merge <<join>>
+    Split --> Validate
+    Split --> Decision
+    Decision --> Archive: [keep copy]
+    Decision --> Skip: [otherwise]
+    Validate --> Merge
+    Archive --> Merge
+    Skip --> Merge
+    Merge --> [*]
+```
+
+### State syntax
+
+| Element | Syntax | Meaning |
+| --- | --- | --- |
+| Header | `stateDiagram-v2`, `stateDiagram` | Starts a state diagram |
+| States | `Idle`, `state Idle`, `state "Waiting for input" as Idle` | Declares a state, optionally with a display label; transitions also introduce states |
+| Descriptions | `Idle: Waiting for input` | Sets the label, or appends to an explicit display name; repeated descriptions add lines |
+| Transitions | `Idle --> Active`, `Active --> Active: retry` | Draws an arrow, optionally with a label; self-transitions and cycles are supported |
+| Start and end | `[*] --> Idle`, `Active --> [*]` | Draws a start circle or final double circle, local to each composite |
+| Composite states | `state Active {` … `}` | Groups states; composites may be nested and may use quoted aliases |
+| Choice | `state Decision <<choice>>` | Draws a diamond; conditions can be written in transition labels |
+| Fork and join | `state Split <<fork>>`, `state Merge <<join>>` | Draws a bar perpendicular to the flow direction |
+| Direction | `direction TB`, `direction BT`, `direction LR`, `direction RL` | Sets the direction of the current diagram or composite; `TD` is an alias for `TB`; each scope defaults to top to bottom |
+| Links | `click Idle href details.md`, `click Idle "https://example.com/"` | Links a state or composite frame; see [Clickable nodes](#clickable-nodes) |
+| Line breaks | `<br>` or `\n` in labels | Starts a new line |
+| Accessible title | `accTitle: Text` | Names the diagram for assistive technology |
+| Accessible description | `accDescr: Text` | Provides a single-line description through SVG `desc` and `aria-describedby`; inside a composite, describes that composite |
+| Comments | `%% comment` | Ignores the rest of the line, outside quotes |
+
+Write one statement per line, optionally followed by a semicolon. State IDs use letters, digits, underscores, and hyphens and must be unique across the diagram. Transitions stay within a composite's scope; connect the composite states themselves to cross their boundaries. State links accept quoted destinations or unquoted destinations after `href`, and an optional ignored tooltip. A linked composite has the same full-frame click area in HTML and PDF; its child links retain their own destinations. Mermaid front matter may follow leading blank lines and `%%` comments. Custom styles and `:::` class suffixes are ignored so states follow the page theme.
+
+Notes, concurrent regions (`--`), history states, JavaScript callbacks, and multiline `accDescr` blocks are not supported. These statements keep the whole diagram as a code block and produce `MDU010` during linting.
 
 ## Class diagrams
 
@@ -414,11 +522,12 @@ A node appears in the first phase that links to it, and a zone appears with its 
 
 ## Clickable nodes
 
-A Mermaid `click` statement links a flowchart or context node; PlantUML's `url of` statement links a component. The linked node is recognizable and can be opened from the rendered HTML.
+A Mermaid `click` statement links a flowchart, state, or context node; PlantUML's `url of` statement links a component. The linked node is recognizable and can be opened from the rendered HTML.
 
 | Diagram | Syntax | Meaning |
 | --- | --- | --- |
 | Flowchart | `click A href "details.md"` | Links node `A` to a destination |
+| State | `click A href "details.md"` | Links a state or composite frame |
 | Context | `click A href "details.md"` | Links node `A` to a destination |
 | Component | `url of ID is [[details.md]]` | Links element `ID` to a destination |
 

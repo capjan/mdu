@@ -6,6 +6,36 @@ namespace Markdown.Renderer.Test;
 
 public class PdfRendererTest
 {
+    [Fact]
+    public void CompositeStatePdfLinkCoversItsWholeFrameAndKeepsTheChildDestination()
+    {
+        var document = new System.Xml.XmlDocument();
+        document.LoadXml(StaticCode.Diagrams.MermaidRenderer.RenderSvg("""
+            stateDiagram-v2
+            state Composite {
+                Inner
+                click Inner href inner.md
+            }
+            click Composite href outer.md
+            """));
+        var svg = document.DocumentElement!;
+        var frame = svg.GetElementsByTagName("rect").OfType<System.Xml.XmlElement>()
+            .Single(element => element.GetAttribute("class") == "diagram-container-shape");
+        var dimensions = PdfSvgRenderer.Measure(svg);
+        var links = new List<(string Href, double Left, double Bottom, double Right, double Top)>();
+
+        PdfSvgRenderer.Draw(svg, new StringBuilder(), 0, 0, dimensions.Width, dimensions.Height, 800,
+            (href, left, bottom, right, top) => links.Add((href, left, bottom, right, top)));
+
+        Assert.Equal(new[] { "outer.html", "inner.html" }, links.Select(link => link.Href));
+        var outer = links[0];
+        var inner = links[1];
+        Assert.Equal(double.Parse(frame.GetAttribute("width"), CultureInfo.InvariantCulture), outer.Right - outer.Left, 2);
+        Assert.Equal(double.Parse(frame.GetAttribute("height"), CultureInfo.InvariantCulture), outer.Top - outer.Bottom, 2);
+        Assert.True(inner.Left > outer.Left && inner.Right < outer.Right);
+        Assert.True(inner.Bottom > outer.Bottom && inner.Top < outer.Top);
+    }
+
     [Theory]
     [InlineData("material-design-icons")]
     [InlineData("alacritty")]

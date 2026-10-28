@@ -98,4 +98,57 @@ public class UnitTestMarkdownDocument
 
         Assert.Empty(MarkdownDocument.ReadLinks(markdown));
     }
+
+    [Theory]
+    [InlineData("stateDiagram")]
+    [InlineData("stateDiagram-v2")]
+    public void ReadLinksIncludesStatesInsideCompositeStatesWithSourceLines(string header)
+    {
+        var markdown = $"# States\n\n```mermaid\n%% Example\n{header} %% Header\nstate Outer {{\n  Inner-State\n  click Inner-State href \"guide.md#details\" \"Tooltip\" %% Comment\n}}\nclick Outer 'https://example.com/'\n```\n";
+
+        var links = MarkdownDocument.ReadLinks(markdown).ToArray();
+
+        Assert.Equal(2, links.Length);
+        Assert.Equal("Inner-State", links[0].Name);
+        Assert.Equal("guide.md#details", links[0].Destination);
+        Assert.Equal(8, links[0].LineNumber);
+        Assert.Equal("https://example.com/", links[1].Destination);
+        Assert.Equal(10, links[1].LineNumber);
+    }
+
+    [Theory]
+    [InlineData("sequenceDiagram")]
+    [InlineData("csharp")]
+    public void ReadLinksDoesNotReadStateLinksFromOtherCodeBlocks(string header)
+    {
+        Assert.Empty(MarkdownDocument.ReadLinks($"```mermaid\n{header}\nclick A href \"guide.md\"\n```"));
+    }
+
+    [Fact]
+    public void ReadLinksIncludesStateLinksAfterMermaidFrontMatter()
+    {
+        const string markdown = "```mermaid\n---\ntitle: Lifecycle\n---\nstateDiagram-v2\nA\nclick A href \"guide.md\"\n```";
+        var link = Assert.Single(MarkdownDocument.ReadLinks(markdown));
+        Assert.Equal("guide.md", link.Destination);
+        Assert.Equal(7, link.LineNumber);
+    }
+
+    [Theory]
+    [InlineData("flowchart LR; A --> B")]
+    [InlineData("graph TD; A --> B")]
+    [InlineData("flowchart LR")]
+    public void ReadLinksStillFindsFlowchartLinks(string header)
+    {
+        var link = Assert.Single(MarkdownDocument.ReadLinks($"```mermaid\n{header}\nclick A href \"guide.md\"\n```"));
+        Assert.Equal("guide.md", link.Destination);
+    }
+
+    [Fact]
+    public void ReadLinksIncludesUnquotedStateLinksAfterCommentsAndFrontMatter()
+    {
+        const string markdown = "```mermaid\n%% Lifecycle\n---\ntitle: Options\n---\nstateDiagram-v2\nA\nclick A href guide.md#state; %% Link\n```";
+        var link = Assert.Single(MarkdownDocument.ReadLinks(markdown));
+        Assert.Equal("guide.md#state", link.Destination);
+        Assert.Equal(8, link.LineNumber);
+    }
 }

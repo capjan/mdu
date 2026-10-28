@@ -12,7 +12,6 @@ namespace StaticCode.Diagrams.Flowchart;
 /// </summary>
 internal static class FlowchartSvgWriter
 {
-    private const double LoopSize = 22;
     private const double CanvasPadding = 4;
 
     public static string Write(FlowchartDiagram diagram)
@@ -25,22 +24,10 @@ internal static class FlowchartSvgWriter
         var boxes = diagram.Nodes.Select(NodeShapes.CreateNode).ToList();
         var labels = diagram.Edges.Select(edge => edge.Label == null ? null : NodeShapes.CreateLabel(edge.Label)).ToList();
 
-        var loopSizes = new double[diagram.Edges.Count];
-        var margins = new double[boxes.Count];
-        var loopCounts = new int[boxes.Count];
-        for (var index = 0; index < diagram.Edges.Count; index++)
-        {
-            var edge = diagram.Edges[index];
-            if (edge.From != edge.To) continue;
-            var node = nodeIndex[edge.From];
-            loopSizes[index] = LoopSize + 10 * loopCounts[node]++;
-            var label = labels[index];
-            var labelExtent = label == null ? 0 : 6 + (horizontal ? label.Height : label.Width);
-            margins[node] = Math.Max(margins[node], loopSizes[index] * 1.1 + labelExtent + 4);
-        }
+        var (nodes, loopSizes) = SvgGraphEdges.SizeNodes(boxes, diagram.Edges, labels, nodeIndex, horizontal);
 
         var layout = new LayeredLayout().Compute(
-            boxes.Select((box, index) => new LayoutNode(box.Width, box.Height, margins[index])).ToList(),
+            nodes,
             diagram.Edges.Select((edge, index) => new LayoutEdge(
                 nodeIndex[edge.From],
                 nodeIndex[edge.To],
@@ -94,14 +81,14 @@ internal static class FlowchartSvgWriter
             var to = nodeIndex[edge.To];
             if (from == to)
             {
-                labelCenters[index] = WriteSelfLoop(svg, edge, boxes[from], layout.NodeCenters[from], loopSizes[index], labels[index], axis, cross, horizontal);
+                labelCenters[index] = SvgGraphEdges.WriteSelfLoop(svg, edge, boxes[from], layout.NodeCenters[from], loopSizes[index], labels[index], axis, cross, horizontal);
                 continue;
             }
 
             var points = layout.Edges[index].Points.ToList();
-            points[0] = SnapToShape(boxes[from], layout.NodeCenters[from], points[0], axis, cross, horizontal);
-            points[^1] = SnapToShape(boxes[to], layout.NodeCenters[to], points[^1], axis, cross, horizontal);
-            WriteRoute(svg, edge, points, axis);
+            points[0] = SvgGraphEdges.SnapToShape(boxes[from], layout.NodeCenters[from], points[0], axis, cross, horizontal);
+            points[^1] = SvgGraphEdges.SnapToShape(boxes[to], layout.NodeCenters[to], points[^1], axis, cross, horizontal);
+            SvgGraphEdges.WriteRoute(svg, edge, points, axis);
             labelCenters[index] = layout.Edges[index].LabelCenter;
         }
 
@@ -118,77 +105,5 @@ internal static class FlowchartSvgWriter
             NodeShapes.WriteNode(svg, boxes[index], layout.NodeCenters[index], href: diagram.Nodes[index].Href);
         svg.Append("</g>\n</svg>");
         return svg.ToString();
-    }
-
-    /// <summary>Moves an edge end from the node's bounding box onto its actual outline.</summary>
-    private static Point SnapToShape(NodeBox box, Point center, Point point, Point axis, Point cross, bool horizontal)
-    {
-        var offset = point - center;
-        var along = offset.Dot(axis);
-        var across = offset.Dot(cross);
-        var halfAlong = (horizontal ? box.Width : box.Height) / 2;
-        var halfAcross = (horizontal ? box.Height : box.Width) / 2;
-        var extent = NodeShapes.Extent(box, halfAlong, halfAcross, across);
-        return center + cross * across + axis * ((along < 0 ? -1 : 1) * extent);
-    }
-
-    /// <summary>
-    /// Draws a smooth cubic Hermite spline through the route. Interior tangents follow Catmull-Rom;
-    /// the ends leave and enter nodes along the flow direction.
-    /// </summary>
-    private static void WriteRoute(StringBuilder svg, FlowchartEdge edge, List<Point> points, Point axis)
-    {
-        var startDirection = axis * Math.Sign((points[1] - points[0]).Dot(axis));
-        var endDirection = axis * Math.Sign((points[^1] - points[^2]).Dot(axis));
-        var start = points[0];
-        var end = points[^1];
-        points[0] = start + startDirection * SvgMarkers.Inset(NodeShapes.Marker(edge.StartMarker), NodeShapes.MarkerScale(edge.Style));
-        points[^1] = end - endDirection * SvgMarkers.Inset(NodeShapes.Marker(edge.EndMarker), NodeShapes.MarkerScale(edge.Style));
-
-        var count = points.Count;
-        var tangents = new Point[count];
-        tangents[0] = axis * ((points[1] - points[0]).Dot(axis) * 1.5);
-        tangents[^1] = axis * ((points[^1] - points[^2]).Dot(axis) * 1.5);
-        for (var index = 1; index < count - 1; index++)
-            tangents[index] = (points[index + 1] - points[index - 1]) * 0.5;
-
-        var path = new StringBuilder($"M{F(points[0].X)} {F(points[0].Y)}");
-        for (var index = 0; index < count - 1; index++)
-        {
-            var c1 = points[index] + tangents[index] * (1.0 / 3);
-            var c2 = points[index + 1] - tangents[index + 1] * (1.0 / 3);
-            path.Append($" C{F(c1.X)} {F(c1.Y)} {F(c2.X)} {F(c2.Y)} {F(points[index + 1].X)} {F(points[index + 1].Y)}");
-        }
-
-        svg.Append($"<path class=\"{NodeShapes.EdgeClass(edge.Style)}\" d=\"{path}\"/>");
-        SvgMarkers.Write(svg, NodeShapes.Marker(edge.EndMarker), end, endDirection, NodeShapes.MarkerScale(edge.Style));
-        SvgMarkers.Write(svg, NodeShapes.Marker(edge.StartMarker), start, startDirection * -1, NodeShapes.MarkerScale(edge.Style));
-        svg.Append('\n');
-    }
-
-    private static Point? WriteSelfLoop(
-        StringBuilder svg, FlowchartEdge edge, NodeBox box, Point center, double size, LabelBox? label, Point axis, Point cross, bool horizontal)
-    {
-        var halfAlong = (horizontal ? box.Width : box.Height) / 2;
-        var halfAcross = (horizontal ? box.Height : box.Width) / 2;
-        var attach = Math.Min(halfAlong * 0.45, 10);
-        var side = NodeShapes.Extent(box, halfAcross, halfAlong, attach);
-        var start = center - axis * attach + cross * side;
-        var end = center + axis * attach + cross * side;
-        var c1 = start + cross * (size * 1.4) - axis * (size * 0.5);
-        var c2 = end + cross * (size * 1.4) + axis * (size * 0.5);
-        var endDirection = (end - c2).Normalized;
-        var startDirection = (start - c1).Normalized;
-        var pathEnd = end - endDirection * SvgMarkers.Inset(NodeShapes.Marker(edge.EndMarker), NodeShapes.MarkerScale(edge.Style));
-        var pathStart = start - startDirection * SvgMarkers.Inset(NodeShapes.Marker(edge.StartMarker), NodeShapes.MarkerScale(edge.Style));
-
-        svg.Append($"<path class=\"{NodeShapes.EdgeClass(edge.Style)}\" d=\"M{F(pathStart.X)} {F(pathStart.Y)} C{F(c1.X)} {F(c1.Y)} {F(c2.X)} {F(c2.Y)} {F(pathEnd.X)} {F(pathEnd.Y)}\"/>");
-        SvgMarkers.Write(svg, NodeShapes.Marker(edge.EndMarker), end, endDirection, NodeShapes.MarkerScale(edge.Style));
-        SvgMarkers.Write(svg, NodeShapes.Marker(edge.StartMarker), start, startDirection, NodeShapes.MarkerScale(edge.Style));
-        svg.Append('\n');
-
-        if (label == null) return null;
-        var labelExtent = horizontal ? label.Height : label.Width;
-        return center + cross * (side + size * 1.1 + 6 + labelExtent / 2);
     }
 }

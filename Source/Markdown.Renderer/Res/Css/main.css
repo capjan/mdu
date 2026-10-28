@@ -2387,6 +2387,10 @@ pre code {
     stroke-width: 1.25;
 }
 
+.diagram-state-symbol {
+    fill: var(--diagram-edge);
+}
+
 .diagram-node-subroutine-line {
     fill: none;
     stroke: var(--diagram-node-border);
@@ -2411,6 +2415,10 @@ pre code {
 .diagram-link:is(:hover, :focus-visible) .diagram-actor-head,
 .diagram-link:is(:hover, :focus-visible) .diagram-actor-body {
     stroke: var(--link);
+}
+
+.diagram-link:is(:hover, :focus-visible) .diagram-state-symbol {
+    fill: var(--link);
 }
 
 .diagram-link:is(:hover, :focus-visible) text {
