@@ -160,12 +160,14 @@ public class ServeCommandIntegrationTest
         var sourceRepository = Path.Combine(remotes, "acme", "handbook.git");
         Directory.CreateDirectory(docs);
         Directory.CreateDirectory(Path.Combine(sourceRepository, "docs"));
-        File.WriteAllText(Path.Combine(sourceRepository, "docs", "README.md"), "# Handbook\n\nImported handbook content\n");
+        File.WriteAllText(Path.Combine(sourceRepository, "docs", "README.md"),
+            $"# Handbook\n\nImported handbook content\n\n<!-- {Guid.NewGuid():N} -->\n");
         RunGit(sourceRepository, ["init", "-b", "main"]);
         RunGit(sourceRepository, ["config", "user.email", "mdu-tests@example.com"]);
         RunGit(sourceRepository, ["config", "user.name", "MDU tests"]);
         RunGit(sourceRepository, ["add", "."]);
         RunGit(sourceRepository, ["commit", "-m", "test source"]);
+        var commit = RunGit(sourceRepository, ["rev-parse", "HEAD"]).Trim();
 
         File.WriteAllText(Path.Combine(docs, "README.md"), "# Home\n");
         var markerPath = Path.Combine(docs, "Handbook.md");
@@ -181,9 +183,6 @@ public class ServeCommandIntegrationTest
         };
         var importCache = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "mdu", "GitHubImports");
-        var previousCacheEntries = Directory.Exists(importCache)
-            ? Directory.GetFileSystemEntries(importCache).ToHashSet()
-            : new HashSet<string>();
 
         var (process, port) = await StartServerOnFreePortAsync(docs, site, environment);
         using var _ = process;
@@ -205,12 +204,13 @@ public class ServeCommandIntegrationTest
         {
             StopServer(process);
             Directory.Delete(root, recursive: true);
+            // Only clones of the unique test commit are removed, so caches of other mdu processes stay untouched.
             if (Directory.Exists(importCache))
             {
-                foreach (var entry in Directory.GetFileSystemEntries(importCache).Where(entry => !previousCacheEntries.Contains(entry)))
+                foreach (var entry in Directory.GetDirectories(importCache))
                 {
-                    if (Directory.Exists(entry)) Directory.Delete(entry, recursive: true);
-                    else File.Delete(entry);
+                    if (TryRunGit(entry, ["rev-parse", "HEAD"])?.Trim() == commit)
+                        Directory.Delete(entry, recursive: true);
                 }
             }
         }
@@ -412,7 +412,13 @@ public class ServeCommandIntegrationTest
         }
         """;
 
-    private static string RunGit(string workingDirectory, IReadOnlyList<string> arguments)
+    private static string RunGit(string workingDirectory, IReadOnlyList<string> arguments) =>
+        TryRunGit(workingDirectory, arguments, out var error) ?? throw new InvalidOperationException(error);
+
+    private static string? TryRunGit(string workingDirectory, IReadOnlyList<string> arguments) =>
+        TryRunGit(workingDirectory, arguments, out _);
+
+    private static string? TryRunGit(string workingDirectory, IReadOnlyList<string> arguments, out string error)
     {
         var startInfo = new ProcessStartInfo("git")
         {
@@ -424,10 +430,10 @@ public class ServeCommandIntegrationTest
         foreach (var argument in arguments) startInfo.ArgumentList.Add(argument);
         using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start git.");
         var output = process.StandardOutput.ReadToEndAsync();
-        var error = process.StandardError.ReadToEndAsync();
+        var errorOutput = process.StandardError.ReadToEndAsync();
         process.WaitForExit();
-        if (process.ExitCode != 0) throw new InvalidOperationException(error.Result);
-        return output.Result;
+        error = errorOutput.Result;
+        return process.ExitCode == 0 ? output.Result : null;
     }
 
     private static Process StartServer(
