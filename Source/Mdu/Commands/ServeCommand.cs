@@ -436,7 +436,9 @@ public sealed class ServeCommand
             var previousNavigationPlacement = page.NavigationPlacement;
             var previousInvalidNavigationPlacement = page.InvalidNavigationPlacement;
             _dataPreparationVisitor.Process(page, depth);
-            if (!previousTitle.Equals(page.Title, StringComparison.Ordinal) ||
+            // Pages that already import a repository are handled above, so a set source means a newly added import.
+            if (page.ImportSource is not null ||
+                !previousTitle.Equals(page.Title, StringComparison.Ordinal) ||
                 !previousNavigationTitle.Equals(page.NavigationTitle, StringComparison.Ordinal) ||
                 previousNavigationOrder != page.NavigationOrder ||
                 previousNavigationVisible != page.NavigationVisible ||

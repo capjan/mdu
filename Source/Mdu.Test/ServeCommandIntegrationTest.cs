@@ -151,6 +151,72 @@ public class ServeCommandIntegrationTest
     }
 
     [Fact]
+    public async Task ImportsRepositoryWhenAnImportIsAddedToAnExistingPage()
+    {
+        var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        var docs = Path.Combine(root, "Docs");
+        var site = Path.Combine(root, "site");
+        var remotes = Path.Combine(root, "remotes");
+        var sourceRepository = Path.Combine(remotes, "acme", "handbook.git");
+        Directory.CreateDirectory(docs);
+        Directory.CreateDirectory(Path.Combine(sourceRepository, "docs"));
+        File.WriteAllText(Path.Combine(sourceRepository, "docs", "README.md"),
+            $"# Handbook\n\nImported handbook content\n\n<!-- {Guid.NewGuid():N} -->\n");
+        RunGit(sourceRepository, ["init", "-b", "main"]);
+        RunGit(sourceRepository, ["config", "user.email", "mdu-tests@example.com"]);
+        RunGit(sourceRepository, ["config", "user.name", "MDU tests"]);
+        RunGit(sourceRepository, ["add", "."]);
+        RunGit(sourceRepository, ["commit", "-m", "test source"]);
+        var commit = RunGit(sourceRepository, ["rev-parse", "HEAD"]).Trim();
+
+        File.WriteAllText(Path.Combine(docs, "README.md"), "# Home\n");
+        var markerPath = Path.Combine(docs, "Handbook.md");
+        const string frontMatter = "---\ntitle: Handbook\n";
+        File.WriteAllText(markerPath, frontMatter + "---\n");
+
+        // Git redirects the HTTPS source to the local repository, so the import needs no network access.
+        var environment = new Dictionary<string, string>
+        {
+            ["GIT_CONFIG_COUNT"] = "1",
+            ["GIT_CONFIG_KEY_0"] = $"url.{new Uri(remotes).AbsoluteUri.TrimEnd('/')}/.insteadOf",
+            ["GIT_CONFIG_VALUE_0"] = "https://git.example.test/"
+        };
+        var importCache = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "mdu", "GitHubImports");
+
+        var (process, port) = await StartServerOnFreePortAsync(docs, site, environment);
+        using var _ = process;
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+        var pageUrl = $"http://127.0.0.1:{port}/Handbook/index.html";
+
+        try
+        {
+            await WaitUntilAsync(async () =>
+                await PageContainsAsync(client, $"http://127.0.0.1:{port}/Handbook.html", "Handbook"), process);
+
+            File.WriteAllText(markerPath, frontMatter +
+                "mdu:\n  import:\n    source: https://git.example.test/acme/handbook/-/tree/main/docs\n---\n");
+
+            await WaitUntilAsync(async () => await PageContainsAsync(client, pageUrl, "Imported handbook content"), process);
+            Assert.Contains("href=\"https://git.example.test/acme/handbook\"", await client.GetStringAsync(pageUrl));
+        }
+        finally
+        {
+            StopServer(process);
+            Directory.Delete(root, recursive: true);
+            // Only clones of the unique test commit are removed, so caches of other mdu processes stay untouched.
+            if (Directory.Exists(importCache))
+            {
+                foreach (var entry in Directory.GetDirectories(importCache))
+                {
+                    if (TryRunGit(entry, ["rev-parse", "HEAD"])?.Trim() == commit)
+                        Directory.Delete(entry, recursive: true);
+                }
+            }
+        }
+    }
+
+    [Fact]
     public async Task WatchesOpenApiSpecificationsChangedDuringInitialRender()
     {
         var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
@@ -346,7 +412,36 @@ public class ServeCommandIntegrationTest
         }
         """;
 
-    private static Process StartServer(string docs, string site, int port, TaskCompletionSource<bool> ready)
+    private static string RunGit(string workingDirectory, IReadOnlyList<string> arguments) =>
+        TryRunGit(workingDirectory, arguments, out var error) ?? throw new InvalidOperationException(error);
+
+    private static string? TryRunGit(string workingDirectory, IReadOnlyList<string> arguments) =>
+        TryRunGit(workingDirectory, arguments, out _);
+
+    private static string? TryRunGit(string workingDirectory, IReadOnlyList<string> arguments, out string error)
+    {
+        var startInfo = new ProcessStartInfo("git")
+        {
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
+        };
+        foreach (var argument in arguments) startInfo.ArgumentList.Add(argument);
+        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start git.");
+        var output = process.StandardOutput.ReadToEndAsync();
+        var errorOutput = process.StandardError.ReadToEndAsync();
+        process.WaitForExit();
+        error = errorOutput.Result;
+        return process.ExitCode == 0 ? output.Result : null;
+    }
+
+    private static Process StartServer(
+        string docs,
+        string site,
+        int port,
+        TaskCompletionSource<bool> ready,
+        IReadOnlyDictionary<string, string>? environment = null)
     {
         var projectPath = Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory,
@@ -373,6 +468,8 @@ public class ServeCommandIntegrationTest
         startInfo.ArgumentList.Add("--port");
         startInfo.ArgumentList.Add(port.ToString());
         startInfo.ArgumentList.Add("--no-browser");
+        foreach (var (name, value) in environment ?? new Dictionary<string, string>())
+            startInfo.Environment[name] = value;
 
         var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start the preview process.");
         // mdu prints this line only after it has bound the port.
@@ -418,13 +515,16 @@ public class ServeCommandIntegrationTest
     /// it in between; the server then exits, and the start is retried on a new port. Startup counts as done when mdu
     /// reports that it serves, which it does only after binding the port.
     /// </summary>
-    private static async Task<(Process Process, int Port)> StartServerOnFreePortAsync(string docs, string site)
+    private static async Task<(Process Process, int Port)> StartServerOnFreePortAsync(
+        string docs,
+        string site,
+        IReadOnlyDictionary<string, string>? environment = null)
     {
         for (var attempt = 1; ; attempt++)
         {
             var port = FindAvailablePort();
             var ready = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var process = StartServer(docs, site, port, ready);
+            var process = StartServer(docs, site, port, ready, environment);
             var completed = await Task.WhenAny(ready.Task, Task.Delay(TimeSpan.FromSeconds(30)));
             if (completed != ready.Task || ready.Task.Result || attempt == 5) return (process, port);
             process.Dispose();
