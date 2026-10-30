@@ -173,11 +173,17 @@ var pdfOutputPath = new Argument<string?>("outpath")
 };
 pdfCommand.Arguments.Add(pdfRootPath);
 pdfCommand.Arguments.Add(pdfOutputPath);
+var pdfPage = new Option<string?>("--page")
+{
+    Description = "Export this Markdown page and all its navigation descendants. Path is relative to the documentation root."
+};
+pdfCommand.Options.Add(pdfPage);
 pdfCommand.SetAction(parseResult =>
     services.GetRequiredService<PdfCommand>().Execute(new RenderCommandSettings
     {
         RootPath = parseResult.GetValue(pdfRootPath),
         OutputPath = parseResult.GetValue(pdfOutputPath),
+        PdfRootPage = parseResult.GetValue(pdfPage),
         SearchPattern = parseResult.GetValue(pdfPattern),
         IncludeHidden = parseResult.GetValue(pdfHidden)
     }));

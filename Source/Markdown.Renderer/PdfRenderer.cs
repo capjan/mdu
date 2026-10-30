@@ -13,6 +13,7 @@ public sealed record PdfSourceSection(string Title, string RelativeHtmlPath, str
 public sealed class PdfRenderer(HtmlRenderer htmlRenderer)
 {
     public bool ContainsPdfLink(string markdown) => htmlRenderer.ContainsPdfLink(markdown);
+    public IReadOnlyList<string> FindPdfLinks(string markdown) => htmlRenderer.FindPdfLinks(markdown);
 
     public void WritePdf(Stream output, string title, IReadOnlyList<PdfSourceSection> sections, bool includeFrontMatter = true)
     {

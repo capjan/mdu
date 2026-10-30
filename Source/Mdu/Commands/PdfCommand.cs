@@ -11,6 +11,8 @@ namespace Mdu.Commands;
 
 public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRenderer)
 {
+    public IReadOnlyCollection<string> GeneratedSitePdfPaths { get; private set; } = Array.Empty<string>();
+
     public int Execute(RenderCommandSettings settings)
     {
         string rootPath;
@@ -19,6 +21,8 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         {
             if (settings.RootPath is { } configuredPath && File.Exists(Path.GetFullPath(configuredPath)))
             {
+                if (settings.PdfRootPage is not null)
+                    throw new InvalidOperationException("--page requires a documentation folder as PATH, not a single file.");
                 singleFilePath = Path.GetFullPath(configuredPath);
                 if (!Path.GetExtension(singleFilePath).Equals(".md", StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException($"PDF input must be a Markdown file: {singleFilePath}");
@@ -67,6 +71,8 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
             files = files.Where(item => Path.GetFullPath(item.File.FileInfo.FullName).Equals(singleFilePath, StringComparison.Ordinal));
         try
         {
+            if (settings.PdfRootPage is not null)
+                files = Flatten([PdfSelection.FindPage(rootPath, graph, settings.PdfRootPage)]);
             return WritePdf(rootPath, outputPath, files, includeFrontMatter: singleFilePath is null);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
@@ -81,16 +87,34 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
 
     public int WriteSitePdfIfLinked(string rootPath, string outputPath, IEnumerable<MarkdownFile> graph)
     {
-        var files = Flatten(graph).ToArray();
-        var containsPdfLink = files.Any(item => pdfRenderer.ContainsPdfLink(
-            RemoveFrontMatter(item.File.ReadMarkdown(), item.File.FrontMatter)));
-        if (!containsPdfLink)
+        var roots = graph.ToArray();
+        var files = Flatten(roots).ToArray();
+        var requests = new Dictionary<string, MarkdownFile?>(MarkdownLinks.PathComparer);
+        foreach (var (page, _) in files)
         {
-            if (File.Exists(outputPath)) File.Delete(outputPath);
-            return 0;
+            foreach (var url in pdfRenderer.FindPdfLinks(RemoveFrontMatter(page.ReadMarkdown(), page.FrontMatter)))
+            {
+                var path = LinkReplacer.GetPdfRoot(url);
+                var selected = path is null ? null : PdfSelection.FindPage(rootPath, roots, path, page);
+                var destination = selected is null ? outputPath :
+                    Path.Combine(Path.GetDirectoryName(outputPath)!, PdfSelection.GetOutputPath(rootPath, selected));
+                requests[destination] = selected;
+            }
         }
 
-        return WritePdf(rootPath, outputPath, files, includeFrontMatter: true);
+        foreach (var (destination, selected) in requests)
+            if (WritePdf(rootPath, destination, selected is null ? files : Flatten([selected]), includeFrontMatter: true) != 0)
+                return 1;
+
+        if (!requests.ContainsKey(outputPath) && File.Exists(outputPath)) File.Delete(outputPath);
+        var scopedDirectory = Path.Combine(Path.GetDirectoryName(outputPath)!, PdfSelection.OutputDirectory);
+        if (Directory.Exists(scopedDirectory))
+            foreach (var oldPath in Directory.EnumerateFiles(scopedDirectory, "*.pdf"))
+                if (Path.GetFileNameWithoutExtension(oldPath) is { Length: 64 } name &&
+                    name.All(char.IsAsciiHexDigit) && !requests.ContainsKey(oldPath))
+                    File.Delete(oldPath);
+        GeneratedSitePdfPaths = requests.Keys.ToArray();
+        return 0;
     }
 
     private int WritePdf(

@@ -16,17 +16,34 @@ public class LinkReplacer
     private const string PdfLinkUrl = "mdu:pdf";
 
     public static bool IsPdfLink(string? url) =>
-        string.Equals(url, PdfLinkUrl, StringComparison.OrdinalIgnoreCase);
+        string.Equals(url, PdfLinkUrl, StringComparison.OrdinalIgnoreCase) ||
+        (url?.StartsWith(PdfLinkUrl + "?", StringComparison.OrdinalIgnoreCase) ?? false);
 
-    public void ReplaceAll(MarkdownDocument document, string? pdfDownloadUrl = null)
+    public static string? GetPdfRoot(string url)
+    {
+        if (string.Equals(url, PdfLinkUrl, StringComparison.OrdinalIgnoreCase)) return null;
+        const string prefix = "mdu:pdf?root=";
+        if (!url.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Invalid PDF link '{url}'. Expected mdu:pdf?root=<Markdown page>.");
+        var root = url[prefix.Length..];
+        if (root.Length == 0 || root.IndexOfAny(['&', '#', '?']) >= 0 ||
+            Regex.IsMatch(root, "%(?![0-9a-fA-F]{2})"))
+            throw new InvalidOperationException($"Invalid PDF root in '{url}'.");
+        return Uri.UnescapeDataString(root);
+    }
+
+    public void ReplaceAll(MarkdownDocument document, string? pdfDownloadUrl = null,
+        IReadOnlyDictionary<string, string>? pdfDownloadUrls = null)
     {
         var headingIds = HeadingIds.Read(document);
         foreach (var link in document.Descendants<LinkInline>())
         {
-            if (IsPdfLink(link.Url))
+            if (!link.IsImage && IsPdfLink(link.Url))
             {
-                if (string.IsNullOrWhiteSpace(pdfDownloadUrl)) continue;
-                link.Url = pdfDownloadUrl;
+                if (pdfDownloadUrls?.TryGetValue(link.Url!, out var downloadUrl) == true)
+                    link.Url = downloadUrl;
+                else if (GetPdfRoot(link.Url!) is null && !string.IsNullOrWhiteSpace(pdfDownloadUrl))
+                    link.Url = pdfDownloadUrl;
                 continue;
             }
 

@@ -112,6 +112,15 @@ public class MarkdigVisitor : BaseVisitor
         var pdfUrl = GetRelativeUrl(
             GetSiteRelativeSegments(Path.GetDirectoryName(Path.GetFullPath(outputFileName))!),
             ["documentation.pdf"]);
+        var pdfDownloadUrls = _htmlFoundation.FindPdfLinks(markdown).ToDictionary(url => url, url =>
+        {
+            var path = LinkReplacer.GetPdfRoot(url);
+            if (path is null) return pdfUrl;
+            var selected = PdfSelection.FindPage(_rootPath, _navigationRoots, path, entity);
+            return GetRelativeUrl(
+                GetSiteRelativeSegments(outputDirectory),
+                PdfSelection.GetOutputPath(_rootPath, selected).Split('/'));
+        }, StringComparer.Ordinal);
 
         var temporaryPath = outputFileName + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
@@ -132,7 +141,8 @@ public class MarkdigVisitor : BaseVisitor
                     topNavigation,
                     GetLastModified(entity),
                     pdfUrl,
-                    Dashboard.ReadFrontMatter(entity.FrontMatter)).GetAwaiter().GetResult();
+                    Dashboard.ReadFrontMatter(entity.FrontMatter),
+                    pdfDownloadUrls).GetAwaiter().GetResult();
 
             File.Move(temporaryPath, outputFileName, true);
             WriteAliasPage(entity, outputFileName);
