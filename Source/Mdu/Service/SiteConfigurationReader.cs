@@ -112,16 +112,28 @@ public static class SiteConfigurationReader
 
     private static bool ReadAttributionVisible(YamlMappingNode root)
     {
-        YamlNode? value = null;
+        bool? nested = null;
         if (root.Children.TryGetValue(new YamlScalarNode("attribution"), out var attribution))
         {
-            if (attribution is not YamlMappingNode mapping)
+            if (attribution is YamlMappingNode mapping)
+            {
+                if (mapping.Children.TryGetValue(new YamlScalarNode("visible"), out var value))
+                    nested = ReadVisible(value);
+            }
+            else if (attribution is not YamlScalarNode { Value: null or "" })
+            {
                 throw new InvalidOperationException("The 'attribution' setting in mdu.yml must be a mapping with a 'visible' boolean.");
-            mapping.Children.TryGetValue(new YamlScalarNode("visible"), out value);
+            }
         }
-        if (root.Children.TryGetValue(new YamlScalarNode("attribution.visible"), out var compactValue))
-            value = compactValue;
-        if (value is null) return true;
+        bool? compact = root.Children.TryGetValue(new YamlScalarNode("attribution.visible"), out var compactValue)
+            ? ReadVisible(compactValue) : null;
+        if (nested.HasValue && compact.HasValue && nested != compact)
+            throw new InvalidOperationException("The 'attribution.visible' setting in mdu.yml has conflicting nested and compact values.");
+        return compact ?? nested ?? true;
+    }
+
+    private static bool ReadVisible(YamlNode value)
+    {
         if (value is YamlScalarNode scalar && bool.TryParse(scalar.Value, out var visible)) return visible;
         throw new InvalidOperationException("The 'attribution.visible' setting in mdu.yml must be true or false.");
     }

@@ -277,7 +277,7 @@ body {
     white-space: nowrap;
 }
 
-.site-brand > span {
+#site-brand-title {
     overflow: hidden;
     text-overflow: ellipsis;
 }
@@ -429,6 +429,7 @@ body {
 .sidebar-resizer:focus-visible,
 .toc-resizer:focus-visible {
     border-radius: 2px;
+    outline-offset: -2px;
 }
 
 .page-meta a:focus-visible {
@@ -555,11 +556,11 @@ body {
     padding-inline: var(--page-inset);
 }
 
-.site-layout:has(.on-this-page) {
-    --main-reserve: calc(var(--toc-content-min) + var(--panel-gap) + var(--toc-preferred-width) + 2 * var(--main-padding));
+:root.toc-space-available .site-layout:has(.on-this-page) {
+    --main-reserve: calc(max(var(--toc-threshold), var(--toc-content-min) + var(--panel-gap) + var(--toc-preferred-width)) + 2 * var(--main-padding));
 }
 
-.toc-collapsed .site-layout {
+:root.toc-collapsed .site-layout {
     --main-reserve: calc(var(--panel-content-min) + 2 * var(--main-padding));
 }
 

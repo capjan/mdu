@@ -19,7 +19,7 @@
     %%SITE_THEME_STYLE%%
     %%PAGE_STYLES%%
     <script>
-        (() => {
+        const mduPanels = (() => {
             const root = document.documentElement;
             root.classList.add("panels-initializing");
             const styles = getComputedStyle(root);
@@ -29,7 +29,7 @@
                 min: pixels(`--${name}-min-width`), max: pixels(`--${name}-max-width`),
                 initial: pixels(initialProperty)
             });
-            const panels = window.mduPanels = {
+            const panels = {
                 sidebar: panel("sidebar", "--sidebar-preferred-width"),
                 toc: panel("toc", "--toc-preferred-width"),
                 contentMin: pixels("--panel-content-min"), tocContentMin: pixels("--toc-content-min"),
@@ -51,6 +51,17 @@
                 collapsed ||= sessionStorage.getItem("mdu-sidebar-collapsed") === "true";
             } catch { }
             root.classList.toggle("sidebar-starts-collapsed", collapsed);
+            panels.measure = (width, padding, sidebarVisible, hasToc) => {
+                // Decide fit independently of the current sidebar width to avoid a circular TOC reserve.
+                const tocFits = hasToc && !matchMedia("(max-width: 760px)").matches &&
+                    width - (sidebarVisible ? panels.sidebar.min : 0) - padding >= panels.tocThreshold;
+                const reserve = (tocFits && !root.classList.contains("toc-collapsed")
+                    ? Math.max(panels.tocThreshold, panels.tocContentMin + panels.gap + parseFloat(root.style.getPropertyValue(panels.toc.property)))
+                    : panels.contentMin) + padding;
+                const sidebarMax = Math.round(Math.max(panels.sidebar.min, Math.min(panels.sidebar.max, width - reserve)));
+                return { tocFits, sidebarMax };
+            };
+            return panels;
         })();
     </script>
 </head>
@@ -101,14 +112,12 @@
     navigationToggle.title = navigationLabel;
 
     const styles = getComputedStyle(root);
-    const panels = window.mduPanels;
+    const panels = mduPanels;
     const pageWidth = Math.min(root.clientWidth, parseFloat(styles.getPropertyValue("--page-max-width")));
-    const tocWidth = parseFloat(styles.getPropertyValue("--toc-preferred-width"));
-    const reserve = (%%HAS_TOC%% && !root.classList.contains("toc-collapsed")
-        ? panels.tocContentMin + panels.gap + tocWidth : panels.contentMin) + 2 * panels.mainPadding;
-    const sidebarWidth = Math.max(panels.sidebar.min, Math.min(parseFloat(styles.getPropertyValue("--sidebar-preferred-width")), pageWidth - reserve));
     const sidebarVisible = open && (header.classList.contains("has-wide-sidebar") || matchMedia("(max-width: 1220px)").matches);
-    const available = %%HAS_TOC%% && !compact && pageWidth - (sidebarVisible ? sidebarWidth : 0) - 2 * panels.mainPadding >= panels.tocThreshold;
+    const measured = panels.measure(pageWidth, 2 * panels.mainPadding, sidebarVisible, %%HAS_TOC%%);
+    root.classList.toggle("toc-space-available", measured.tocFits);
+    const available = measured.tocFits;
     const tocToggle = document.getElementById("toc-toggle");
     tocToggle.hidden = !available;
     tocToggle.setAttribute("aria-expanded", String(!root.classList.contains("toc-collapsed")));
@@ -134,20 +143,21 @@
         navigation.querySelectorAll(".site-nav-toggle").forEach((toggle) => {
             const children = document.getElementById(toggle.getAttribute("aria-controls"));
             const link = toggle.parentElement.querySelector(".site-nav-link");
+            const storageKey = `mdu-nav-expanded:${new URL(link.href).pathname}`;
+            const onCurrentPath = link === currentPage || !!currentPage && children.contains(currentPage);
             let saved = null;
             try {
-                saved = sessionStorage.getItem(`mdu-nav-expanded:${new URL(link.href).pathname}`);
+                saved = sessionStorage.getItem(storageKey);
             } catch { }
-            const expanded = link === currentPage || !!currentPage && children.contains(currentPage) ||
+            const expanded = onCurrentPath ||
                 (saved === null ? toggle.getAttribute("aria-expanded") === "true" : saved === "true");
             const setExpanded = (open) => {
                 children.hidden = !open;
                 toggle.setAttribute("aria-expanded", String(open));
                 toggle.setAttribute("aria-label", `${open ? "Collapse" : "Expand"} ${link.textContent.trim()}`);
             };
-            const storageKey = `mdu-nav-expanded:${new URL(link.href).pathname}`;
             setExpanded(expanded);
-            if (expanded && (link === currentPage || currentPage && children.contains(currentPage))) {
+            if (expanded && onCurrentPath) {
                 try { sessionStorage.setItem(storageKey, "true"); } catch { }
             }
             toggle.addEventListener("click", () => {
@@ -275,55 +285,96 @@
     const breakpoint = window.matchMedia("(max-width: 760px)");
     const compactNavigation = window.matchMedia("(max-width: 1220px)");
     const sidebarPreferenceKey = "mdu-sidebar-collapsed";
-    const panels = window.mduPanels;
-    let preferredSidebarWidth = parseFloat(getComputedStyle(root).getPropertyValue(panels.sidebar.property));
+    const panels = mduPanels;
     const main = layout.querySelector(".site-main");
-    const hasTableOfContents = main.querySelector(".on-this-page") !== null;
+    const toc = main.querySelector(".on-this-page");
+    const hasTableOfContents = toc !== null;
     const tocToggle = document.getElementById("toc-toggle");
     const tocResizer = document.getElementById("toc-resizer");
-    let preferredTocWidth = parseFloat(getComputedStyle(root).getPropertyValue(panels.toc.property));
     const tocIsCollapsed = () => root.classList.contains("toc-collapsed");
-    const getSidebarWidthBounds = () => {
+    const sidebarPanel = { ...panels.sidebar, resizer: sidebarResizer, element: navigation };
+    const tocPanel = { ...panels.toc, resizer: tocResizer, element: toc };
+    for (const panel of [sidebarPanel, tocPanel]) {
+        panel.preferred = parseFloat(root.style.getPropertyValue(panel.property));
+    }
+    let panelFrame = null;
+    const observedWidths = new WeakMap();
+    const syncPanels = () => {
+        if (panelFrame !== null) cancelAnimationFrame(panelFrame);
+        panelFrame = null;
         const layoutStyle = getComputedStyle(layout);
         const mainStyle = getComputedStyle(main);
         const availableWidth = layout.clientWidth - parseFloat(layoutStyle.paddingLeft) - parseFloat(layoutStyle.paddingRight);
         const mainPadding = parseFloat(mainStyle.paddingLeft) + parseFloat(mainStyle.paddingRight);
-        const tocWidth = parseFloat(getComputedStyle(root).getPropertyValue(panels.toc.property));
-        const minimumMainWidth = (hasTableOfContents && !tocIsCollapsed()
-            ? panels.tocContentMin + panels.gap + tocWidth : panels.contentMin) + mainPadding;
-        return {
-            min: panels.sidebar.min,
-            max: Math.floor(Math.max(panels.sidebar.min, Math.min(panels.sidebar.max, availableWidth - minimumMainWidth)))
-        };
+        const sidebarVisible = !breakpoint.matches && !layout.classList.contains("sidebar-collapsed") &&
+            (compactNavigation.matches || layout.classList.contains("has-wide-sidebar"));
+        const measured = panels.measure(availableWidth, mainPadding, sidebarVisible, hasTableOfContents);
+        root.classList.toggle("toc-space-available", measured.tocFits);
+        const mainWidth = main.clientWidth;
+        observedWidths.set(layout, Math.round(layout.clientWidth));
+        observedWidths.set(main, Math.round(mainWidth));
+        const contentWidth = mainWidth - mainPadding;
+        const available = measured.tocFits;
+        tocToggle.hidden = !available;
+        tocResizer.hidden = !available || tocIsCollapsed();
+        tocToggle.setAttribute("aria-expanded", String(!tocIsCollapsed()));
+        const label = `${tocIsCollapsed() ? "Expand" : "Collapse"} table of contents`;
+        tocToggle.setAttribute("aria-label", label);
+        tocToggle.title = label;
+        sidebarPanel.availableMax = measured.sidebarMax;
+        tocPanel.availableMax = Math.round(Math.max(panels.toc.min, Math.min(panels.toc.max,
+            contentWidth - panels.tocContentMin - panels.gap)));
+        for (const panel of [sidebarPanel, tocPanel]) {
+            const width = Math.round(panel.element?.getBoundingClientRect().width ?? 0);
+            if (panel.element) observedWidths.set(panel.element, width);
+            panel.resizer.setAttribute("aria-valuemin", String(panel.min));
+            panel.resizer.setAttribute("aria-valuemax", String(panel.availableMax));
+            panel.resizer.setAttribute("aria-valuenow", String(width));
+        }
     };
-    const syncSidebar = () => {
-        const bounds = getSidebarWidthBounds();
-        sidebarResizer.setAttribute("aria-valuemin", String(bounds.min));
-        sidebarResizer.setAttribute("aria-valuemax", String(bounds.max));
-        sidebarResizer.setAttribute("aria-valuenow", String(Math.round(navigation.getBoundingClientRect().width)));
+    const schedulePanelSync = () => {
+        if (panelFrame === null) panelFrame = requestAnimationFrame(syncPanels);
     };
-    const setSidebarWidth = (width, save = true) => {
-        const bounds = getSidebarWidthBounds();
-        const clampedWidth = Math.round(Math.max(bounds.min, Math.min(bounds.max, width)));
-        root.style.setProperty(panels.sidebar.property, `${clampedWidth}px`);
+    const setPanelWidth = (panel, width, save = true) => {
+        const clampedWidth = Math.round(Math.max(panel.min, Math.min(panel.availableMax, width)));
+        root.style.setProperty(panel.property, `${clampedWidth}px`);
         if (save) {
-            preferredSidebarWidth = clampedWidth;
+            panel.preferred = clampedWidth;
             try {
-                localStorage.setItem(panels.sidebar.key, String(clampedWidth));
+                localStorage.setItem(panel.key, String(clampedWidth));
             } catch { }
         }
-        syncSidebar();
-        updateToc();
-        return clampedWidth;
+        syncPanels();
+    };
+    const restorePanelWidth = (panel) => {
+        root.style.setProperty(panel.property, `${panel.preferred}px`);
+        syncPanels();
     };
 
-    const bindPanelResizer = (resizer, direction, setWidth, restoreWidth) => {
+    const bindPanelResizer = (panel, direction) => {
+        const resizer = panel.resizer;
         let activePointerId = null;
         let pointerStartX = 0;
         let pointerStartWidth = 0;
         let moved = false;
+        let pendingWidth = null;
+        let dragFrame = null;
+        const applyDrag = () => {
+            if (dragFrame !== null) cancelAnimationFrame(dragFrame);
+            dragFrame = null;
+            if (pendingWidth === null) return;
+            const width = pendingWidth;
+            pendingWidth = null;
+            setPanelWidth(panel, width, false);
+        };
+        const discardDrag = () => {
+            if (dragFrame !== null) cancelAnimationFrame(dragFrame);
+            dragFrame = null;
+            pendingWidth = null;
+        };
         resizer.addEventListener("pointerdown", (event) => {
-            if (event.button !== 0) return;
+            if (event.button !== 0 || activePointerId !== null) return;
+            syncPanels();
             pointerStartX = event.clientX;
             pointerStartWidth = Number(resizer.getAttribute("aria-valuenow"));
             activePointerId = event.pointerId;
@@ -335,15 +386,20 @@
             if (event.pointerId !== activePointerId) return;
             if (event.clientX === pointerStartX && !moved) return;
             moved = true;
-            setWidth(pointerStartWidth + direction * (event.clientX - pointerStartX), false);
+            pendingWidth = pointerStartWidth + direction * (event.clientX - pointerStartX);
+            if (dragFrame === null) dragFrame = requestAnimationFrame(applyDrag);
         });
         const finishResize = (event) => {
             if (event.pointerId !== activePointerId) return;
             activePointerId = null;
             if (moved) {
+                if (event.type === "pointerup") {
+                    pendingWidth = pointerStartWidth + direction * (event.clientX - pointerStartX);
+                    applyDrag();
+                } else discardDrag();
                 const width = Number(resizer.getAttribute("aria-valuenow"));
-                if (event.type === "pointerup" && width !== pointerStartWidth) setWidth(width);
-                else restoreWidth();
+                if (event.type === "pointerup" && width !== pointerStartWidth) setPanelWidth(panel, width);
+                else restorePanelWidth(panel);
             }
         };
         resizer.addEventListener("pointerup", finishResize);
@@ -351,11 +407,13 @@
         resizer.addEventListener("lostpointercapture", (event) => {
             if (event.pointerId === activePointerId) {
                 activePointerId = null;
-                if (moved) restoreWidth();
+                discardDrag();
+                if (moved) restorePanelWidth(panel);
             }
         });
         resizer.addEventListener("keydown", (event) => {
             if (event.altKey || event.metaKey || event.ctrlKey) return;
+            syncPanels();
             const currentWidth = Number(resizer.getAttribute("aria-valuenow"));
             const step = event.shiftKey ? 50 : 10;
             let nextWidth;
@@ -365,68 +423,28 @@
             else if (event.key === "End") nextWidth = Number(resizer.getAttribute("aria-valuemax"));
             else return;
             event.preventDefault();
-            setWidth(nextWidth);
+            const clampedWidth = Math.round(Math.max(panel.min, Math.min(panel.availableMax, nextWidth)));
+            if (clampedWidth !== currentWidth) setPanelWidth(panel, clampedWidth);
         });
     };
-    bindPanelResizer(sidebarResizer, 1, setSidebarWidth, () => {
-        root.style.setProperty(panels.sidebar.property, `${preferredSidebarWidth}px`);
-        syncSidebar();
-        updateToc();
-    });
-
-    const updateToc = () => {
-        const available = hasTableOfContents && !breakpoint.matches && main.clientWidth -
-            parseFloat(getComputedStyle(main).paddingLeft) - parseFloat(getComputedStyle(main).paddingRight) >= panels.tocThreshold;
-        tocToggle.hidden = !available;
-        tocResizer.hidden = !available || tocIsCollapsed();
-        tocToggle.setAttribute("aria-expanded", String(!tocIsCollapsed()));
-        const label = `${tocIsCollapsed() ? "Expand" : "Collapse"} table of contents`;
-        tocToggle.setAttribute("aria-label", label);
-        tocToggle.title = label;
-        const max = Math.max(panels.toc.min, Math.min(panels.toc.max, main.clientWidth -
-            parseFloat(getComputedStyle(main).paddingLeft) - parseFloat(getComputedStyle(main).paddingRight) - panels.tocContentMin - panels.gap));
-        tocResizer.setAttribute("aria-valuemin", String(panels.toc.min));
-        tocResizer.setAttribute("aria-valuemax", String(Math.floor(max)));
-        tocResizer.setAttribute("aria-valuenow", String(Math.round(main.querySelector(".on-this-page")?.getBoundingClientRect().width ?? 0)));
-    };
-    const setTocWidth = (width, save = true) => {
-        const max = Number(tocResizer.getAttribute("aria-valuemax"));
-        const clampedWidth = Math.round(Math.max(panels.toc.min, Math.min(max, width)));
-        root.style.setProperty(panels.toc.property, `${clampedWidth}px`);
-        if (save) {
-            preferredTocWidth = clampedWidth;
-            try {
-                localStorage.setItem(panels.toc.key, String(preferredTocWidth));
-            } catch { }
-        }
-        updateToc();
-        syncSidebar();
-    };
+    bindPanelResizer(sidebarPanel, 1);
+    bindPanelResizer(tocPanel, -1);
     tocToggle.addEventListener("click", () => {
         root.classList.toggle("toc-collapsed");
         try {
             localStorage.setItem("mdu-toc-collapsed", String(tocIsCollapsed()));
         } catch { }
-        syncSidebar();
-        updateToc();
+        syncPanels();
     });
-    bindPanelResizer(tocResizer, -1, setTocWidth, () => {
-        root.style.setProperty(panels.toc.property, `${preferredTocWidth}px`);
-        updateToc();
-        syncSidebar();
+    const panelObserver = new ResizeObserver((entries) => {
+        if (entries.some(entry => observedWidths.get(entry.target) !== Math.round(entry.borderBoxSize[0].inlineSize))) {
+            schedulePanelSync();
+        }
     });
-    const panelObserver = new ResizeObserver(() => {
-        updateToc();
-        syncSidebar();
-    });
+    panelObserver.observe(layout);
     panelObserver.observe(main);
     panelObserver.observe(navigation);
-    if (hasTableOfContents) panelObserver.observe(main.querySelector(".on-this-page"));
-    window.addEventListener("resize", () => {
-        updateToc();
-        syncSidebar();
-    });
-    updateToc();
+    if (hasTableOfContents) panelObserver.observe(toc);
 
     const isDesktopSidebarCollapsed = () => {
         try {
@@ -452,9 +470,7 @@
         root.classList.toggle("sidebar-starts-collapsed", !open && !breakpoint.matches);
         header.classList.toggle("navigation-is-open", open);
         header.classList.toggle("navigation-is-collapsed", !open);
-        header.classList.toggle("has-wide-sidebar", layout.classList.contains("has-wide-sidebar"));
-        syncSidebar();
-        updateToc();
+        syncPanels();
         const toggleAvailable = compactNavigation.matches || layout.classList.contains("has-wide-sidebar");
         toggle.hidden = !toggleAvailable;
         toggle.setAttribute("aria-expanded", String(open));
@@ -485,7 +501,7 @@
     breakpoint.addEventListener("change", (event) =>
         setOpen(!event.matches && !startsCollapsed()));
     compactNavigation.addEventListener("change", (event) =>
-        setOpen((event.matches && !isDashboard) || !startsCollapsed()));
+        setOpen(!breakpoint.matches && ((event.matches && !isDashboard) || !startsCollapsed())));
 })();
 </script>
 <script>

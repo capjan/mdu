@@ -7,6 +7,10 @@ public class SiteConfigurationReaderTest
     [Theory]
     [InlineData("", true)]
     [InlineData("attribution: {}", true)]
+    [InlineData("attribution:", true)]
+    [InlineData("attribution:\nattribution.visible: false", false)]
+    [InlineData("attribution: {visible: false}\nattribution.visible: false", false)]
+    [InlineData("attribution: {visible: true}\nattribution.visible: true", true)]
     [InlineData("attribution.visible: false", false)]
     [InlineData("attribution.visible: true", true)]
     [InlineData("attribution:\n  visible: false", false)]
@@ -31,6 +35,10 @@ public class SiteConfigurationReaderTest
     [InlineData("attribution.visible: maybe")]
     [InlineData("attribution:\n  visible: []")]
     [InlineData("attribution.visible:")]
+    [InlineData("attribution: {visible: false}\nattribution.visible: true")]
+    [InlineData("attribution: {visible: true}\nattribution.visible: false")]
+    [InlineData("attribution: {visible: maybe}\nattribution.visible: true")]
+    [InlineData("attribution: {visible: true}\nattribution.visible: maybe")]
     public void RejectsInvalidAttributionVisibility(string yaml)
     {
         var root = Path.Combine(Path.GetTempPath(), $"mdu-site-config-test-{Guid.NewGuid():N}");

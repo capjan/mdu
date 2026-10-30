@@ -36,25 +36,26 @@ public class RendererTest
 
         Assert.Contains("id=\"sidebar-resizer\" role=\"separator\" aria-label=\"Resize sidebar\"", html);
         Assert.Contains("aria-orientation=\"vertical\" tabindex=\"0\"", html);
-        Assert.Contains("sidebarResizer.setAttribute(\"aria-valuemin\", String(bounds.min));", html);
+        Assert.Contains("panel.resizer.setAttribute(\"aria-valuemin\", String(panel.min));", html);
         Assert.Contains("grid-template-columns: var(--sidebar-width) minmax(0, 1fr);", css);
         Assert.Contains("resizer.addEventListener(\"pointerdown\"", html);
         Assert.Contains("resizer.addEventListener(\"keydown\"", html);
-        Assert.Contains("bindPanelResizer(sidebarResizer, 1, setSidebarWidth,", html);
+        Assert.Contains("bindPanelResizer(sidebarPanel, 1);", html);
         var focusStyles = BlockAfter(css, ".sidebar-resizer:focus-visible,\n.toc-resizer:focus-visible {");
         Assert.Contains("border-radius: 2px;", focusStyles);
+        Assert.Contains("outline-offset: -2px;", focusStyles);
     }
 
     [Fact]
     public void PreservesThePreferredSidebarWidthAcrossViewportChanges()
     {
         var html = Resources.HtmlTemplateContent();
-        var resizeHandler = BlockAfter(html, "window.addEventListener(\"resize\", () => {");
-
-        Assert.Contains("syncSidebar();", resizeHandler);
-        Assert.DoesNotContain("setSidebarWidth(", resizeHandler);
-        Assert.Contains("preferredSidebarWidth = clampedWidth;", html);
-        Assert.Contains("setWidth(pointerStartWidth + direction * (event.clientX - pointerStartX), false);", html);
+        Assert.Contains("observedWidths.get(entry.target) !== Math.round(entry.borderBoxSize[0].inlineSize)", html);
+        Assert.DoesNotContain("window.addEventListener(\"resize\", () => {", html);
+        Assert.Contains("panel.preferred = clampedWidth;", html);
+        Assert.Contains("pendingWidth = pointerStartWidth + direction * (event.clientX - pointerStartX);", html);
+        Assert.Contains("if (dragFrame === null) dragFrame = requestAnimationFrame(applyDrag);", html);
+        Assert.Contains("if (clampedWidth !== currentWidth) setPanelWidth(panel, clampedWidth);", html);
         Assert.Contains("const step = event.shiftKey ? 50 : 10;", html);
     }
 
@@ -97,8 +98,11 @@ public class RendererTest
         Assert.Contains("grid-template-columns: minmax(0, 1fr);", css);
         Assert.Contains("@container (min-width: 600px)", css);
         Assert.Contains("grid-template-columns: minmax(0, 1fr) var(--toc-width);", css);
-        Assert.Contains("? panels.tocContentMin + panels.gap + tocWidth : panels.contentMin) + mainPadding;", html);
-        Assert.Contains("availableWidth - minimumMainWidth", html);
+        Assert.Contains("width - (sidebarVisible ? panels.sidebar.min : 0) - padding >= panels.tocThreshold", html);
+        Assert.Contains(": panels.contentMin) + padding;", html);
+        Assert.Contains("width - reserve", html);
+        Assert.Contains(":root.toc-space-available .site-layout:has(.on-this-page)", css);
+        Assert.DoesNotContain("\n.site-layout:has(.on-this-page) {", css);
     }
 
     [Fact]
@@ -109,7 +113,7 @@ public class RendererTest
         Assert.True(html.IndexOf("for (const panel of [panels.sidebar, panels.toc])", StringComparison.Ordinal) < body);
         Assert.True(html.IndexOf("mdu-toc-collapsed", StringComparison.Ordinal) < body);
         Assert.Contains("aria-label=\"Resize table of contents\"", html);
-        Assert.Contains("bindPanelResizer(tocResizer, -1, setTocWidth,", html);
+        Assert.Contains("bindPanelResizer(tocPanel, -1);", html);
         Assert.Contains("tocToggle.setAttribute(\"aria-expanded\"", html);
     }
 
@@ -132,9 +136,24 @@ public class RendererTest
         Assert.Equal(1, html.Split("querySelectorAll(\".site-nav-toggle\")").Length - 1);
         Assert.Contains("if (event.altKey || event.metaKey || event.ctrlKey) return;", html);
         Assert.Contains("if (moved) {", html);
-        Assert.Contains("else restoreWidth();", html);
+        Assert.Contains("else restorePanelWidth(panel);", html);
+        Assert.DoesNotContain("window.mduPanels", html);
+        Assert.DoesNotContain("header.classList.toggle(\"has-wide-sidebar\"", html);
+        Assert.Contains("setOpen(!breakpoint.matches && ((event.matches && !isDashboard) || !startsCollapsed()))", html);
+        Assert.Equal(1, html.Split("`mdu-nav-expanded:${new URL(link.href).pathname}`").Length - 1);
         Assert.DoesNotContain("layout.style.removeProperty(\"--sidebar-width\")", html);
         Assert.DoesNotContain("\"%%SITE_LAYOUT_CLASS%%\".includes", html);
+    }
+
+    [Fact]
+    public void UsesSharedDashboardPaddingAndLimitsTitleTruncationToTheTitle()
+    {
+        var css = Resources.CssContent();
+        Assert.Contains("#site-brand-title {", css);
+        Assert.DoesNotContain(".site-brand > span", css);
+        Assert.Contains("padding: 1rem var(--main-padding) 3rem;", css);
+        Assert.Contains("--main-padding: clamp(1rem, 2.5vw, 2.5rem);", Dashboard.Styles);
+        Assert.Contains("padding-inline: var(--main-padding);", Dashboard.Styles);
     }
 
     private static string BlockAfter(string text, string marker)
