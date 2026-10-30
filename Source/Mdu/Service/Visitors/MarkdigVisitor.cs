@@ -112,7 +112,7 @@ public class MarkdigVisitor : BaseVisitor
         var pdfUrl = GetRelativeUrl(
             GetSiteRelativeSegments(Path.GetDirectoryName(Path.GetFullPath(outputFileName))!),
             ["documentation.pdf"]);
-        var pdfDownloadUrls = GetPdfDownloadUrls(markdown, entity, outputDirectory, pdfUrl);
+        var (pdfDownloadUrls, pdfDownloadNames) = GetPdfDownloads(markdown, entity, outputDirectory, pdfUrl);
 
         var temporaryPath = outputFileName + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
@@ -134,7 +134,8 @@ public class MarkdigVisitor : BaseVisitor
                     GetLastModified(entity),
                     pdfUrl,
                     Dashboard.ReadFrontMatter(entity.FrontMatter),
-                    pdfDownloadUrls).GetAwaiter().GetResult();
+                    pdfDownloadUrls,
+                    pdfDownloadNames).GetAwaiter().GetResult();
 
             File.Move(temporaryPath, outputFileName, true);
             WriteAliasPage(entity, outputFileName);
@@ -156,17 +157,28 @@ public class MarkdigVisitor : BaseVisitor
         return true;
     }
 
-    private IReadOnlyDictionary<string, string> GetPdfDownloadUrls(
-        string markdown, MarkdownFile entity, string outputDirectory, string pdfUrl) =>
-        _htmlFoundation.FindPdfLinks(markdown).ToDictionary(url => url, url =>
+    private (IReadOnlyDictionary<string, string> Urls, IReadOnlyDictionary<string, string> Names) GetPdfDownloads(
+        string markdown, MarkdownFile entity, string outputDirectory, string pdfUrl)
+    {
+        var urls = new Dictionary<string, string>(StringComparer.Ordinal);
+        var names = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var url in _htmlFoundation.FindPdfLinks(markdown))
         {
             var path = LinkReplacer.GetPdfRoot(url);
-            if (path is null) return pdfUrl;
+            if (path is null)
+            {
+                urls[url] = pdfUrl;
+                names[url] = "documentation";
+                continue;
+            }
             var selected = PdfSelection.FindPage(_rootPath, _navigationRoots, path, entity);
-            return GetRelativeUrl(
+            urls[url] = GetRelativeUrl(
                 GetSiteRelativeSegments(outputDirectory),
                 PdfSelection.GetOutputPath(_rootPath, selected).Split('/'));
-        }, StringComparer.Ordinal);
+            names[url] = NavigationPage.RemoveIconShortcodes(selected.Title).Trim();
+        }
+        return (urls, names);
+    }
 
     private IReadOnlyList<string> WriteSpecificationPages(
         MarkdownFile entity,
@@ -191,6 +203,7 @@ public class MarkdigVisitor : BaseVisitor
 
         foreach (var specPage in specificationPages)
         {
+            var (pdfDownloadUrls, pdfDownloadNames) = GetPdfDownloads(specPage.Markdown, entity, parentDirectory, pdfUrl);
             var specOutputPath = Path.GetFullPath(Path.Combine(parentDirectory, specPage.FileName));
             if (_pageOutputPaths.Contains(specOutputPath)) continue;
             var temporaryPath = specOutputPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
@@ -212,7 +225,8 @@ public class MarkdigVisitor : BaseVisitor
                         topNavigation,
                         GetLastModified(entity),
                         pdfUrl,
-                        pdfDownloadUrls: GetPdfDownloadUrls(specPage.Markdown, entity, parentDirectory, pdfUrl)).GetAwaiter().GetResult();
+                        pdfDownloadUrls: pdfDownloadUrls,
+                        pdfDownloadNames: pdfDownloadNames).GetAwaiter().GetResult();
 
                 File.Move(temporaryPath, specOutputPath, true);
                 generatedPagePaths.Add(specOutputPath);

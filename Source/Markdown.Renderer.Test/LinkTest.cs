@@ -3,6 +3,34 @@ namespace Markdown.Renderer.Test;
 public class LinkTest
 {
     [Theory]
+    [InlineData("API Guide", "API Guide.pdf")]
+    [InlineData("../API: \"Guide\"?*", "-API- -Guide---.pdf")]
+    [InlineData("...", "documentation.pdf")]
+    [InlineData("CON", "_CON.pdf")]
+    [InlineData("API\nGuide", "API-Guide.pdf")]
+    [InlineData("API . ", "API.pdf")]
+    [InlineData("API & Guide", "API &amp; Guide.pdf")]
+    public async Task UsesSafeDownloadNamesWithoutChangingPdfUrls(string title, string expected)
+    {
+        using var writer = new StringWriter();
+        await new HtmlRenderer().WriteHtml(writer, "PDF", "", 0,
+            "[Topic](mdu:pdf?root=Topic/README.md) [All](mdu:pdf) [Ordinary](manual.pdf)", "",
+            pdfDownloadUrl: "../documentation.pdf",
+            pdfDownloadUrls: new Dictionary<string, string>
+            {
+                ["mdu:pdf?root=Topic/README.md"] = "../_mdu-pdf/hash.pdf"
+            },
+            pdfDownloadNames: new Dictionary<string, string>
+            {
+                ["mdu:pdf?root=Topic/README.md"] = title
+            });
+        var html = writer.ToString();
+        Assert.Contains($"href=\"../_mdu-pdf/hash.pdf\" download=\"{expected}\"", html);
+        Assert.Contains("href=\"../documentation.pdf\" download=\"documentation.pdf\"", html);
+        Assert.Contains("<a href=\"manual.pdf\">Ordinary</a>", html);
+    }
+
+    [Theory]
     [InlineData("mdu:pdf", null)]
     [InlineData("mdu:pdf?root=README.md", "README.md")]
     [InlineData("MDU:PDF?root=../API%20Guide/README.md", "../API Guide/README.md")]

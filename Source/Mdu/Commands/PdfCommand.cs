@@ -11,6 +11,7 @@ namespace Mdu.Commands;
 
 public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRenderer)
 {
+    private readonly Dictionary<string, PdfSourceSection[]> _sitePdfSections = new(MarkdownLinks.PathComparer);
     public IReadOnlyCollection<string> GeneratedSitePdfPaths { get; private set; } = Array.Empty<string>();
 
     public int Execute(RenderCommandSettings settings)
@@ -86,8 +87,10 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
     public int WriteSitePdf(string rootPath, string outputPath, IEnumerable<MarkdownFile> graph) =>
         WritePdf(rootPath, outputPath, Flatten(graph), includeFrontMatter: true);
 
-    public int WriteSitePdfIfLinked(string rootPath, string outputPath, IEnumerable<MarkdownFile> graph)
+    public int WriteSitePdfIfLinked(string rootPath, string outputPath, IEnumerable<MarkdownFile> graph,
+        bool reuseUnchanged = false)
     {
+        if (!reuseUnchanged) _sitePdfSections.Clear();
         outputPath = Path.GetFullPath(outputPath);
         var roots = graph.ToArray();
         var files = Flatten(roots).ToArray();
@@ -111,7 +114,8 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         }
 
         foreach (var (destination, selected) in requests)
-            if (WritePdf(rootPath, destination, selected is null ? files : Flatten([selected]), includeFrontMatter: true) != 0)
+            if (WritePdf(rootPath, destination, selected is null ? files : Flatten([selected]),
+                    includeFrontMatter: true, reuseUnchanged: reuseUnchanged, trackSitePdf: true) != 0)
                 return 1;
 
         if (!requests.ContainsKey(outputPath) && File.Exists(outputPath)) File.Delete(outputPath);
@@ -121,6 +125,8 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
                 if (Path.GetFileNameWithoutExtension(oldPath) is { Length: 64 } name &&
                     name.All(char.IsAsciiHexDigit) && !requests.ContainsKey(Path.GetFullPath(oldPath)))
                     File.Delete(oldPath);
+        foreach (var oldPath in _sitePdfSections.Keys.Where(path => !requests.ContainsKey(path)).ToArray())
+            _sitePdfSections.Remove(oldPath);
         GeneratedSitePdfPaths = requests.Keys.ToArray();
         return 0;
     }
@@ -129,7 +135,9 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         string rootPath,
         string outputPath,
         IEnumerable<(MarkdownFile File, int Depth)> files,
-        bool includeFrontMatter)
+        bool includeFrontMatter,
+        bool reuseUnchanged = false,
+        bool trackSitePdf = false)
     {
         var sections = files.Where(item => IsPdfVisible(item.File.FrontMatter))
             .Select(item =>
@@ -153,6 +161,11 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
             return 1;
         }
 
+        if (reuseUnchanged && File.Exists(outputPath) &&
+            _sitePdfSections.TryGetValue(outputPath, out var previousSections) &&
+            previousSections.SequenceEqual(sections))
+            return 0;
+
         var outputDirectory = Path.GetDirectoryName(outputPath)!;
         Directory.CreateDirectory(outputDirectory);
         var temporaryPath = outputPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
@@ -161,6 +174,7 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
             using (var stream = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write))
                 pdfRenderer.WritePdf(stream, Path.GetFileNameWithoutExtension(outputPath), sections, includeFrontMatter);
             File.Move(temporaryPath, outputPath, true);
+            if (trackSitePdf) _sitePdfSections[outputPath] = sections;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or XmlException)
         {

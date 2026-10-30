@@ -508,7 +508,7 @@ public sealed class ServeCommand
         {
             _searchIndexBuilder.WriteIndex(_outputPath);
             var pdfOutputPath = Path.Combine(_outputPath, "documentation.pdf");
-            if (_pdfCommand.WriteSitePdfIfLinked(_rootPath, pdfOutputPath, _navigationRoots) != 0)
+            if (_pdfCommand.WriteSitePdfIfLinked(_rootPath, pdfOutputPath, _navigationRoots, reuseUnchanged: true) != 0)
                 throw new InvalidOperationException("Could not render the documentation PDF.");
         }
 

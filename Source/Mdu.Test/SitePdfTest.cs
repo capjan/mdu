@@ -13,6 +13,71 @@ namespace Mdu.Test;
 
 public class SitePdfTest
 {
+    [Fact]
+    public void ReusesOnlyUnchangedExistingPdfsDuringIncrementalUpdates()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-incremental-pdf-{Guid.NewGuid():N}");
+        var docs = Path.Combine(root, "docs");
+        var output = Path.Combine(root, "site", "documentation.pdf");
+        Directory.CreateDirectory(Path.Combine(docs, "Topic"));
+        var home = Path.Combine(docs, "README.md");
+        var detail = Path.Combine(docs, "Topic", "Details.md");
+        File.WriteAllText(home, "# Home\n\n[All](mdu:pdf) [Topic](mdu:pdf?root=Topic/README.md)");
+        File.WriteAllText(Path.Combine(docs, "Topic", "README.md"), "# Topic");
+        File.WriteAllText(detail, "# Details\n\nBefore");
+        var builder = new GraphBuilder(new DataPreparationVisitor(new MarkdownDocumentReader()));
+        var command = new PdfCommand(builder, new PdfRenderer(new HtmlRenderer()));
+        var sentinel = new DateTime(2001, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        void Update(bool reuse = true)
+        {
+            var graph = builder.CreateGraph(new RenderCommandSettings { RootPath = docs });
+            Assert.Equal(0, command.WriteSitePdfIfLinked(docs, output, graph, reuseUnchanged: reuse));
+        }
+        try
+        {
+            Update(reuse: false);
+            var topic = Assert.Single(command.GeneratedSitePdfPaths.Where(path => path != output));
+            File.SetLastWriteTimeUtc(output, sentinel);
+            File.SetLastWriteTimeUtc(topic, sentinel);
+            Update();
+            Assert.Equal(sentinel, File.GetLastWriteTimeUtc(output));
+            Assert.Equal(sentinel, File.GetLastWriteTimeUtc(topic));
+
+            File.AppendAllText(home, "\n\nUnrelated change");
+            Update();
+            Assert.NotEqual(sentinel, File.GetLastWriteTimeUtc(output));
+            Assert.Equal(sentinel, File.GetLastWriteTimeUtc(topic));
+
+            File.WriteAllText(detail, "# Details\n\nAfter");
+            Update();
+            Assert.NotEqual(sentinel, File.GetLastWriteTimeUtc(topic));
+            Assert.Contains(Hex("After"), File.ReadAllText(topic, Encoding.Latin1));
+
+            File.SetLastWriteTimeUtc(topic, sentinel);
+            File.WriteAllText(detail, "---\npdf.visible: false\n---\n# Details\n\nAfter");
+            Update();
+            Assert.NotEqual(sentinel, File.GetLastWriteTimeUtc(topic));
+            Assert.DoesNotContain(Hex("After"), File.ReadAllText(topic, Encoding.Latin1));
+
+            File.Delete(topic);
+            Update();
+            Assert.True(File.Exists(topic));
+            File.SetLastWriteTimeUtc(topic, sentinel);
+            Update(reuse: false);
+            Assert.NotEqual(sentinel, File.GetLastWriteTimeUtc(topic));
+
+            File.WriteAllText(home, "# Home");
+            Update();
+            Assert.Empty(command.GeneratedSitePdfPaths);
+            Assert.False(File.Exists(output));
+            Assert.False(File.Exists(topic));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData("mdu:pdf?root=README.md", true)]
     [InlineData("mdu:pdf", false)]
@@ -38,9 +103,21 @@ public class SitePdfTest
             var destination = scoped ? ReadScopedUrl(html) : "documentation.pdf";
             Assert.NotEmpty(destination);
             Assert.Contains($"href=\"{destination}\"", html);
+            Assert.Contains($"download=\"{(scoped ? "API" : "documentation")}.pdf\"", html);
             Assert.True(File.Exists(Path.Combine(site, destination)));
             Assert.Single(Directory.GetFiles(site, "*.pdf", SearchOption.AllDirectories));
             Assert.DoesNotContain("href=\"mdu:pdf", html);
+
+            var builder = new GraphBuilder(new DataPreparationVisitor(new MarkdownDocumentReader()));
+            var command = new PdfCommand(builder, new PdfRenderer(new HtmlRenderer()));
+            var output = Path.Combine(site, "documentation.pdf");
+            Assert.Equal(0, command.WriteSitePdfIfLinked(docs, output,
+                builder.CreateGraph(new RenderCommandSettings { RootPath = docs })));
+            var spec = File.ReadAllText(Path.Combine(docs, "api.yaml"));
+            File.WriteAllText(Path.Combine(docs, "api.yaml"), spec.Replace("Example API", "Updated API"));
+            Assert.Equal(0, command.WriteSitePdfIfLinked(docs, output,
+                builder.CreateGraph(new RenderCommandSettings { RootPath = docs }), reuseUnchanged: true));
+            Assert.Contains(Hex("Updated API"), File.ReadAllText(Path.Combine(site, destination), Encoding.Latin1));
         }
         finally
         {
@@ -59,7 +136,7 @@ public class SitePdfTest
             var builder = new GraphBuilder(new DataPreparationVisitor(new MarkdownDocumentReader()));
             var command = new PdfCommand(builder, new PdfRenderer(new HtmlRenderer()));
             var graph = builder.CreateGraph(new RenderCommandSettings { RootPath = root });
-            var output = root + Path.DirectorySeparatorChar + "site/documentation.pdf";
+            var output = root + Path.DirectorySeparatorChar + "site/../site/documentation.pdf";
             Assert.Equal(0, command.WriteSitePdfIfLinked(root, output, graph));
             var generated = Assert.Single(command.GeneratedSitePdfPaths);
             Assert.Equal(Path.GetFullPath(generated), generated);
@@ -101,6 +178,7 @@ public class SitePdfTest
             Assert.DoesNotContain(Hex("Home"), topicPdf);
             var topicHtml = File.ReadAllText(Path.Combine(output, "Topic A", "index.html"));
             Assert.Contains($"href=\"../{topicUrl}\"", topicHtml);
+            Assert.Contains("download=\"Selected.pdf\"", topicHtml);
 
             File.WriteAllText(home, "# Home\n\n[Topic](mdu:pdf?root=Topic%20A/README.md)");
             File.WriteAllText(topic, "# Selected\n\nUpdated");

@@ -1,6 +1,6 @@
 # PDF Link
 
-`mdu render` and `mdu serve` create PDF downloads requested by links in Markdown pages. The link `mdu:pdf` requests the combined `documentation.pdf` in the site output folder. With no PDF Link, no PDF asset is generated. `mdu serve` refreshes the PDFs when Markdown pages change.
+`mdu render` and `mdu serve` create PDF downloads requested by links in Markdown pages. The link `mdu:pdf` requests the combined `documentation.pdf` in the site output folder. With no PDF Link, no PDF asset is generated. During incremental Markdown updates, `mdu serve` regenerates only exports whose selected content changed or whose PDF is missing. Full site rebuilds regenerate all requested PDFs.
 
 ## Syntax
 
@@ -35,6 +35,8 @@ PDF links in rendered OpenAPI descriptions request downloads too. Their root pat
 This also works with [repository imports](Repository-Imports.md): paths refer to their location in the assembled site, not the source repository or cache. An import declaration such as `API.md` can be used as the root too.
 
 Several topic PDFs and the full documentation PDF can coexist. Links selecting the same root share one download. Topic PDFs are generated in the reserved `_mdu-pdf/` output folder with stable generated filenames; link to them using `mdu:pdf?root=...`, not their generated filenames. Obsolete generated PDFs are removed when their last requesting link is removed. Invalid or missing roots fail the render rather than producing a broken download.
+
+Topic download links suggest the selected page's title as the filename through the HTML `download` attribute, with characters unsuitable for filenames replaced. The generated URL stays unchanged. Full-document downloads use `documentation.pdf`.
 
 For the equivalent CLI export, see [`mdu pdf --page`](../Usage/pdf.md#export-a-topic-and-its-subpages).
 

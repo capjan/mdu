@@ -8,12 +8,19 @@ using System.Text;
 
 namespace Mdu.Test;
 
+internal sealed class WindowsFactAttribute : FactAttribute
+{
+    public WindowsFactAttribute()
+    {
+        if (!OperatingSystem.IsWindows()) Skip = "Requires native Windows path handling.";
+    }
+}
+
 public class PdfCommandTest
 {
-    [Fact]
+    [WindowsFact]
     public void AcceptsNativeWindowsSeparatorsInCliPageSelection()
     {
-        if (!OperatingSystem.IsWindows()) return;
         var root = Path.Combine(Path.GetTempPath(), $"mdu-native-pdf-{Guid.NewGuid():N}");
         Directory.CreateDirectory(Path.Combine(root, "API"));
         File.WriteAllText(Path.Combine(root, "API", "README.md"), "# API");

@@ -33,17 +33,30 @@ public class LinkReplacer
     }
 
     public void ReplaceAll(MarkdownDocument document, string? pdfDownloadUrl = null,
-        IReadOnlyDictionary<string, string>? pdfDownloadUrls = null)
+        IReadOnlyDictionary<string, string>? pdfDownloadUrls = null,
+        IReadOnlyDictionary<string, string>? pdfDownloadNames = null)
     {
         var headingIds = HeadingIds.Read(document);
         foreach (var link in document.Descendants<LinkInline>())
         {
             if (!link.IsImage && IsPdfLink(link.Url))
             {
+                var originalUrl = link.Url!;
                 if (pdfDownloadUrls?.TryGetValue(link.Url!, out var downloadUrl) == true)
                     link.Url = downloadUrl;
                 else if (GetPdfRoot(link.Url!) is null && !string.IsNullOrWhiteSpace(pdfDownloadUrl))
                     link.Url = pdfDownloadUrl;
+                if (!IsPdfLink(link.Url))
+                {
+                    var name = pdfDownloadNames?.GetValueOrDefault(originalUrl) ?? "documentation";
+                    var safeName = new string(name.Select(character =>
+                        char.IsControl(character) || "<>:\"/\\|?*".Contains(character) ? '-' : character).ToArray())
+                        .Trim().Trim(' ', '.');
+                    if (safeName.Length == 0) safeName = "documentation";
+                    if (Regex.IsMatch(safeName, @"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)", RegexOptions.IgnoreCase))
+                        safeName = "_" + safeName;
+                    link.GetAttributes().AddPropertyIfNotExist("download", safeName + ".pdf");
+                }
                 continue;
             }
 
