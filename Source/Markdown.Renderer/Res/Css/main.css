@@ -4333,7 +4333,6 @@ th, td {
 .image-lightbox {
     position: fixed;
     inset: 0;
-    display: grid;
     place-items: center;
     max-width: min(96vw, 1400px);
     max-height: 96vh;
@@ -4341,6 +4340,10 @@ th, td {
     border: 1px solid var(--border);
     border-radius: 12px;
     background: var(--surface-header);
+}
+
+.image-lightbox[open] {
+    display: grid;
 }
 
 .image-lightbox::backdrop {

@@ -6,6 +6,26 @@ namespace Markdown.Renderer.Test;
 public class RendererTest
 {
     [Fact]
+    public void AppliesImageLightboxGridLayoutOnlyWhileOpen()
+    {
+        var outputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            new HtmlRenderer().PrepareBasePath(outputPath);
+            var css = File.ReadAllText(Path.Combine(outputPath, "css", "main.css"));
+            var lightboxStyles = css.Split(".image-lightbox {", 2)[1].Split('}', 2)[0];
+
+            Assert.DoesNotContain("display:", lightboxStyles);
+            Assert.Matches(@"\.image-lightbox\[open\]\s*\{\s*display:\s*grid;\s*\}", css);
+        }
+        finally
+        {
+            if (Directory.Exists(outputPath)) Directory.Delete(outputPath, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task BasicTest()
     {
         var markdown = Res.Resources.MarkdownWithCode;
