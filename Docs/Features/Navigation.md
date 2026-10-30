@@ -39,6 +39,9 @@ How tabs behave:
 - **Wide screens** show the tabs below the site header. When a tab is active, the sidebar lists its child pages and pages elsewhere in the tree that are not assigned to a tab; it omits the root page above the tabs and is hidden when neither group has pages.
 - **Up to 1220 px** wide, the tabs fold into the full sidebar tree at their original place, and the selected section opens there. On narrow screens the sidebar becomes a drawer.
 - **Resize the sidebar** by dragging its right edge on desktop and tablet layouts. Focus the divider and use the arrow keys for 10 px steps, or Shift+arrow keys for 50 px steps; Home and End select the minimum and maximum width. The width is saved in the browser and restored when space is available again after resizing the window. The mobile drawer keeps its fixed width.
+- **Content and headings** share the remaining width without a separate content-width cap. On pages with a table of contents, sidebar resizing reserves room for the content and headings list. On narrower screens where both no longer fit, the headings list is hidden.
+- **Table of contents** can be hidden or shown with the right-hand panel button in the header. Drag its left divider to adjust its width, or focus the divider and use the arrow keys (Shift for larger steps), Home, or End. Both panel widths and the table-of-contents visibility are remembered and applied before the page is displayed.
+- **Panel buttons** use matching left/right icons and a neutral hover background. A filled panel area means the panel is open; an empty area means it is closed. Navigation expansion and header controls are initialized before the page content, without playing startup transitions.
 - **Breadcrumbs** always keep the full path from the documentation root; selecting a tab does not change it.
 - The root `README.md` stays the landing page. Mark it `top` as well if it should also appear as a tab, such as *Dashboard*.
 

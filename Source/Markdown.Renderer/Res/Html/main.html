@@ -15,12 +15,32 @@
             }
         } catch { }
     </script>
+    <script>
+        (() => {
+            const root = document.documentElement;
+            root.classList.add("panels-initializing");
+            try {
+                for (const [key, property, fallback, min, max] of [
+                    ["mdu-sidebar-width", "--sidebar-preferred-width", 260, 200, 480],
+                    ["mdu-toc-width", "--toc-preferred-width", 210, 180, 400]
+                ]) {
+                    const saved = localStorage.getItem(key);
+                    const width = saved === null ? fallback : Number(saved);
+                    if (Number.isFinite(width)) root.style.setProperty(property, `${Math.max(min, Math.min(max, width))}px`);
+                }
+                root.classList.toggle("toc-collapsed", localStorage.getItem("mdu-toc-collapsed") === "true");
+            } catch { }
+            try {
+                root.classList.toggle("sidebar-starts-collapsed", sessionStorage.getItem("mdu-sidebar-collapsed") === "true" || "%%SITE_LAYOUT_CLASS%%".includes("is-dashboard"));
+            } catch { }
+        })();
+    </script>
     <link rel="stylesheet" href="%%CSS_LINK%%">
     %%SITE_THEME_STYLE%%
     %%PAGE_STYLES%%
 </head>
 <body id="top" data-search-index="%%SEARCH_INDEX_LINK%%">
-<header class="site-header" id="site-header">
+<header class="site-header%%HEADER_LAYOUT_CLASS%%" id="site-header">
     %%SITE_BRAND%%
     <button class="search-button" id="search-button" type="button" aria-label="Search" aria-haspopup="dialog" aria-controls="search-dialog">
         <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
@@ -46,7 +66,37 @@
     </button>
 %%BACK_TO_TOP%%
 %%REPOSITORY_LINK%%
+    <button class="toc-toggle panel-toggle" id="toc-toggle" type="button" aria-controls="on-this-page" aria-expanded="true" aria-label="Collapse table of contents" title="Collapse table of contents" hidden>
+        <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><rect x="2.5" y="3.5" width="15" height="13" rx="2"></rect><path class="panel-fill" d="M12 4h5v12h-5z"></path><path d="M12 4v12"></path></svg>
+    </button>
 </header>
+<script>
+(() => {
+    const root = document.documentElement;
+    const compact = matchMedia("(max-width: 760px)").matches;
+    const header = document.getElementById("site-header");
+    const navigationToggle = document.getElementById("navigation-toggle");
+    const open = !compact && !root.classList.contains("sidebar-starts-collapsed");
+    header.classList.toggle("navigation-is-open", open);
+    header.classList.toggle("navigation-is-collapsed", !open);
+    navigationToggle.hidden = !matchMedia("(max-width: 1220px)").matches && !header.classList.contains("has-wide-sidebar");
+    navigationToggle.setAttribute("aria-expanded", String(open));
+    const navigationLabel = `${open ? "Collapse" : "Expand"} navigation`;
+    navigationToggle.setAttribute("aria-label", navigationLabel);
+    navigationToggle.title = navigationLabel;
+
+    const styles = getComputedStyle(root);
+    const pageWidth = Math.min(root.clientWidth, parseFloat(styles.getPropertyValue("--page-max-width")));
+    const tocWidth = parseFloat(styles.getPropertyValue("--toc-preferred-width"));
+    const reserve = root.classList.contains("toc-collapsed") ? 360 : 390 + tocWidth + 64;
+    const sidebarWidth = Math.max(200, Math.min(parseFloat(styles.getPropertyValue("--sidebar-preferred-width")), pageWidth - reserve));
+    const sidebarVisible = open && (header.classList.contains("has-wide-sidebar") || matchMedia("(max-width: 1220px)").matches);
+    const available = %%HAS_TOC%% && !compact && pageWidth - (sidebarVisible ? sidebarWidth : 0) - 64 >= 600;
+    const tocToggle = document.getElementById("toc-toggle");
+    tocToggle.hidden = !available;
+    tocToggle.setAttribute("aria-expanded", String(!root.classList.contains("toc-collapsed")));
+})();
+</script>
 <nav class="top-navigation%%TOP_NAVIGATION_CLASS%%" aria-label="Main sections">
 %%TOP_NAVIGATION_ITEMS%%
 </nav>
@@ -60,6 +110,24 @@
             </ul>
         </nav>
     </aside>
+    <script>
+    (() => {
+        const navigation = document.getElementById("site-navigation");
+        const currentPage = navigation.querySelector('.site-nav-link[aria-current="page"]');
+        navigation.querySelectorAll(".site-nav-toggle").forEach((toggle) => {
+            const children = document.getElementById(toggle.getAttribute("aria-controls"));
+            const link = toggle.parentElement.querySelector(".site-nav-link");
+            let saved = null;
+            try {
+                saved = sessionStorage.getItem(`mdu-nav-expanded:${new URL(link.href).pathname}`);
+            } catch { }
+            const expanded = link === currentPage || !!currentPage && children.contains(currentPage) ||
+                (saved === null ? toggle.getAttribute("aria-expanded") === "true" : saved === "true");
+            children.hidden = !expanded;
+            toggle.setAttribute("aria-expanded", String(expanded));
+        });
+    })();
+    </script>
     <div class="sidebar-resizer" id="sidebar-resizer" role="separator" aria-label="Resize sidebar" aria-orientation="vertical" aria-valuemin="200" aria-valuemax="480" aria-valuenow="260" tabindex="0"></div>
     <button class="sidebar-backdrop" id="sidebar-backdrop" type="button" tabindex="-1" aria-label="Close navigation"></button>
     <main class="site-main%%TOC_LAYOUT_CLASS%%">
@@ -70,6 +138,7 @@
 %%PAGE_FOOTER%%
             </article>
 %%PAGE_TOC%%
+            <div class="toc-resizer" id="toc-resizer" role="separator" aria-label="Resize table of contents" aria-orientation="vertical" aria-valuemin="180" aria-valuemax="400" aria-valuenow="210" tabindex="0" hidden></div>
         </div>
     </main>
 </div>
@@ -180,10 +249,23 @@
     const minimumSidebarWidth = 200;
     const maximumSidebarWidth = 480;
     let preferredSidebarWidth = 260;
-    const getSidebarWidthBounds = () => ({
-        min: minimumSidebarWidth,
-        max: Math.max(minimumSidebarWidth, Math.min(maximumSidebarWidth, document.documentElement.clientWidth - 360))
-    });
+    const main = layout.querySelector(".site-main");
+    const hasTableOfContents = main.querySelector(".on-this-page") !== null;
+    const tocToggle = document.getElementById("toc-toggle");
+    const tocResizer = document.getElementById("toc-resizer");
+    let preferredTocWidth = parseFloat(getComputedStyle(root).getPropertyValue("--toc-preferred-width")) || 210;
+    const tocIsCollapsed = () => root.classList.contains("toc-collapsed");
+    const getSidebarWidthBounds = () => {
+        const layoutStyle = getComputedStyle(layout);
+        const mainStyle = getComputedStyle(main);
+        const availableWidth = layout.clientWidth - parseFloat(layoutStyle.paddingLeft) - parseFloat(layoutStyle.paddingRight);
+        const mainPadding = parseFloat(mainStyle.paddingLeft) + parseFloat(mainStyle.paddingRight);
+        const minimumMainWidth = hasTableOfContents && !tocIsCollapsed() ? 390 + preferredTocWidth + mainPadding : 360;
+        return {
+            min: minimumSidebarWidth,
+            max: Math.max(minimumSidebarWidth, Math.min(maximumSidebarWidth, availableWidth - minimumMainWidth))
+        };
+    };
     const setSidebarWidth = (width, save = true) => {
         const bounds = getSidebarWidthBounds();
         const clampedWidth = Math.round(Math.max(bounds.min, Math.min(bounds.max, width)));
@@ -192,6 +274,7 @@
         sidebarResizer.setAttribute("aria-valuenow", String(clampedWidth));
         if (save) {
             preferredSidebarWidth = clampedWidth;
+            root.style.setProperty("--sidebar-preferred-width", `${clampedWidth}px`);
             try {
                 localStorage.setItem(sidebarWidthPreferenceKey, String(clampedWidth));
             } catch { }
@@ -206,44 +289,84 @@
     } catch { }
     setSidebarWidth(preferredSidebarWidth, false);
 
-    let activePointerId = null;
-    let pointerStartX = 0;
-    let pointerStartWidth = 0;
-    sidebarResizer.addEventListener("pointerdown", (event) => {
-        if (event.button !== 0) return;
-        pointerStartX = event.clientX;
-        pointerStartWidth = Number(sidebarResizer.getAttribute("aria-valuenow"));
-        activePointerId = event.pointerId;
-        sidebarResizer.setPointerCapture(event.pointerId);
-        event.preventDefault();
-    });
-    sidebarResizer.addEventListener("pointermove", (event) => {
-        if (event.pointerId !== activePointerId) return;
-        setSidebarWidth(pointerStartWidth + event.clientX - pointerStartX, false);
-    });
-    const finishResize = (event) => {
-        if (event.pointerId !== activePointerId) return;
-        activePointerId = null;
-        setSidebarWidth(Number(sidebarResizer.getAttribute("aria-valuenow")));
+    const bindPanelResizer = (resizer, direction, setWidth) => {
+        let activePointerId = null;
+        let pointerStartX = 0;
+        let pointerStartWidth = 0;
+        resizer.addEventListener("pointerdown", (event) => {
+            if (event.button !== 0) return;
+            pointerStartX = event.clientX;
+            pointerStartWidth = Number(resizer.getAttribute("aria-valuenow"));
+            activePointerId = event.pointerId;
+            resizer.setPointerCapture(event.pointerId);
+            event.preventDefault();
+        });
+        resizer.addEventListener("pointermove", (event) => {
+            if (event.pointerId !== activePointerId) return;
+            setWidth(pointerStartWidth + direction * (event.clientX - pointerStartX), false);
+        });
+        const finishResize = (event) => {
+            if (event.pointerId !== activePointerId) return;
+            activePointerId = null;
+            setWidth(Number(resizer.getAttribute("aria-valuenow")));
+        };
+        resizer.addEventListener("pointerup", finishResize);
+        resizer.addEventListener("pointercancel", finishResize);
+        resizer.addEventListener("keydown", (event) => {
+            const currentWidth = Number(resizer.getAttribute("aria-valuenow"));
+            const step = event.shiftKey ? 50 : 10;
+            let nextWidth;
+            if (event.key === "ArrowLeft") nextWidth = currentWidth - direction * step;
+            else if (event.key === "ArrowRight") nextWidth = currentWidth + direction * step;
+            else if (event.key === "Home") nextWidth = Number(resizer.getAttribute("aria-valuemin"));
+            else if (event.key === "End") nextWidth = Number(resizer.getAttribute("aria-valuemax"));
+            else return;
+            event.preventDefault();
+            setWidth(nextWidth);
+        });
     };
-    sidebarResizer.addEventListener("pointerup", finishResize);
-    sidebarResizer.addEventListener("pointercancel", finishResize);
-    sidebarResizer.addEventListener("keydown", (event) => {
-        const currentWidth = Number(sidebarResizer.getAttribute("aria-valuenow"));
-        const bounds = getSidebarWidthBounds();
-        const step = event.shiftKey ? 50 : 10;
-        let nextWidth;
-        if (event.key === "ArrowLeft") nextWidth = currentWidth - step;
-        else if (event.key === "ArrowRight") nextWidth = currentWidth + step;
-        else if (event.key === "Home") nextWidth = bounds.min;
-        else if (event.key === "End") nextWidth = bounds.max;
-        else return;
-        event.preventDefault();
-        setSidebarWidth(nextWidth);
-    });
+    bindPanelResizer(sidebarResizer, 1, setSidebarWidth);
     window.addEventListener("resize", () => {
         setSidebarWidth(preferredSidebarWidth, false);
     });
+
+    const updateToc = () => {
+        const available = hasTableOfContents && !breakpoint.matches && main.clientWidth -
+            parseFloat(getComputedStyle(main).paddingLeft) - parseFloat(getComputedStyle(main).paddingRight) >= 600;
+        tocToggle.hidden = !available;
+        tocResizer.hidden = !available || tocIsCollapsed();
+        tocToggle.setAttribute("aria-expanded", String(!tocIsCollapsed()));
+        const label = `${tocIsCollapsed() ? "Expand" : "Collapse"} table of contents`;
+        tocToggle.setAttribute("aria-label", label);
+        tocToggle.title = label;
+        const max = Math.max(180, Math.min(400, main.clientWidth -
+            parseFloat(getComputedStyle(main).paddingLeft) - parseFloat(getComputedStyle(main).paddingRight) - 390));
+        tocResizer.setAttribute("aria-valuemax", String(Math.floor(max)));
+        tocResizer.setAttribute("aria-valuenow", String(Math.round(Math.min(preferredTocWidth, max))));
+    };
+    const setTocWidth = (width, save = true) => {
+        const max = Number(tocResizer.getAttribute("aria-valuemax"));
+        preferredTocWidth = Math.round(Math.max(180, Math.min(max, width)));
+        root.style.setProperty("--toc-preferred-width", `${preferredTocWidth}px`);
+        layout.style.removeProperty("--sidebar-width");
+        if (save) {
+            try {
+                localStorage.setItem("mdu-toc-width", String(preferredTocWidth));
+            } catch { }
+        }
+        updateToc();
+    };
+    tocToggle.addEventListener("click", () => {
+        root.classList.toggle("toc-collapsed");
+        try {
+            localStorage.setItem("mdu-toc-collapsed", String(tocIsCollapsed()));
+        } catch { }
+        setSidebarWidth(preferredSidebarWidth, false);
+        updateToc();
+    });
+    bindPanelResizer(tocResizer, -1, setTocWidth);
+    new ResizeObserver(updateToc).observe(main);
+    updateToc();
 
     const isDesktopSidebarCollapsed = () => {
         try {
@@ -266,9 +389,11 @@
         isOpen = open;
         layout.classList.toggle("sidebar-open", open && breakpoint.matches);
         layout.classList.toggle("sidebar-collapsed", !open && !breakpoint.matches);
+        root.classList.toggle("sidebar-starts-collapsed", !open && !breakpoint.matches);
         header.classList.toggle("navigation-is-open", open);
         header.classList.toggle("navigation-is-collapsed", !open);
         header.classList.toggle("has-wide-sidebar", layout.classList.contains("has-wide-sidebar"));
+        if (!breakpoint.matches) layout.style.removeProperty("--sidebar-width");
         const toggleAvailable = compactNavigation.matches || layout.classList.contains("has-wide-sidebar");
         toggle.hidden = !toggleAvailable;
         toggle.setAttribute("aria-expanded", String(open));
@@ -296,7 +421,7 @@
         const storageKey = `mdu-nav-expanded:${new URL(pageLink.href).pathname}`;
         const isCurrentPage = pageLink === currentPage;
         const containsCurrentPage = currentPage && children.contains(currentPage);
-        let savedState;
+        let savedState = null;
         try {
             savedState = sessionStorage.getItem(storageKey);
         } catch { }
@@ -506,7 +631,10 @@
     window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
         document.documentElement.classList.remove("is-hero-settling");
     }));
-    scheduleScrollUpdate();
+    updateOnScroll();
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+        document.documentElement.classList.remove("panels-initializing");
+    }));
 })();
 </script>
 <script>
