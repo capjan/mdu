@@ -45,10 +45,14 @@ The option requires a folder as `PATH`; passing a single Markdown file without `
 
 - Pages are A4 and follow the order of the documentation navigation.
 - A folder export starts with a title page and a linked table of contents; a single file has neither.
-- Headings stay with the start of the following block when a page break is needed.
+- Wrapped headings, consecutive headings, and callout titles stay with the start of the following block when a page break is needed.
+- Short paragraphs stay together. Longer paragraphs avoid a single line at the bottom or top of a page.
+- Short code blocks stay together when possible; long code blocks continue on the next page.
 - Content pages repeat the document title in a small header. The footer shows the current page and the total page count.
 - Links between included pages, links on diagram nodes, links in tables, and external links stay clickable.
 - Tables retain inline emphasis, code, icons, and keyboard shortcuts. Light fills distinguish code and table headers while keeping pages readable on a monochrome printer.
+- Tables repeat their leading header rows on continuation pages when the headers leave room for body content. Ordinary rows stay together; very tall rows are split into readable portions within the page margins.
+- New sections use the remaining page space when their heading and opening content fit. At the top of a page, extra section dividers and heading spacing are omitted.
 
 ## Exclude pages
 
