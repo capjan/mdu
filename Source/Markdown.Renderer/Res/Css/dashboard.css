@@ -250,14 +250,39 @@
     text-transform: uppercase;
 }
 
-.dashboard-group h2 .headerlink {
+/* Third-level headings divide a group: smaller than a tile title, in full text color and sentence case so they read
+   below the group label, with a dashed rule that stays quieter than the label's solid line. */
+.markdown-content .dashboard-group h3 {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 1.25rem 0 0.25rem;
+    padding: 0 0 0 0.6rem;
+    color: var(--text-primary);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0;
+    line-height: 1.4;
+}
+
+.markdown-content .dashboard-group h3::after {
+    content: "";
+    flex: 1;
+    border-top: 1px dashed var(--dashboard-line);
+}
+
+.markdown-content .dashboard-group > [role="row"]:nth-child(2) > [role="gridcell"] > h3 {
+    margin-top: 0.5rem;
+}
+
+.dashboard-group :is(h2, h3) .headerlink {
     display: none;
 }
 
 .dashboard-group > [role="row"] > [role="gridcell"] > p {
-    margin: 0 0 0.5rem 0.6rem;
+    margin: -0.1rem 0 0.35rem 0.6rem;
     color: var(--dashboard-muted);
-    font-size: 0.875rem;
+    font-size: 0.75rem;
 }
 
 .markdown-content ul.dashboard-tiles {

@@ -40,6 +40,7 @@ layout: dashboard
 | --- | --- |
 | `# Heading` and text before the first group | Page title and introduction above the filter field |
 | `## Heading` | A group of tiles |
+| `### Heading` inside a group | A subheading that divides the group; a paragraph below it is a short description |
 | `- [Name](URL)` | A tile that opens the link |
 | Text after the link | Subtitle of the tile. A leading `—`, `–`, `-`, or `:` is removed. Without it, the tile shows the host name. |
 | `---` | Starts a new row of groups |
