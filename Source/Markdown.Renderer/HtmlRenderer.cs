@@ -298,7 +298,7 @@ public class HtmlRenderer
         var renderedHtml = TemplateTokenRegex.Replace(Resources.HtmlTemplateContent(), match =>
             values.TryGetValue(match.Groups["name"].Value, out var value) ? value : match.Value);
         
-        await writer.WriteAsync(renderedHtml);
+        await writer.WriteAsync(renderedHtml).ConfigureAwait(false);
     }
 
     private void EnsureIconSearchAssets()
