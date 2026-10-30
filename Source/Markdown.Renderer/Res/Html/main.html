@@ -179,6 +179,7 @@
     const sidebarWidthPreferenceKey = "mdu-sidebar-width";
     const minimumSidebarWidth = 200;
     const maximumSidebarWidth = 480;
+    let preferredSidebarWidth = 260;
     const getSidebarWidthBounds = () => ({
         min: minimumSidebarWidth,
         max: Math.max(minimumSidebarWidth, Math.min(maximumSidebarWidth, document.documentElement.clientWidth - 360))
@@ -190,6 +191,7 @@
         sidebarResizer.setAttribute("aria-valuemax", String(bounds.max));
         sidebarResizer.setAttribute("aria-valuenow", String(clampedWidth));
         if (save) {
+            preferredSidebarWidth = clampedWidth;
             try {
                 localStorage.setItem(sidebarWidthPreferenceKey, String(clampedWidth));
             } catch { }
@@ -199,43 +201,40 @@
     try {
         const savedWidth = localStorage.getItem(sidebarWidthPreferenceKey);
         if (savedWidth !== null && Number.isFinite(Number(savedWidth))) {
-            setSidebarWidth(Number(savedWidth), false);
-        } else {
-            setSidebarWidth(260, false);
+            preferredSidebarWidth = Math.max(minimumSidebarWidth, Math.min(maximumSidebarWidth, Number(savedWidth)));
         }
-    } catch {
-        setSidebarWidth(260, false);
-    }
+    } catch { }
+    setSidebarWidth(preferredSidebarWidth, false);
 
     let activePointerId = null;
-    let pointerOffset = 0;
+    let pointerStartX = 0;
+    let pointerStartWidth = 0;
     sidebarResizer.addEventListener("pointerdown", (event) => {
         if (event.button !== 0) return;
-        const currentWidth = Number.parseFloat(getComputedStyle(layout).getPropertyValue("--sidebar-width")) || 260;
-        const layoutLeft = layout.getBoundingClientRect().left + Number.parseFloat(getComputedStyle(layout).paddingLeft);
-        pointerOffset = event.clientX - layoutLeft - currentWidth;
+        pointerStartX = event.clientX;
+        pointerStartWidth = Number(sidebarResizer.getAttribute("aria-valuenow"));
         activePointerId = event.pointerId;
         sidebarResizer.setPointerCapture(event.pointerId);
         event.preventDefault();
     });
     sidebarResizer.addEventListener("pointermove", (event) => {
         if (event.pointerId !== activePointerId) return;
-        const layoutLeft = layout.getBoundingClientRect().left + Number.parseFloat(getComputedStyle(layout).paddingLeft);
-        setSidebarWidth(event.clientX - layoutLeft - pointerOffset, false);
+        setSidebarWidth(pointerStartWidth + event.clientX - pointerStartX, false);
     });
     const finishResize = (event) => {
         if (event.pointerId !== activePointerId) return;
         activePointerId = null;
-        setSidebarWidth(Number.parseFloat(getComputedStyle(layout).getPropertyValue("--sidebar-width")));
+        setSidebarWidth(Number(sidebarResizer.getAttribute("aria-valuenow")));
     };
     sidebarResizer.addEventListener("pointerup", finishResize);
     sidebarResizer.addEventListener("pointercancel", finishResize);
     sidebarResizer.addEventListener("keydown", (event) => {
-        const currentWidth = Number.parseFloat(getComputedStyle(layout).getPropertyValue("--sidebar-width")) || 260;
+        const currentWidth = Number(sidebarResizer.getAttribute("aria-valuenow"));
         const bounds = getSidebarWidthBounds();
+        const step = event.shiftKey ? 50 : 10;
         let nextWidth;
-        if (event.key === "ArrowLeft") nextWidth = currentWidth - 10;
-        else if (event.key === "ArrowRight") nextWidth = currentWidth + 10;
+        if (event.key === "ArrowLeft") nextWidth = currentWidth - step;
+        else if (event.key === "ArrowRight") nextWidth = currentWidth + step;
         else if (event.key === "Home") nextWidth = bounds.min;
         else if (event.key === "End") nextWidth = bounds.max;
         else return;
@@ -243,7 +242,7 @@
         setSidebarWidth(nextWidth);
     });
     window.addEventListener("resize", () => {
-        setSidebarWidth(Number.parseFloat(getComputedStyle(layout).getPropertyValue("--sidebar-width")) || 260, false);
+        setSidebarWidth(preferredSidebarWidth, false);
     });
 
     const isDesktopSidebarCollapsed = () => {

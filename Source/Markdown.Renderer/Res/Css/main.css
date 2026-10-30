@@ -619,6 +619,8 @@ body {
 
 .site-sidebar {
     position: sticky;
+    grid-column: 1;
+    grid-row: 1;
     top: calc(var(--site-header-height) + var(--top-navigation-height));
     align-self: start;
     overflow-y: auto;
@@ -646,7 +648,8 @@ body {
 
 .sidebar-resizer::before {
     position: absolute;
-    inset: 0 5px;
+    inset: 0 auto 0 6px;
+    width: 1px;
     background: var(--border-subtle);
     content: "";
     opacity: 0;
@@ -661,6 +664,7 @@ body {
 .sidebar-resizer:focus-visible {
     outline: 2px solid var(--link);
     outline-offset: 3px;
+    border-radius: 2px;
 }
 
 .site-nav-section-title {
@@ -848,9 +852,15 @@ body {
 }
 
 .site-main {
+    grid-column: 2;
+    grid-row: 1;
     width: 100%;
     min-width: 0;
     padding: 1rem 2rem 3rem;
+}
+
+.site-layout.sidebar-collapsed .site-main {
+    grid-column: 1;
 }
 
 .sidebar-backdrop {

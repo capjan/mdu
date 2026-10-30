@@ -16,6 +16,49 @@ public class RendererTest
         Assert.Contains("grid-template-columns: var(--sidebar-width) minmax(0, 1fr);", css);
         Assert.Contains("sidebarResizer.addEventListener(\"pointerdown\"", html);
         Assert.Contains("sidebarResizer.addEventListener(\"keydown\"", html);
+        var focusStyles = css.Split(".sidebar-resizer:focus-visible {", 2)[1].Split('}', 2)[0];
+        Assert.Contains("border-radius: 2px;", focusStyles);
+    }
+
+    [Fact]
+    public void PreservesThePreferredSidebarWidthAcrossViewportChanges()
+    {
+        var html = Resources.HtmlTemplateContent();
+        var resizeHandler = html.Split("window.addEventListener(\"resize\", () => {", 2)[1].Split("});", 2)[0];
+
+        Assert.Contains("setSidebarWidth(preferredSidebarWidth, false);", resizeHandler);
+        Assert.Contains("preferredSidebarWidth = clampedWidth;", html);
+        Assert.Contains("setSidebarWidth(pointerStartWidth + event.clientX - pointerStartX, false);", html);
+        Assert.Contains("const step = event.shiftKey ? 50 : 10;", html);
+    }
+
+    [Fact]
+    public void KeepsSidebarAndContentInTheirOwnColumnsOnTheSameRow()
+    {
+        var css = Resources.CssContent();
+        var sidebarStyles = css.Split(".site-sidebar {", 2)[1].Split('}', 2)[0];
+        var mainStyles = css.Split(".site-main {", 2)[1].Split('}', 2)[0];
+        var collapsedStyles = css.Split(".site-layout.sidebar-collapsed .site-main {", 2)[1].Split('}', 2)[0];
+
+        Assert.Contains("grid-column: 1;", sidebarStyles);
+        Assert.Contains("grid-row: 1;", sidebarStyles);
+        Assert.Contains("grid-column: 2;", mainStyles);
+        Assert.Contains("grid-row: 1;", mainStyles);
+        Assert.Contains("grid-column: 1;", collapsedStyles);
+    }
+
+    [Fact]
+    public void MatchesTheResizerLineToTheSidebarGuide()
+    {
+        var css = Resources.CssContent();
+        var resizerStyles = css.Split(".sidebar-resizer::before {", 2)[1].Split('}', 2)[0];
+        var guideStyles = css.Split(".site-nav-row:has(> .site-nav-toggle) + .site-nav-children::before {", 2)[1].Split('}', 2)[0];
+
+        foreach (var styles in new[] { resizerStyles, guideStyles })
+        {
+            Assert.Contains("width: 1px;", styles);
+            Assert.Contains("background: var(--border-subtle);", styles);
+        }
     }
 
     [Fact]
