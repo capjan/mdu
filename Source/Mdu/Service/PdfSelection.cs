@@ -32,6 +32,21 @@ internal static class PdfSelection
     internal static string GetSitePath(string rootPath, MarkdownFile page) =>
         page.SiteRelativePath ?? Path.GetRelativePath(rootPath, page.FileInfo.FullName);
 
+    internal static string GetTitle(string rootPath, MarkdownFile page) =>
+        !string.IsNullOrWhiteSpace(page.Title) ? page.Title.Trim() : GetFallbackTitle(rootPath, page);
+
+    internal static string GetFallbackTitle(string rootPath, MarkdownFile page)
+    {
+        var path = GetSitePath(rootPath, page);
+        var name = Path.GetFileNameWithoutExtension(path);
+        if (!name.Equals("README", StringComparison.OrdinalIgnoreCase) &&
+            !name.Equals("index", StringComparison.OrdinalIgnoreCase))
+            return name;
+
+        var directory = Path.GetDirectoryName(path);
+        return string.IsNullOrEmpty(directory) ? new DirectoryInfo(rootPath).Name : Path.GetFileName(directory);
+    }
+
     internal static string GetOutputPath(string rootPath, MarkdownFile page)
     {
         var identity = GetSitePath(rootPath, page).Replace('\\', '/');

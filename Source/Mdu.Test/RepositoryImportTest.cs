@@ -14,6 +14,39 @@ namespace Mdu.Test;
 public class RepositoryImportTest
 {
     [Theory]
+    [InlineData("README.md")]
+    [InlineData("index.md")]
+    public void UsesMountedFolderForUntitledImportedPdfNamesAndTitles(string rootFileName)
+    {
+        var root = CreateTemporaryDirectory();
+        var docs = Path.Combine(root, "docs");
+        var repository = Path.Combine(root, "repository");
+        var remoteDocs = Path.Combine(repository, "Docs");
+        Directory.CreateDirectory(docs);
+        Directory.CreateDirectory(remoteDocs);
+        const string sourceUrl = "https://github.com/example/api/tree/main/Docs";
+        File.WriteAllText(Path.Combine(docs, "README.md"), "# Home\n\n[Topic](mdu:pdf?root=API.md)");
+        File.WriteAllText(Path.Combine(docs, "API.md"),
+            $"---\ntitle: \"\"\nmdu:\n  import:\n    source: {sourceUrl}\n---\n");
+        File.WriteAllText(Path.Combine(remoteDocs, rootFileName), "---\ntitle: \"\"\n---\nContent without a heading.");
+        var builder = CreateGraphBuilder(new FakeSourceResolver((sourceUrl, CreateResolvedSource(repository, "api"))));
+        var site = Path.Combine(root, "site");
+        try
+        {
+            var command = new RenderCommand(builder, new CountNodesVisitor<MarkdownFile>(), new HtmlRenderer(), new SearchIndexBuilder());
+            Assert.Equal(0, command.Execute(new RenderCommandSettings { RootPath = docs, OutputPath = site }));
+            Assert.Contains("download=\"API.pdf\"", File.ReadAllText(Path.Combine(site, "index.html")));
+            var pdf = File.ReadAllText(Assert.Single(Directory.GetFiles(Path.Combine(site, "_mdu-pdf"), "*.pdf")), Encoding.Latin1);
+            Assert.Contains("/Title (API)", pdf);
+            Assert.DoesNotContain("/Title (Docs)", pdf);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
     [InlineData("API.md", true)]
     [InlineData("API/index.md", true)]
     [InlineData("API/Details.md", false)]

@@ -19,6 +19,9 @@ public class SitePdfTest
     [InlineData(":rocket: API Guide", "Guide.md", "API Guide.pdf")]
     [InlineData(":rocket:", "Topic/README.md", "Topic.pdf")]
     [InlineData(":material-home: :rocket:", "Guide.md", "Guide.pdf")]
+    [InlineData("API :rocket: Guide", "Guide.md", "API Guide.pdf")]
+    [InlineData("", "Topic/index.md", "Topic.pdf")]
+    [InlineData(":rocket:", "Topic/index.md", "Topic.pdf")]
     public void UsesPageNamesWhenDownloadTitlesAreEmptyAndRemovesEmojiShortcodes(
         string title, string pagePath, string expectedName)
     {

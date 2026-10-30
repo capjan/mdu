@@ -180,16 +180,8 @@ public class MarkdigVisitor : BaseVisitor
             var title = Regex.Replace(NavigationPage.RemoveIconShortcodes(selected.Title),
                 @":[\w+-]+:", match => ShortcodeExtension.Emojis.ContainsKey(match.Value) ? string.Empty : match.Value)
                 .Trim();
-            if (title.Length == 0)
-            {
-                title = Path.GetFileNameWithoutExtension(selected.FileInfo.Name);
-                if (selected.FileInfo.Name.Equals("README.md", StringComparison.OrdinalIgnoreCase))
-                {
-                    var directory = Path.GetDirectoryName(PdfSelection.GetSitePath(_rootPath, selected));
-                    title = string.IsNullOrEmpty(directory) ? new DirectoryInfo(_rootPath).Name : Path.GetFileName(directory);
-                }
-            }
-            names[url] = title;
+            title = Regex.Replace(title, @"\s+", " ");
+            names[url] = title.Length > 0 ? title : PdfSelection.GetFallbackTitle(_rootPath, selected);
         }
         return (urls, names);
     }

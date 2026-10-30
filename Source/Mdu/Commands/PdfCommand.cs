@@ -67,13 +67,13 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
             Console.Error.WriteLine($"Could not resolve Markdown sources: {exception.Message}");
             return 1;
         }
-        var files = Flatten(graph);
+        var files = Flatten(rootPath, graph);
         if (singleFilePath is not null)
             files = files.Where(item => Path.GetFullPath(item.File.FileInfo.FullName).Equals(singleFilePath, StringComparison.Ordinal));
         try
         {
             if (settings.PdfRootPage is not null)
-                files = Flatten([PdfSelection.FindPage(rootPath, graph,
+                files = Flatten(rootPath, [PdfSelection.FindPage(rootPath, graph,
                     OperatingSystem.IsWindows() ? settings.PdfRootPage.Replace('\\', '/') : settings.PdfRootPage)]);
             return WritePdf(rootPath, outputPath, files, includeFrontMatter: singleFilePath is null);
         }
@@ -85,7 +85,7 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
     }
 
     public int WriteSitePdf(string rootPath, string outputPath, IEnumerable<MarkdownFile> graph) =>
-        WritePdf(rootPath, outputPath, Flatten(graph), includeFrontMatter: true);
+        WritePdf(rootPath, outputPath, Flatten(rootPath, graph), includeFrontMatter: true);
 
     public int WriteSitePdfIfLinked(string rootPath, string outputPath, IEnumerable<MarkdownFile> graph,
         bool reuseUnchanged = false)
@@ -93,7 +93,7 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         if (!reuseUnchanged) _sitePdfSections.Clear();
         outputPath = Path.GetFullPath(outputPath);
         var roots = graph.ToArray();
-        var files = Flatten(roots).ToArray();
+        var files = Flatten(rootPath, roots).ToArray();
         var requests = new Dictionary<string, MarkdownFile?>(MarkdownLinks.PathComparer);
         foreach (var (page, _) in files)
         {
@@ -114,7 +114,7 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         }
 
         foreach (var (destination, selected) in requests)
-            if (WritePdf(rootPath, destination, selected is null ? files : Flatten([selected]),
+            if (WritePdf(rootPath, destination, selected is null ? files : Flatten(rootPath, [selected]),
                     includeFrontMatter: true, reuseUnchanged: reuseUnchanged, trackSitePdf: true) != 0)
                 return 1;
 
@@ -148,7 +148,7 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
                     item.File.SourceRootPath,
                     includeSpecificationPageLink: false);
                 return new PdfSourceSection(
-                    GetTitle(item.File),
+                    PdfSelection.GetTitle(rootPath, item.File),
                     GetRelativeHtmlPath(rootPath, item.File),
                     markdown,
                     item.Depth);
@@ -187,23 +187,16 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         return 0;
     }
 
-    private static IEnumerable<(MarkdownFile File, int Depth)> Flatten(IEnumerable<MarkdownFile> files, int depth = 0)
+    private static IEnumerable<(MarkdownFile File, int Depth)> Flatten(string rootPath, IEnumerable<MarkdownFile> files, int depth = 0)
     {
         foreach (var file in files.OrderBy(file => file.NavigationOrder.HasValue ? 0 : 1)
                      .ThenBy(file => file.NavigationOrder)
-                     .ThenBy(GetTitle, StringComparer.OrdinalIgnoreCase))
+                     .ThenBy(file => PdfSelection.GetTitle(rootPath, file), StringComparer.OrdinalIgnoreCase))
         {
             yield return (file, depth);
-            foreach (var child in Flatten(file.Children, depth + 1)) yield return child;
+            foreach (var child in Flatten(rootPath, file.Children, depth + 1)) yield return child;
         }
     }
-
-    private static string GetTitle(MarkdownFile file) =>
-        !string.IsNullOrWhiteSpace(file.Title)
-            ? file.Title.Trim()
-            : file.FileInfo.Name.Equals("README.md", StringComparison.OrdinalIgnoreCase)
-                ? file.FileInfo.Directory?.Name ?? "Documentation"
-                : Path.GetFileNameWithoutExtension(file.FileInfo.Name);
 
     private static string GetRelativeHtmlPath(string rootPath, MarkdownFile file)
     {
