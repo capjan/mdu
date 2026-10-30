@@ -3,6 +3,7 @@ namespace Markdown.Renderer.Res.Model;
 public sealed class SiteConfiguration
 {
     public string SiteName { get; set; } = "Documentation";
+    public bool AttributionVisible { get; set; } = true;
     public string? Glossary { get; set; }
     public string? Icons { get; set; }
     public string? LogoLight { get; set; }

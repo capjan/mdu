@@ -68,7 +68,7 @@ public class RenderCommand
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
         {
-            Console.Error.WriteLine($"Could not read the configured glossary: {exception.Message}");
+            Console.Error.WriteLine($"Could not read site configuration or glossary: {exception.Message}");
             return 1;
         }
         try

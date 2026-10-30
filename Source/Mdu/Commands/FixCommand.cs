@@ -371,7 +371,7 @@ public class FixCommand
     {
         try
         {
-            var configuration = SiteConfigurationReader.Read(rootPath);
+            var configuration = SiteConfigurationReader.ReadForContent(rootPath);
             if (configuration.Glossary is not null)
                 return [Path.GetFullPath(configuration.Glossary, rootPath)];
         }
