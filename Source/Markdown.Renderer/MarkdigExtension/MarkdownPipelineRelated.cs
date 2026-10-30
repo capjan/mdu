@@ -5,12 +5,6 @@ namespace Markdown.Renderer.MarkdigExtension;
 
 public static class MarkdownPipelineRelated
 {
-    public static MarkdownPipelineBuilder UseSharedAbbreviations(this MarkdownPipelineBuilder pipeline, string markdown)
-    {
-        pipeline.Extensions.Add(SharedAbbreviationsExtension.FromMarkdown(markdown));
-        return pipeline;
-    }
-
     /// <summary>
     /// Renders GitHub-compatible math syntax to static SVG.
     /// </summary>
