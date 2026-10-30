@@ -30,6 +30,8 @@ Add `?root=` to select a page and all its descendants in the navigation tree:
 
 The root path is relative to the Markdown page containing the link. It must identify a Markdown page inside the documentation; encode spaces as `%20`. The PDF includes the root page and its navigation descendants, not its siblings or ancestors. Each export has a title page and table of contents and honors `pdf.visible`.
 
+PDF links in rendered OpenAPI descriptions request downloads too. Their root paths are relative to the Markdown page containing the `openapi` block.
+
 This also works with [repository imports](Repository-Imports.md): paths refer to their location in the assembled site, not the source repository or cache. An import declaration such as `API.md` can be used as the root too.
 
 Several topic PDFs and the full documentation PDF can coexist. Links selecting the same root share one download. Topic PDFs are generated in the reserved `_mdu-pdf/` output folder with stable generated filenames; link to them using `mdu:pdf?root=...`, not their generated filenames. Obsolete generated PDFs are removed when their last requesting link is removed. Invalid or missing roots fail the render rather than producing a broken download.

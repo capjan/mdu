@@ -72,7 +72,8 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         try
         {
             if (settings.PdfRootPage is not null)
-                files = Flatten([PdfSelection.FindPage(rootPath, graph, settings.PdfRootPage)]);
+                files = Flatten([PdfSelection.FindPage(rootPath, graph,
+                    OperatingSystem.IsWindows() ? settings.PdfRootPage.Replace('\\', '/') : settings.PdfRootPage)]);
             return WritePdf(rootPath, outputPath, files, includeFrontMatter: singleFilePath is null);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
@@ -87,17 +88,24 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
 
     public int WriteSitePdfIfLinked(string rootPath, string outputPath, IEnumerable<MarkdownFile> graph)
     {
+        outputPath = Path.GetFullPath(outputPath);
         var roots = graph.ToArray();
         var files = Flatten(roots).ToArray();
         var requests = new Dictionary<string, MarkdownFile?>(MarkdownLinks.PathComparer);
         foreach (var (page, _) in files)
         {
-            foreach (var url in pdfRenderer.FindPdfLinks(RemoveFrontMatter(page.ReadMarkdown(), page.FrontMatter)))
+            var markdown = OpenApiMarkdownRenderer.ExpandCodeBlocks(
+                RemoveFrontMatter(page.ReadMarkdown(), page.FrontMatter), page.FileInfo.FullName,
+                out var specificationPages, page.SourceRootPath);
+            var links = pdfRenderer.FindPdfLinks(markdown).Concat(
+                specificationPages.SelectMany(specification => pdfRenderer.FindPdfLinks(specification.Markdown)));
+            foreach (var url in links.Distinct(StringComparer.Ordinal))
             {
                 var path = LinkReplacer.GetPdfRoot(url);
                 var selected = path is null ? null : PdfSelection.FindPage(rootPath, roots, path, page);
                 var destination = selected is null ? outputPath :
-                    Path.Combine(Path.GetDirectoryName(outputPath)!, PdfSelection.GetOutputPath(rootPath, selected));
+                    Path.GetFullPath(Path.Combine(Path.GetDirectoryName(outputPath)!,
+                        PdfSelection.GetOutputPath(rootPath, selected)));
                 requests[destination] = selected;
             }
         }
@@ -111,7 +119,7 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         if (Directory.Exists(scopedDirectory))
             foreach (var oldPath in Directory.EnumerateFiles(scopedDirectory, "*.pdf"))
                 if (Path.GetFileNameWithoutExtension(oldPath) is { Length: 64 } name &&
-                    name.All(char.IsAsciiHexDigit) && !requests.ContainsKey(oldPath))
+                    name.All(char.IsAsciiHexDigit) && !requests.ContainsKey(Path.GetFullPath(oldPath)))
                     File.Delete(oldPath);
         GeneratedSitePdfPaths = requests.Keys.ToArray();
         return 0;

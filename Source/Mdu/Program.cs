@@ -232,7 +232,7 @@ pageLinksCommand.SetAction(parseResult =>
 pageCommand.Subcommands.Add(pageLinksCommand);
 rootCommand.Subcommands.Add(pageCommand);
 
-return await rootCommand.Parse(args).InvokeAsync();
+return rootCommand.Parse(args).Invoke();
 
 static (Option<string?> Pattern, Option<bool> IncludeHidden) AddVisitorOptions(Command command)
 {

@@ -355,6 +355,29 @@ internal sealed class PdfLayout
 
     private void RenderCode(XmlElement pre, int indent)
     {
+        var lines = WrapCodeLines(pre, indent);
+        const double fontSize = 8.5;
+        const double lineHeight = 11;
+        var codeLeft = Left + indent + 8;
+        var maxWidth = PageWidth - Right - codeLeft - 8;
+        EnsureRoom((lines.Count <= ShortCodeLineLimit ? lines.Count : 2) * lineHeight + 5);
+        foreach (var segments in lines)
+        {
+            EnsureRoom(lineHeight + 5);
+            FillRect(codeLeft - 5, _y - 2, maxWidth + 10, lineHeight + 3, PdfColor.CodeBackground);
+            var x = codeLeft;
+            foreach (var segment in segments)
+            {
+                DrawText(segment.Text, x, _y + fontSize, fontSize, PdfFont.Courier, segment.Color);
+                x += TextWidth(segment.Text, fontSize, PdfFont.Courier);
+            }
+            _y += lineHeight;
+        }
+        _y += 7;
+    }
+
+    private static List<List<(string Text, PdfColor Color)>> WrapCodeLines(XmlElement pre, int indent)
+    {
         var codeRuns = new List<(string Text, PdfColor Color)>();
         ReadCodeRuns(pre, PdfColor.Text, codeRuns);
         var lines = new List<List<(string Text, PdfColor Color)>> { new() };
@@ -368,66 +391,41 @@ internal sealed class PdfLayout
             }
         }
         if (lines.Count > 1 && lines[^1].Count == 0) lines.RemoveAt(lines.Count - 1);
-        var fontSize = 8.5;
-        var lineHeight = 11;
-        var codeLeft = Left + indent + 8;
-        var maxWidth = PageWidth - Right - codeLeft - 8;
-        var lineCount = CodeLineCount(pre, indent);
-        EnsureRoom((lineCount <= ShortCodeLineLimit ? lineCount : 2) * lineHeight + 5);
+        const double fontSize = 8.5;
+        var maxWidth = PageWidth - Left - Right - indent - 16;
+        var wrapped = new List<List<(string Text, PdfColor Color)>>();
         foreach (var segments in lines)
         {
-            var x = codeLeft;
-            var hasDrawnLine = false;
+            wrapped.Add([]);
+            var width = 0.0;
             foreach (var segment in segments)
             {
                 var remaining = segment.Text;
                 while (remaining.Length > 0)
                 {
-                    var previousPage = _pages.Count - 1;
-                    EnsureRoom(lineHeight + 5);
-                    if (_pages.Count - 1 != previousPage)
-                    {
-                        x = codeLeft;
-                        hasDrawnLine = false;
-                    }
-                    var availableWidth = Math.Max(0, codeLeft + maxWidth - x);
+                    var availableWidth = Math.Max(0, maxWidth - width);
                     var take = GetTextLengthWithinWidth(remaining, fontSize, availableWidth, PdfFont.Courier);
                     if (take == 0)
                     {
-                        if (x > codeLeft)
+                        if (width > 0)
                         {
-                            _y += lineHeight;
-                            x = codeLeft;
-                            hasDrawnLine = false;
+                            wrapped.Add([]);
+                            width = 0;
                             continue;
                         }
                         take = TextElementLength(remaining, 0);
                     }
-                    if (!hasDrawnLine)
-                        FillRect(codeLeft - 5, _y - 2, maxWidth + 10, lineHeight + 3, PdfColor.CodeBackground);
                     var text = remaining[..take];
-                    DrawText(text, x, _y + fontSize, fontSize, PdfFont.Courier, segment.Color);
-                    x += TextWidth(text, fontSize, PdfFont.Courier);
+                    wrapped[^1].Add((text, segment.Color));
+                    width += TextWidth(text, fontSize, PdfFont.Courier);
                     remaining = remaining[take..];
-                    hasDrawnLine = true;
                 }
             }
-            if (!hasDrawnLine)
-            {
-                EnsureRoom(lineHeight + 5);
-                FillRect(codeLeft - 5, _y - 2, maxWidth + 10, lineHeight + 3, PdfColor.CodeBackground);
-            }
-            _y += lineHeight;
         }
-        _y += 7;
+        return wrapped;
     }
 
-    private static int CodeLineCount(XmlElement pre, int indent)
-    {
-        var width = PageWidth - Left - Right - indent - 16;
-        var lines = pre.InnerText.Replace("\r\n", "\n", StringComparison.Ordinal).TrimEnd('\n').Split('\n');
-        return lines.Sum(line => Math.Max(1, (int)Math.Ceiling(TextWidth(line, 8.5, PdfFont.Courier) / width)));
-    }
+    private static int CodeLineCount(XmlElement pre, int indent) => WrapCodeLines(pre, indent).Count;
 
     private static void ReadCodeRuns(XmlNode node, PdfColor color, List<(string Text, PdfColor Color)> runs)
     {
@@ -673,8 +671,6 @@ internal sealed class PdfLayout
                 continue;
             }
             if (run.Text.Length == 0) continue;
-
-            if (run.Text.Length == 0) continue;
             var size = style.Size ?? 8.5;
             x += DrawStyledText(run.Text, style, x, top, baseline, size, 10.5, 9.5);
         }
@@ -791,6 +787,14 @@ internal sealed class PdfLayout
     private void WriteParagraph(IReadOnlyList<PdfRun> runs, double fontSize, int indent, double before, double after,
         bool keepTogether = false)
     {
+        if (runs.All(run => run.Svg is null && string.IsNullOrWhiteSpace(run.Text)))
+        {
+            _y += before;
+            foreach (var run in runs)
+                if (run.Anchor is not null) MarkAnchor(run.Anchor);
+            _y += after;
+            return;
+        }
         var lines = WrapRuns(runs, fontSize, PageWidth - Left - Right - indent, mergeText: false);
         var lineHeight = fontSize * 1.35;
         var minimumLines = keepTogether || lines.Length <= 3 ? lines.Length : 2;
@@ -962,7 +966,7 @@ internal sealed class PdfLayout
     private static string NormalizeInlineWhitespace(string text) => Regex.Replace(WebUtility.HtmlDecode(text), @"\s+", " ");
     internal static string NormalizeVoidElements(string html)
     {
-        var normalized = Regex.Replace(html, @"<(input|br|hr|img|source)(?<attributes>[^<>]*?)(?<!/)>" , "<$1${attributes} />", RegexOptions.IgnoreCase);
+        var normalized = Regex.Replace(html, @"<(input|br|hr|img|source)(?<attributes>[^<>]*?)(?<!/)>", "<$1${attributes} />", RegexOptions.IgnoreCase);
         return StartTagRegex.Replace(normalized, tag =>
             BooleanAttributeRegex.Replace(tag.Value, match =>
             {

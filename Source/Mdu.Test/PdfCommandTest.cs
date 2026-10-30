@@ -11,6 +11,26 @@ namespace Mdu.Test;
 public class PdfCommandTest
 {
     [Fact]
+    public void AcceptsNativeWindowsSeparatorsInCliPageSelection()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-native-pdf-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(root, "API"));
+        File.WriteAllText(Path.Combine(root, "API", "README.md"), "# API");
+        try
+        {
+            Assert.Equal(0, CreateCommand().Execute(new RenderCommandSettings
+            {
+                RootPath = root, OutputPath = Path.Combine(root, "api.pdf"), PdfRootPage = @"API\README.md"
+            }));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void SelectsOnlyThePageAndItsNavigationDescendants()
     {
         var root = Path.Combine(Path.GetTempPath(), $"mdu-pdf-subtree-{Guid.NewGuid():N}");

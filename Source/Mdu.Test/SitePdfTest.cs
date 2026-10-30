@@ -13,6 +13,66 @@ namespace Mdu.Test;
 
 public class SitePdfTest
 {
+    [Theory]
+    [InlineData("mdu:pdf?root=README.md", true)]
+    [InlineData("mdu:pdf", false)]
+    public void GeneratesPdfsRequestedOnlyByOpenApiDescriptions(string url, bool scoped)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-openapi-pdf-{Guid.NewGuid():N}");
+        var docs = Path.Combine(root, "docs");
+        var site = Path.Combine(root, "site");
+        Directory.CreateDirectory(docs);
+        File.WriteAllText(Path.Combine(docs, "README.md"), "# API\n\n```openapi\n./api.yaml\n```");
+        File.WriteAllText(Path.Combine(docs, "api.yaml"), $$"""
+            openapi: 3.0.3
+            info:
+              title: Example API
+              version: 1.0.0
+              description: "[Download this API]({{url}})"
+            paths: {}
+            """);
+        try
+        {
+            Assert.Equal(0, Render(docs, site));
+            var html = File.ReadAllText(Path.Combine(site, "index.html"));
+            var destination = scoped ? ReadScopedUrl(html) : "documentation.pdf";
+            Assert.NotEmpty(destination);
+            Assert.Contains($"href=\"{destination}\"", html);
+            Assert.True(File.Exists(Path.Combine(site, destination)));
+            Assert.Single(Directory.GetFiles(site, "*.pdf", SearchOption.AllDirectories));
+            Assert.DoesNotContain("href=\"mdu:pdf", html);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void RetainsNewlyGeneratedPdfsWhenOutputPathUsesMixedSeparators()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-mixed-pdf-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        File.WriteAllText(Path.Combine(root, "README.md"), "# Home\n\n[PDF](mdu:pdf?root=README.md)");
+        try
+        {
+            var builder = new GraphBuilder(new DataPreparationVisitor(new MarkdownDocumentReader()));
+            var command = new PdfCommand(builder, new PdfRenderer(new HtmlRenderer()));
+            var graph = builder.CreateGraph(new RenderCommandSettings { RootPath = root });
+            var output = root + Path.DirectorySeparatorChar + "site/documentation.pdf";
+            Assert.Equal(0, command.WriteSitePdfIfLinked(root, output, graph));
+            var generated = Assert.Single(command.GeneratedSitePdfPaths);
+            Assert.Equal(Path.GetFullPath(generated), generated);
+            Assert.True(File.Exists(generated));
+            Assert.Equal(0, command.WriteSitePdfIfLinked(root, output, graph));
+            Assert.True(File.Exists(generated));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public void RendersDistinctSubtreesAndRemovesObsoleteExportsAcrossRuns()
     {

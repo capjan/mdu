@@ -7,6 +7,39 @@ namespace Markdown.Renderer.Test;
 public class PdfRendererTest
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void KeepsEightWrappedCodeLinesTogetherUsingActualCharacterBoundaries(bool highlighted)
+    {
+        var text = "CodeStart" + new string('a', 647) + "CodeEnd";
+        var code = highlighted
+            ? $"<pre><code><span class=\"keyword\">{text[..100]}</span><span class=\"string\">{text[100..]}</span></code></pre>"
+            : $"```text\n{text}\n```";
+        var result = Layout(Filler(46) + "\n\n" + code);
+        var page = PageContaining(result, "CodeStart");
+        Assert.Equal(1, page);
+        var codeText = string.Concat(ReadTextOperations(result.Pages[page].Content.ToString()).Select(operation => operation.Text));
+        Assert.Equal(text, codeText);
+        Assert.Equal(8, Regex.Matches(result.Pages[page].Content.ToString(), " re f").Count);
+        AssertContentWithinMargins(result);
+    }
+
+    [Theory]
+    [InlineData("<p></p>")]
+    [InlineData("<p><button>Ignored</button></p>")]
+    [InlineData("<p><span id=\"empty-anchor\"></span></p>")]
+    public void EmptyParagraphsOnlyAddBlockSpacing(string emptyParagraph)
+    {
+        var baseline = Layout("<p>Before</p><p>After</p>");
+        var actual = Layout($"<p>Before</p>{emptyParagraph}<p>After</p>");
+        var baselineY = ReadTextOperations(baseline.Pages[0].Content.ToString()).Single(operation => operation.Text == "After").Y;
+        var actualY = ReadTextOperations(actual.Pages[0].Content.ToString()).Single(operation => operation.Text == "After").Y;
+        Assert.Equal(12, baselineY - actualY, 3);
+        if (emptyParagraph.Contains("empty-anchor", StringComparison.Ordinal))
+            Assert.True(actual.Destinations.ContainsKey("page.html#empty-anchor"));
+    }
+
+    [Theory]
     [InlineData(43)]
     [InlineData(45)]
     [InlineData(47)]

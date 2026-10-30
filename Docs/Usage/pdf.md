@@ -35,7 +35,7 @@ Use `--page` with a documentation folder to export one page and all its descenda
 mdu pdf ./ProjectDocs ./build/api.pdf --page API/README.md
 ```
 
-The page path is relative to `PATH`, not to the current working directory. Quote paths containing spaces. The selected page becomes the PDF's root, followed by its descendants in navigation order, with a title page and table of contents. Sibling pages and ancestors are not included. `pdf.visible` still applies to each page.
+The page path is relative to `PATH`, not to the current working directory. Quote paths containing spaces. Use `/` as the separator; on Windows the CLI also accepts native `\` separators. The selected page becomes the PDF's root, followed by its descendants in navigation order, with a title page and table of contents. Sibling pages and ancestors are not included. `pdf.visible` still applies to each page.
 
 Selection uses the assembled navigation tree, including [repository imports](../Features/Repository-Imports.md). Use the import declaration's path or the imported page's mounted path within the site, not a path in MDU's repository cache. For example, an import declared in `API.md` can be selected with `--page API.md`; its imported child can be selected with `--page API/Details.md`.
 

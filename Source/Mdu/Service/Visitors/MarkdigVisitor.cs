@@ -112,15 +112,7 @@ public class MarkdigVisitor : BaseVisitor
         var pdfUrl = GetRelativeUrl(
             GetSiteRelativeSegments(Path.GetDirectoryName(Path.GetFullPath(outputFileName))!),
             ["documentation.pdf"]);
-        var pdfDownloadUrls = _htmlFoundation.FindPdfLinks(markdown).ToDictionary(url => url, url =>
-        {
-            var path = LinkReplacer.GetPdfRoot(url);
-            if (path is null) return pdfUrl;
-            var selected = PdfSelection.FindPage(_rootPath, _navigationRoots, path, entity);
-            return GetRelativeUrl(
-                GetSiteRelativeSegments(outputDirectory),
-                PdfSelection.GetOutputPath(_rootPath, selected).Split('/'));
-        }, StringComparer.Ordinal);
+        var pdfDownloadUrls = GetPdfDownloadUrls(markdown, entity, outputDirectory, pdfUrl);
 
         var temporaryPath = outputFileName + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
@@ -163,6 +155,18 @@ public class MarkdigVisitor : BaseVisitor
 
         return true;
     }
+
+    private IReadOnlyDictionary<string, string> GetPdfDownloadUrls(
+        string markdown, MarkdownFile entity, string outputDirectory, string pdfUrl) =>
+        _htmlFoundation.FindPdfLinks(markdown).ToDictionary(url => url, url =>
+        {
+            var path = LinkReplacer.GetPdfRoot(url);
+            if (path is null) return pdfUrl;
+            var selected = PdfSelection.FindPage(_rootPath, _navigationRoots, path, entity);
+            return GetRelativeUrl(
+                GetSiteRelativeSegments(outputDirectory),
+                PdfSelection.GetOutputPath(_rootPath, selected).Split('/'));
+        }, StringComparer.Ordinal);
 
     private IReadOnlyList<string> WriteSpecificationPages(
         MarkdownFile entity,
@@ -207,7 +211,8 @@ public class MarkdigVisitor : BaseVisitor
                         string.Empty,
                         topNavigation,
                         GetLastModified(entity),
-                        pdfUrl).GetAwaiter().GetResult();
+                        pdfUrl,
+                        pdfDownloadUrls: GetPdfDownloadUrls(specPage.Markdown, entity, parentDirectory, pdfUrl)).GetAwaiter().GetResult();
 
                 File.Move(temporaryPath, specOutputPath, true);
                 generatedPagePaths.Add(specOutputPath);
