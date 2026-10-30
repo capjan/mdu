@@ -15,6 +15,7 @@ MDU is one solution, `Mdu.sln`, with one executable project and several librarie
 | [Markdown.Linter](#markdown.linter) | Validators for titles, link casing, and link targets | FluentValidation |
 | [Markdown.Renderer](#markdown.renderer) | HTML and PDF rendering, including OpenAPI references | StaticCode.\*, Markdig, Microsoft.OpenApi, AngleSharp |
 | [Markdown.Search](#markdown.search) | Static search index and search script | Markdown.Renderer |
+| [Markdown.Confluence](#markdown.confluence) | Guarded Confluence Data Center storage export and synchronization | Markdown.Renderer |
 | [StaticCode.Highlighter](#staticcode.highlighter) | Syntax highlighting for code blocks | Cap.Core |
 | [StaticCode.Diagrams](#staticcode.diagrams) | Mermaid, PlantUML, and context diagrams as SVG | StaticCode.Icons |
 | [StaticCode.Icons](#staticcode.icons) | Embedded icon sets for shortcodes | — |
@@ -37,6 +38,7 @@ package "Markdown" {
   [Linter] as Linter
   [Renderer] as Renderer
   [Search] as Search
+  [Confluence] as Confluence
 }
 package "StaticCode" {
   [Highlighter] as Highlighter
@@ -46,11 +48,13 @@ package "StaticCode" {
 Cli --> Graph
 Cli --> Preview
 Cli --> Links
+Cli --> Confluence
 Graph --> Doc
 Graph --> Linter
 Graph --> Renderer
 Graph --> Search
 Search --> Renderer
+Confluence --> Renderer
 Renderer --> Highlighter
 Renderer --> Diagrams
 Renderer --> Icons
@@ -63,6 +67,7 @@ url of Doc is [[#markdown.document]]
 url of Linter is [[#markdown.linter]]
 url of Renderer is [[#markdown.renderer]]
 url of Search is [[#markdown.search]]
+url of Confluence is [[#markdown.confluence]]
 url of Highlighter is [[#staticcode.highlighter]]
 url of Diagrams is [[#staticcode.diagrams]]
 url of Icons is [[#staticcode.icons]]
@@ -74,7 +79,7 @@ url of Icons is [[#staticcode.icons]]
 The packaged .NET tool `mdu` with the command name `mdu`.
 
 - `Program.cs` defines all commands, aliases, and options with `System.CommandLine` and registers the services with `Microsoft.Extensions.DependencyInjection`.
-- `Commands/` holds one class per command: `LintCommand`, `FixCommand`, `PrintTreeCommand`, `RenderCommand`, `PdfCommand`, `ServeCommand`, and `PageCommand`.
+- `Commands/` holds one class per command: `LintCommand`, `FixCommand`, `PrintTreeCommand`, `RenderCommand`, `PdfCommand`, `ServeCommand`, `PageCommand`, and `ConfluenceCommand`.
 - `GraphBuilder`, the tree traversal in `Service/PageTree`, and the visitors in `Service/Visitors` build and walk the [page tree](Pipeline.md#page-tree).
 - `PreviewServer` serves the rendered site for `mdu serve` and pushes reload events to the browser.
 - `MarkdownLinks` finds and rewrites relative Markdown links. `mdu fix`, `mdu page move` (through `PageMover`), and `mdu page links` share it.
@@ -104,6 +109,10 @@ Turns Markdown into pages. `HtmlRenderer` holds the Markdig pipeline and the emb
 ## Markdown.Search
 
 `SearchIndexBuilder` splits every page into sections at its headings and writes their plain text to `search-index.json`. `SearchClientAsset` writes `js/search.js`, which searches that index in the browser and links to the matching section.
+
+## Markdown.Confluence
+
+`ConfluenceTarget` fixes the instance, space and optional parent for a run. `ConfluenceStorageRenderer` reuses Markdown extensions and produces Confluence storage, static SVG assets and attachment links. `ConfluencePublisher` calculates and applies the managed-tree synchronization; `ConfluenceClient` enforces target, ownership and restriction checks for its REST requests. The module uses `HttpClient`, XML and JSON APIs from .NET; there is no separate runtime or publisher installation. See [Confluence publishing](Pipeline.md#confluence-publishing).
 
 ## StaticCode.Highlighter
 
