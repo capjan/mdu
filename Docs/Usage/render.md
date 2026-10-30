@@ -40,7 +40,7 @@ An optional `mdu.yml` in the documentation folder sets the site name, light and 
 
 An optional `icons:` value is the folder of your own icon sets. Without it, MDU uses the `.icons` folder of the documentation when there is one. See [Your own icons](../Features/Icons-and-Emojis.md#your-own-icons).
 
-The small **Made with MDU** credit appears at the end of the page content by default. To omit it entirely from the generated HTML, set `attribution.visible: false`. Both the compact form and the nested form below work. The value must be `true` or `false`. An empty `attribution:` block uses the default. If both forms specify a value, both must be valid and agree; conflicting values are an error.
+The small **Made with MDU** credit appears at the end of the page content by default. To omit it entirely from the generated HTML, set `attribution.visible: false`. Both the compact form and the nested form below work. The value must be `true` or `false`. An empty `attribution:` block or an unquoted YAML null (`null` or `~`) uses the default. If both forms specify a visibility value, both must be valid and agree; conflicting values are an error. Attribution is an HTML setting: `render` and `serve` validate it, but it does not affect PDF generation, linting, or link fixing.
 
 ```yaml
 attribution:

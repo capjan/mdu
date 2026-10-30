@@ -24,14 +24,17 @@
             root.classList.add("panels-initializing");
             const styles = getComputedStyle(root);
             const pixels = (property) => parseFloat(styles.getPropertyValue(property));
-            const panel = (name, initialProperty) => ({
+            const createPanel = (name) => ({
                 key: `mdu-${name}-width`, property: `--${name}-preferred-width`,
                 min: pixels(`--${name}-min-width`), max: pixels(`--${name}-max-width`),
-                initial: pixels(initialProperty)
+                initial: pixels(`--${name}-preferred-width`)
             });
             const panels = {
-                sidebar: panel("sidebar", "--sidebar-preferred-width"),
-                toc: panel("toc", "--toc-preferred-width"),
+                sidebar: createPanel("sidebar"),
+                toc: createPanel("toc"),
+                mobile: matchMedia("(max-width: 760px)"),
+                compact: matchMedia("(max-width: 1220px)"),
+                sidebarPreferenceKey: "mdu-sidebar-collapsed",
                 contentMin: pixels("--panel-content-min"), tocContentMin: pixels("--toc-content-min"),
                 gap: pixels("--panel-gap"), mainPadding: pixels("--main-padding"), tocThreshold: pixels("--toc-threshold")
             };
@@ -46,14 +49,25 @@
             try {
                 root.classList.toggle("toc-collapsed", localStorage.getItem("mdu-toc-collapsed") === "true");
             } catch { }
-            let collapsed = %%IS_DASHBOARD%%;
-            try {
-                collapsed ||= sessionStorage.getItem("mdu-sidebar-collapsed") === "true";
-            } catch { }
-            root.classList.toggle("sidebar-starts-collapsed", collapsed);
+            panels.startsCollapsed = () => {
+                if (%%IS_DASHBOARD%%) return true;
+                try {
+                    return sessionStorage.getItem(panels.sidebarPreferenceKey) === "true";
+                } catch { return false; }
+            };
+            root.classList.toggle("sidebar-starts-collapsed", panels.startsCollapsed());
+            panels.updateNavigationHeader = (header, toggle, open) => {
+                header.classList.toggle("navigation-is-open", open);
+                header.classList.toggle("navigation-is-collapsed", !open);
+                toggle.hidden = !panels.compact.matches && !header.classList.contains("has-wide-sidebar");
+                toggle.setAttribute("aria-expanded", String(open));
+                const label = `${open ? "Collapse" : "Expand"} navigation`;
+                toggle.setAttribute("aria-label", label);
+                toggle.title = label;
+            };
             panels.measure = (width, padding, sidebarVisible, hasToc) => {
                 // Decide fit independently of the current sidebar width to avoid a circular TOC reserve.
-                const tocFits = hasToc && !matchMedia("(max-width: 760px)").matches &&
+                const tocFits = hasToc && !panels.mobile.matches &&
                     width - (sidebarVisible ? panels.sidebar.min : 0) - padding >= panels.tocThreshold;
                 const reserve = (tocFits && !root.classList.contains("toc-collapsed")
                     ? Math.max(panels.tocThreshold, panels.tocContentMin + panels.gap + parseFloat(root.style.getPropertyValue(panels.toc.property)))
@@ -99,27 +113,23 @@
 <script>
 (() => {
     const root = document.documentElement;
-    const compact = matchMedia("(max-width: 760px)").matches;
+    const panels = mduPanels;
     const header = document.getElementById("site-header");
     const navigationToggle = document.getElementById("navigation-toggle");
-    const open = !compact && !root.classList.contains("sidebar-starts-collapsed");
-    header.classList.toggle("navigation-is-open", open);
-    header.classList.toggle("navigation-is-collapsed", !open);
-    navigationToggle.hidden = !matchMedia("(max-width: 1220px)").matches && !header.classList.contains("has-wide-sidebar");
-    navigationToggle.setAttribute("aria-expanded", String(open));
-    const navigationLabel = `${open ? "Collapse" : "Expand"} navigation`;
-    navigationToggle.setAttribute("aria-label", navigationLabel);
-    navigationToggle.title = navigationLabel;
+    const open = !panels.mobile.matches && !root.classList.contains("sidebar-starts-collapsed");
+    panels.updateNavigationHeader(header, navigationToggle, open);
 
     const styles = getComputedStyle(root);
-    const panels = mduPanels;
-    const pageWidth = Math.min(root.clientWidth, parseFloat(styles.getPropertyValue("--page-max-width")));
-    const sidebarVisible = open && (header.classList.contains("has-wide-sidebar") || matchMedia("(max-width: 1220px)").matches);
+    // Measure the stable scrollbar gutter before long content has created viewport overflow.
+    const overflow = root.style.overflowY;
+    root.style.overflowY = "scroll";
+    const pageWidth = Math.min(root.getBoundingClientRect().width, parseFloat(styles.getPropertyValue("--page-max-width")));
+    root.style.overflowY = overflow;
+    const sidebarVisible = open && (header.classList.contains("has-wide-sidebar") || panels.compact.matches);
     const measured = panels.measure(pageWidth, 2 * panels.mainPadding, sidebarVisible, %%HAS_TOC%%);
     root.classList.toggle("toc-space-available", measured.tocFits);
-    const available = measured.tocFits;
     const tocToggle = document.getElementById("toc-toggle");
-    tocToggle.hidden = !available;
+    tocToggle.hidden = !measured.tocFits;
     tocToggle.setAttribute("aria-expanded", String(!root.classList.contains("toc-collapsed")));
 })();
 </script>
@@ -282,10 +292,9 @@
     const backdrop = document.getElementById("sidebar-backdrop");
     const navigation = document.getElementById("site-navigation");
     const sidebarResizer = document.getElementById("sidebar-resizer");
-    const breakpoint = window.matchMedia("(max-width: 760px)");
-    const compactNavigation = window.matchMedia("(max-width: 1220px)");
-    const sidebarPreferenceKey = "mdu-sidebar-collapsed";
     const panels = mduPanels;
+    const breakpoint = panels.mobile;
+    const compactNavigation = panels.compact;
     const main = layout.querySelector(".site-main");
     const toc = main.querySelector(".on-this-page");
     const hasTableOfContents = toc !== null;
@@ -314,9 +323,8 @@
         observedWidths.set(layout, Math.round(layout.clientWidth));
         observedWidths.set(main, Math.round(mainWidth));
         const contentWidth = mainWidth - mainPadding;
-        const available = measured.tocFits;
-        tocToggle.hidden = !available;
-        tocResizer.hidden = !available || tocIsCollapsed();
+        tocToggle.hidden = !measured.tocFits;
+        tocResizer.hidden = !measured.tocFits || tocIsCollapsed();
         tocToggle.setAttribute("aria-expanded", String(!tocIsCollapsed()));
         const label = `${tocIsCollapsed() ? "Expand" : "Collapse"} table of contents`;
         tocToggle.setAttribute("aria-label", label);
@@ -413,6 +421,7 @@
         });
         resizer.addEventListener("keydown", (event) => {
             if (event.altKey || event.metaKey || event.ctrlKey) return;
+            if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
             syncPanels();
             const currentWidth = Number(resizer.getAttribute("aria-valuenow"));
             const step = event.shiftKey ? 50 : 10;
@@ -446,21 +455,14 @@
     panelObserver.observe(navigation);
     if (hasTableOfContents) panelObserver.observe(toc);
 
-    const isDesktopSidebarCollapsed = () => {
-        try {
-            return sessionStorage.getItem(sidebarPreferenceKey) === "true";
-        } catch {
-            return false;
-        }
-    };
     const setDesktopSidebarCollapsed = (collapsed) => {
         try {
-            sessionStorage.setItem(sidebarPreferenceKey, String(collapsed));
+            sessionStorage.setItem(panels.sidebarPreferenceKey, String(collapsed));
         } catch { }
     };
     // A dashboard uses the whole width; its navigation stays one click away.
     const isDashboard = layout.classList.contains("is-dashboard");
-    const startsCollapsed = () => isDashboard || isDesktopSidebarCollapsed();
+    const startsCollapsed = panels.startsCollapsed;
     let isOpen = !breakpoint.matches && !startsCollapsed();
 
     const setOpen = (open) => {
@@ -468,14 +470,8 @@
         layout.classList.toggle("sidebar-open", open && breakpoint.matches);
         layout.classList.toggle("sidebar-collapsed", !open && !breakpoint.matches);
         root.classList.toggle("sidebar-starts-collapsed", !open && !breakpoint.matches);
-        header.classList.toggle("navigation-is-open", open);
-        header.classList.toggle("navigation-is-collapsed", !open);
+        panels.updateNavigationHeader(header, toggle, open);
         syncPanels();
-        const toggleAvailable = compactNavigation.matches || layout.classList.contains("has-wide-sidebar");
-        toggle.hidden = !toggleAvailable;
-        toggle.setAttribute("aria-expanded", String(open));
-        toggle.setAttribute("aria-label", `${open ? "Collapse" : "Expand"} navigation`);
-        toggle.title = `${open ? "Collapse" : "Expand"} navigation`;
 
         if (open && breakpoint.matches) {
             navigation.querySelector("a")?.focus();

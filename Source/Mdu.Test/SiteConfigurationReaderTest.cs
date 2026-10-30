@@ -1,4 +1,9 @@
 using Mdu.Service;
+using Markdown.Document.Impl;
+using Mdu.Commands;
+using Mdu.Commands.Settings;
+using Mdu.Service.Renderer;
+using Mdu.Service.Visitors;
 
 namespace Mdu.Test;
 
@@ -8,6 +13,10 @@ public class SiteConfigurationReaderTest
     [InlineData("", true)]
     [InlineData("attribution: {}", true)]
     [InlineData("attribution:", true)]
+    [InlineData("attribution: ~", true)]
+    [InlineData("attribution: null", true)]
+    [InlineData("attribution: Null", true)]
+    [InlineData("attribution: NULL", true)]
     [InlineData("attribution:\nattribution.visible: false", false)]
     [InlineData("attribution: {visible: false}\nattribution.visible: false", false)]
     [InlineData("attribution: {visible: true}\nattribution.visible: true", true)]
@@ -32,6 +41,8 @@ public class SiteConfigurationReaderTest
 
     [Theory]
     [InlineData("attribution: false")]
+    [InlineData("attribution: \"null\"")]
+    [InlineData("attribution: \"~\"")]
     [InlineData("attribution.visible: maybe")]
     [InlineData("attribution:\n  visible: []")]
     [InlineData("attribution.visible:")]
@@ -48,6 +59,61 @@ public class SiteConfigurationReaderTest
             File.WriteAllText(Path.Combine(root, "mdu.yml"), yaml);
             var exception = Assert.Throws<InvalidOperationException>(() => SiteConfigurationReader.Read(root));
             Assert.Contains("attribution", exception.Message);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ReadsContentSettingsAndResolvesGlossaryDespiteInvalidHtmlAttribution()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-site-config-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var glossary = Path.Combine(root, "terms.md");
+            File.WriteAllText(glossary, "*[API]: Application Programming Interface\n");
+            File.WriteAllText(Path.Combine(root, "mdu.yml"), "glossary: terms.md\nattribution: false\n");
+
+            Assert.Throws<InvalidOperationException>(() => SiteConfigurationReader.Read(root));
+            Assert.Equal("terms.md", SiteConfigurationReader.ReadForContent(root).Glossary);
+            Assert.Equal(glossary, SiteConfigurationReader.TryResolveGlossaryPath(root));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void LintAndFixKeepConfiguredGlossaryExcludedDespiteInvalidHtmlAttribution(bool fix)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-site-config-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "README.md"), "# Documentation\n\nAPI documentation.\n");
+            var glossary = Path.Combine(root, "terms.md");
+            const string terms = "*[API]: Application Programming Interface\n";
+            File.WriteAllText(glossary, terms);
+            File.WriteAllText(Path.Combine(root, "mdu.yml"), "glossary: terms.md\nattribution: false\n");
+            var graph = new GraphBuilder(new DataPreparationVisitor(new MarkdownDocumentReader()));
+            var receiver = new ConsoleLintErrorReceiver();
+            var linter = new LinterVisitor(receiver);
+            var settings = new VisitorSettings { RootPath = root, SearchPattern = "*.md", IncludeHidden = true };
+
+            var result = fix
+                ? new FixCommand(graph, linter).Execute(settings)
+                : new LintCommand(graph, linter, new LintResultRenderer(receiver)).Execute(settings);
+
+            Assert.Equal(0, result);
+            Assert.Equal(0, receiver.ErrorCount);
+            Assert.Equal(0, receiver.WarningCount);
+            Assert.Equal(terms, File.ReadAllText(glossary));
         }
         finally
         {

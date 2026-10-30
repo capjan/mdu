@@ -8,7 +8,11 @@ public static class SiteConfigurationReader
 {
     public const string DefaultIconsFolder = ".icons";
 
-    public static SiteConfiguration Read(string rootPath)
+    public static SiteConfiguration Read(string rootPath) => Read(rootPath, includeHtmlSettings: true);
+
+    public static SiteConfiguration ReadForContent(string rootPath) => Read(rootPath, includeHtmlSettings: false);
+
+    private static SiteConfiguration Read(string rootPath, bool includeHtmlSettings)
     {
         var path = Path.Combine(rootPath, "mdu.yml");
         if (!File.Exists(path)) return new SiteConfiguration();
@@ -20,7 +24,7 @@ public static class SiteConfigurationReader
         var configuration = new SiteConfiguration
         {
             SiteName = ReadScalar(root, "site_name") ?? "Documentation",
-            AttributionVisible = ReadAttributionVisible(root),
+            AttributionVisible = !includeHtmlSettings || ReadAttributionVisible(root),
             Glossary = ReadGlossary(root),
             Icons = ReadIcons(root),
             LogoLight = ReadAsset(root, "logo", "light"),
@@ -60,7 +64,7 @@ public static class SiteConfigurationReader
     {
         try
         {
-            return ResolveGlossaryPath(rootPath, Read(rootPath));
+            return ResolveGlossaryPath(rootPath, ReadForContent(rootPath));
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or YamlDotNet.Core.YamlException or InvalidOperationException or ArgumentException)
         {
@@ -120,7 +124,7 @@ public static class SiteConfigurationReader
                 if (mapping.Children.TryGetValue(new YamlScalarNode("visible"), out var value))
                     nested = ReadVisible(value);
             }
-            else if (attribution is not YamlScalarNode { Value: null or "" })
+            else if (!IsYamlNull(attribution))
             {
                 throw new InvalidOperationException("The 'attribution' setting in mdu.yml must be a mapping with a 'visible' boolean.");
             }
@@ -131,6 +135,10 @@ public static class SiteConfigurationReader
             throw new InvalidOperationException("The 'attribution.visible' setting in mdu.yml has conflicting nested and compact values.");
         return compact ?? nested ?? true;
     }
+
+    private static bool IsYamlNull(YamlNode node) =>
+        node is YamlScalarNode scalar && scalar.Style == YamlDotNet.Core.ScalarStyle.Plain &&
+        scalar.Value is null or "" or "~" or "null" or "Null" or "NULL";
 
     private static bool ReadVisible(YamlNode value)
     {

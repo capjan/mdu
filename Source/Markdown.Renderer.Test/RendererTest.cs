@@ -19,7 +19,7 @@ public class RendererTest
         Assert.Contains("class=\"navigation-toggle panel-toggle\"", html);
         Assert.Contains("class=\"toc-toggle panel-toggle\"", html);
         Assert.Equal(2, html.Split("class=\"panel-fill\"").Length - 1);
-        Assert.True(html.IndexOf("navigationToggle.setAttribute(\"aria-expanded\"", StringComparison.Ordinal) <
+        Assert.True(html.IndexOf("panels.updateNavigationHeader(header, navigationToggle, open);", StringComparison.Ordinal) <
                     html.IndexOf("<nav class=\"top-navigation", StringComparison.Ordinal));
         Assert.True(html.IndexOf("children.hidden = !open;", StringComparison.Ordinal) <
                     html.IndexOf("<main class=\"site-main", StringComparison.Ordinal));
@@ -101,7 +101,8 @@ public class RendererTest
         Assert.Contains("width - (sidebarVisible ? panels.sidebar.min : 0) - padding >= panels.tocThreshold", html);
         Assert.Contains(": panels.contentMin) + padding;", html);
         Assert.Contains("width - reserve", html);
-        Assert.Contains(":root.toc-space-available .site-layout:has(.on-this-page)", css);
+        Assert.Contains(":root.toc-space-available:not(.toc-collapsed) .site-layout:has(.on-this-page)", css);
+        Assert.DoesNotContain(":root.toc-collapsed .site-layout {", css);
         Assert.DoesNotContain("\n.site-layout:has(.on-this-page) {", css);
     }
 
@@ -141,6 +142,8 @@ public class RendererTest
         Assert.DoesNotContain("header.classList.toggle(\"has-wide-sidebar\"", html);
         Assert.Contains("setOpen(!breakpoint.matches && ((event.matches && !isDashboard) || !startsCollapsed()))", html);
         Assert.Equal(1, html.Split("`mdu-nav-expanded:${new URL(link.href).pathname}`").Length - 1);
+        Assert.Equal(1, html.Split("matchMedia(\"(max-width: 760px)\")").Length - 1);
+        Assert.Contains("if (![\"ArrowLeft\", \"ArrowRight\", \"Home\", \"End\"].includes(event.key)) return;", html);
         Assert.DoesNotContain("layout.style.removeProperty(\"--sidebar-width\")", html);
         Assert.DoesNotContain("\"%%SITE_LAYOUT_CLASS%%\".includes", html);
     }

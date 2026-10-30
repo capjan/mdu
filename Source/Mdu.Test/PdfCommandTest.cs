@@ -10,14 +10,18 @@ namespace Mdu.Test;
 
 public class PdfCommandTest
 {
-    [Fact]
-    public void WritesOnePdfForTheSelectedMarkdownFolder()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void WritesOnePdfForTheSelectedMarkdownFolder(bool invalidHtmlAttribution)
     {
         var rootPath = Path.Combine(Path.GetTempPath(), $"mdu-pdf-test-{Guid.NewGuid():N}");
         var docsPath = Path.Combine(rootPath, "Docs");
         var outputPath = Path.Combine(rootPath, "manual.pdf");
         Directory.CreateDirectory(docsPath);
         File.WriteAllText(Path.Combine(docsPath, "README.md"), "# Manual\n\nPDF output works.");
+        if (invalidHtmlAttribution)
+            File.WriteAllText(Path.Combine(docsPath, "mdu.yml"), "attribution: false\n");
 
         try
         {
