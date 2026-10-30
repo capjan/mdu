@@ -36,7 +36,7 @@ This also works with [repository imports](Repository-Imports.md): paths refer to
 
 Several topic PDFs and the full documentation PDF can coexist. Links selecting the same root share one download. Topic PDFs are generated in the reserved `_mdu-pdf/` output folder with stable generated filenames; link to them using `mdu:pdf?root=...`, not their generated filenames. Obsolete generated PDFs are removed when their last requesting link is removed. Invalid or missing roots fail the render rather than producing a broken download.
 
-Topic download links suggest the selected page's title as the filename through the HTML `download` attribute, with characters unsuitable for filenames replaced. The generated URL stays unchanged. Full-document downloads use `documentation.pdf`.
+Topic download links suggest the selected page's title as the filename through the HTML `download` attribute. Icon and known emoji shortcodes are removed, and characters unsuitable for filenames are replaced. Empty titles use the page filename without `.md`, or the site's folder name for a `README.md` page. The generated URL stays unchanged. Full-document downloads use `documentation.pdf`.
 
 For the equivalent CLI export, see [`mdu pdf --page`](../Usage/pdf.md#export-a-topic-and-its-subpages).
 

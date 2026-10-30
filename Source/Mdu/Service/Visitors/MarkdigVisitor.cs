@@ -1,5 +1,7 @@
 using System.Text.Encodings.Web;
+using System.Text.RegularExpressions;
 using Markdown.Renderer;
+using Markdown.Renderer.MarkdigExtension;
 using Markdown.Renderer.Res.Model;
 using Markdown.Search;
 using Mdu.Model;
@@ -175,7 +177,19 @@ public class MarkdigVisitor : BaseVisitor
             urls[url] = GetRelativeUrl(
                 GetSiteRelativeSegments(outputDirectory),
                 PdfSelection.GetOutputPath(_rootPath, selected).Split('/'));
-            names[url] = NavigationPage.RemoveIconShortcodes(selected.Title).Trim();
+            var title = Regex.Replace(NavigationPage.RemoveIconShortcodes(selected.Title),
+                @":[\w+-]+:", match => ShortcodeExtension.Emojis.ContainsKey(match.Value) ? string.Empty : match.Value)
+                .Trim();
+            if (title.Length == 0)
+            {
+                title = Path.GetFileNameWithoutExtension(selected.FileInfo.Name);
+                if (selected.FileInfo.Name.Equals("README.md", StringComparison.OrdinalIgnoreCase))
+                {
+                    var directory = Path.GetDirectoryName(PdfSelection.GetSitePath(_rootPath, selected));
+                    title = string.IsNullOrEmpty(directory) ? new DirectoryInfo(_rootPath).Name : Path.GetFileName(directory);
+                }
+            }
+            names[url] = title;
         }
         return (urls, names);
     }

@@ -13,6 +13,37 @@ namespace Mdu.Test;
 
 public class SitePdfTest
 {
+    [Theory]
+    [InlineData("", "Guide.md", "Guide.pdf")]
+    [InlineData("", "Topic/README.md", "Topic.pdf")]
+    [InlineData(":rocket: API Guide", "Guide.md", "API Guide.pdf")]
+    [InlineData(":rocket:", "Topic/README.md", "Topic.pdf")]
+    [InlineData(":material-home: :rocket:", "Guide.md", "Guide.pdf")]
+    public void UsesPageNamesWhenDownloadTitlesAreEmptyAndRemovesEmojiShortcodes(
+        string title, string pagePath, string expectedName)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-pdf-name-{Guid.NewGuid():N}");
+        var docs = Path.Combine(root, "docs");
+        var site = Path.Combine(root, "site");
+        var page = Path.Combine(docs, pagePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(page)!);
+        File.WriteAllText(Path.Combine(docs, "README.md"), $"# Home\n\n[Topic](mdu:pdf?root={pagePath})");
+        File.WriteAllText(page, $"---\ntitle: \"{title}\"\n---\n# Visible heading\n");
+        try
+        {
+            Assert.Equal(0, Render(docs, site));
+            var html = File.ReadAllText(Path.Combine(site, "index.html"));
+            Assert.Contains($"download=\"{expectedName}\"", html);
+            Assert.DoesNotContain("download=\"documentation.pdf\"", html);
+            Assert.DoesNotContain("-rocket-", html);
+            Assert.True(File.Exists(Path.Combine(site, ReadScopedUrl(html))));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public void ReusesOnlyUnchangedExistingPdfsDuringIncrementalUpdates()
     {
