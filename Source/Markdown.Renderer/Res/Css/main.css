@@ -3,6 +3,7 @@
     color-scheme: light;
     --site-header-height: 56px;
     --top-navigation-height: 43px;
+    --sidebar-width: 260px;
     --page-max-width: 1400px;
     /* Space beside the centered page on screens wider than --page-max-width. */
     --page-inset: max(0px, (100% - var(--page-max-width)) / 2);
@@ -529,7 +530,7 @@ body {
 
 .site-layout {
     display: grid;
-    grid-template-columns: 260px minmax(0, 1fr);
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
     min-height: calc(100vh - var(--site-header-height) - var(--top-navigation-height));
     padding-inline: var(--page-inset);
 }
@@ -625,6 +626,41 @@ body {
     min-width: 0;
     padding: 1rem 0.75rem 1rem;
     transition: top 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.sidebar-resizer {
+    position: sticky;
+    top: calc(var(--site-header-height) + var(--top-navigation-height));
+    z-index: 1;
+    grid-column: 1;
+    grid-row: 1;
+    align-self: start;
+    justify-self: end;
+    width: 12px;
+    height: calc(100vh - var(--site-header-height) - var(--top-navigation-height));
+    margin-right: -6px;
+    padding: 0;
+    cursor: col-resize;
+    touch-action: none;
+}
+
+.sidebar-resizer::before {
+    position: absolute;
+    inset: 0 5px;
+    background: var(--border-subtle);
+    content: "";
+    opacity: 0;
+    transition: background-color 120ms ease, opacity 120ms ease;
+}
+
+.sidebar-resizer:hover::before,
+.sidebar-resizer:focus-visible::before {
+    opacity: 1;
+}
+
+.sidebar-resizer:focus-visible {
+    outline: 2px solid var(--link);
+    outline-offset: 3px;
 }
 
 .site-nav-section-title {
@@ -799,6 +835,10 @@ body {
     display: none;
 }
 
+.site-layout.sidebar-collapsed .sidebar-resizer {
+    display: none;
+}
+
 .site-layout.no-wide-sidebar .site-sidebar {
     display: none;
 }
@@ -831,10 +871,11 @@ body {
     }
 
     .site-layout.no-wide-sidebar {
-        grid-template-columns: 260px minmax(0, 1fr);
+        grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
     }
 
-    .site-sidebar {
+    .site-sidebar,
+    .sidebar-resizer {
         top: var(--site-header-height);
         height: calc(100vh - var(--site-header-height));
     }
@@ -864,7 +905,8 @@ body {
 }
 
 @media (min-width: 1221px) {
-    .top-navigation:not(.is-empty).is-hidden-on-scroll ~ .site-layout .site-sidebar {
+    .top-navigation:not(.is-empty).is-hidden-on-scroll ~ .site-layout .site-sidebar,
+    .top-navigation:not(.is-empty).is-hidden-on-scroll ~ .site-layout .sidebar-resizer {
         top: var(--site-header-height);
         height: calc(100vh - var(--site-header-height));
     }
@@ -877,7 +919,8 @@ body {
         min-height: calc(100vh - var(--site-header-height));
     }
 
-    .top-navigation.is-empty ~ .site-layout .site-sidebar {
+    .top-navigation.is-empty ~ .site-layout .site-sidebar,
+    .top-navigation.is-empty ~ .site-layout .sidebar-resizer {
         top: var(--site-header-height);
         height: calc(100vh - var(--site-header-height));
     }
@@ -892,11 +935,15 @@ body {
 
     /* Keep the sidebar column so the content starts at the same place on every page. */
     .site-layout.no-wide-sidebar:not(.sidebar-collapsed) {
-        grid-template-columns: 260px minmax(0, 1fr);
+        grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
     }
 
     .site-layout.no-wide-sidebar:not(.sidebar-collapsed) .site-main {
         grid-column: 2;
+    }
+
+    .site-layout.no-wide-sidebar .sidebar-resizer {
+        display: none;
     }
 
     /* Aligns the sidebar section title with the brand and the first tab. */
@@ -4375,6 +4422,10 @@ th, td {
 
     .site-layout {
         display: block;
+    }
+
+    .sidebar-resizer {
+        display: none;
     }
 
     .top-navigation {

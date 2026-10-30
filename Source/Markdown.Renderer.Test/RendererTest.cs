@@ -6,6 +6,19 @@ namespace Markdown.Renderer.Test;
 public class RendererTest
 {
     [Fact]
+    public void RendersAnAccessibleSidebarResizer()
+    {
+        var html = Resources.HtmlTemplateContent();
+        var css = Resources.CssContent();
+
+        Assert.Contains("id=\"sidebar-resizer\" role=\"separator\" aria-label=\"Resize sidebar\"", html);
+        Assert.Contains("aria-orientation=\"vertical\" aria-valuemin=\"200\" aria-valuemax=\"480\" aria-valuenow=\"260\" tabindex=\"0\"", html);
+        Assert.Contains("grid-template-columns: var(--sidebar-width) minmax(0, 1fr);", css);
+        Assert.Contains("sidebarResizer.addEventListener(\"pointerdown\"", html);
+        Assert.Contains("sidebarResizer.addEventListener(\"keydown\"", html);
+    }
+
+    [Fact]
     public void AppliesImageLightboxGridLayoutOnlyWhileOpen()
     {
         var outputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
