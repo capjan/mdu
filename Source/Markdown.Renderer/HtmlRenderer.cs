@@ -95,19 +95,7 @@ public class HtmlRenderer
             return;
         }
 
-        var sharedAbbreviations = new SharedAbbreviationsExtension();
-        var pipeline = CreatePipeline(sharedAbbreviations);
-        var document = Markdig.Markdown.Parse(markdown, pipeline);
-        var definitions = document.GetAbbreviations();
-        var sharedDefinitions = definitions?.Select(pair => new SharedAbbreviation(
-            pair.Key,
-            pair.Value.Label ?? pair.Key,
-            pair.Value.Text.ToString())).ToArray() ?? [];
-        if (sharedDefinitions.Length == 0)
-            throw new InvalidOperationException("The configured glossary does not contain any abbreviation definitions.");
-
-        sharedAbbreviations.SetDefinitions(sharedDefinitions);
-        _pipeline = pipeline;
+        _pipeline = CreatePipeline(SharedAbbreviationsExtension.FromMarkdown(markdown));
     }
     /// <summary>
     /// The icon search files written to the base path because a rendered page contains an icon search.

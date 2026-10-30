@@ -32,6 +32,7 @@ registrations.AddScoped<RenderCommand>();
 registrations.AddScoped<PdfCommand>();
 registrations.AddScoped<ServeCommand>();
 registrations.AddScoped<PageCommand>();
+registrations.AddScoped<ConfluenceCommand>();
 
 using var services = registrations.BuildServiceProvider();
 
@@ -124,6 +125,39 @@ renderCommand.SetAction(parseResult =>
         EditPageRoot = parseResult.GetValue(editPageRoot) ?? string.Empty
     }));
 rootCommand.Subcommands.Add(renderCommand);
+
+var publishCommand = new Command("publish", "Publishes a documentation mirror.");
+var confluenceCommand = new Command("confluence", "Publishes edit-protected pages to one Confluence Data Center space.");
+var (confluencePattern, confluenceHidden) = AddVisitorOptions(confluenceCommand);
+var confluencePath = AddRootPathArgument(confluenceCommand, "Root folder containing Markdown files. Defaults to ./docs.");
+var confluenceUrl = new Option<string?>("--url") { Description = "HTTPS Confluence base URL. Defaults to MDU_CONFLUENCE_URL." };
+var confluenceSpace = new Option<string?>("--space") { Description = "The only writable space key. Defaults to MDU_CONFLUENCE_SPACE." };
+var confluenceParent = new Option<string?>("--parent-page-id") { Description = "Existing parent page in the target space. Defaults to MDU_CONFLUENCE_PARENT_PAGE_ID." };
+var confluenceExport = new Option<string>("--export-id")
+{
+    Description = "Stable export identity; use a different ID for each project in the same parent.",
+    DefaultValueFactory = _ => "documentation"
+};
+var confluenceDryRun = new Option<bool>("--dry-run") { Description = "Validate and print the publication plan without sending write requests." };
+confluenceCommand.Options.Add(confluenceUrl);
+confluenceCommand.Options.Add(confluenceSpace);
+confluenceCommand.Options.Add(confluenceParent);
+confluenceCommand.Options.Add(confluenceExport);
+confluenceCommand.Options.Add(confluenceDryRun);
+confluenceCommand.SetAction((parseResult, cancellationToken) =>
+    services.GetRequiredService<ConfluenceCommand>().Execute(new ConfluenceCommandSettings
+    {
+        RootPath = parseResult.GetValue(confluencePath),
+        SearchPattern = parseResult.GetValue(confluencePattern),
+        IncludeHidden = parseResult.GetValue(confluenceHidden),
+        Url = parseResult.GetValue(confluenceUrl),
+        SpaceKey = parseResult.GetValue(confluenceSpace),
+        ParentPageId = parseResult.GetValue(confluenceParent),
+        ExportId = parseResult.GetValue(confluenceExport)!,
+        DryRun = parseResult.GetValue(confluenceDryRun)
+    }, cancellationToken));
+publishCommand.Subcommands.Add(confluenceCommand);
+rootCommand.Subcommands.Add(publishCommand);
 
 var pdfCommand = new Command("pdf", "Renders Markdown documentation to one local PDF file.");
 var (pdfPattern, pdfHidden) = AddVisitorOptions(pdfCommand);
@@ -226,7 +260,7 @@ pageLinksCommand.SetAction(parseResult =>
 pageCommand.Subcommands.Add(pageLinksCommand);
 rootCommand.Subcommands.Add(pageCommand);
 
-return rootCommand.Parse(args).Invoke();
+return await rootCommand.Parse(args).InvokeAsync();
 
 static (Option<string?> Pattern, Option<bool> IncludeHidden) AddVisitorOptions(Command command)
 {

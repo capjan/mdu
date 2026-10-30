@@ -17,6 +17,18 @@ internal sealed class SharedAbbreviationsExtension : IMarkdownExtension
     public void SetDefinitions(IEnumerable<SharedAbbreviation> definitions) =>
         _definitions = definitions.ToArray();
 
+    public static SharedAbbreviationsExtension FromMarkdown(string markdown)
+    {
+        var document = Markdig.Markdown.Parse(markdown, new MarkdownPipelineBuilder().UseAdvancedExtensions().Build());
+        var definitions = document.GetAbbreviations()?.Select(pair => new SharedAbbreviation(
+            pair.Key, pair.Value.Label ?? pair.Key, pair.Value.Text.ToString())).ToArray() ?? [];
+        if (definitions.Length == 0)
+            throw new InvalidOperationException("The configured glossary does not contain any abbreviation definitions.");
+        var extension = new SharedAbbreviationsExtension();
+        extension.SetDefinitions(definitions);
+        return extension;
+    }
+
     public void Setup(MarkdownPipelineBuilder pipeline)
     {
         _abbreviationParser = pipeline.BlockParsers.OfType<AbbreviationParser>().FirstOrDefault();

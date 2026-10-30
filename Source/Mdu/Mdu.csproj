@@ -38,6 +38,7 @@
         <ProjectReference Include="..\Markdown.Linter\Markdown.Linter.csproj" />
         <ProjectReference Include="..\Markdown.Renderer\Markdown.Renderer.csproj" />
         <ProjectReference Include="..\Markdown.Search\Markdown.Search.csproj" />
+        <ProjectReference Include="..\Markdown.Confluence\Markdown.Confluence.csproj" />
     </ItemGroup>
 
 </Project>

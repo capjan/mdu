@@ -43,6 +43,7 @@ The tree is the single source for the sidebar, the top navigation, breadcrumbs, 
 | `render` | `LocalAssetsCopy`, `PdfCommand`, `MarkdigVisitor` | Static site and, when a PDF Link is present, `documentation.pdf` |
 | `serve` | Same as `render`, then a file watcher | Preview site and a refreshed PDF when a PDF Link is present |
 | `pdf` | The tree in navigation order, then `PdfRenderer` | One PDF file |
+| `publish confluence` | The tree through `ConfluenceCommand`, then `ConfluencePublisher` | Edit-protected pages and attachments in one Confluence space |
 
 `mdu page move` and `mdu page links` need no page tree. They read every Markdown file below the documentation folder with `MarkdownLinks`, so they also see pages that are hidden from navigation.
 
@@ -113,3 +114,9 @@ When Markdown content changes, `serve` refreshes `documentation.pdf` if a PDF Li
 `LinterVisitor` checks each page in the tree. It reads the page's links with `Markdown.Document` and runs the [validators](Components.md#markdown.linter) for titles, link casing, and link targets. It checks rules that depend on the tree itself, such as duplicate pages, section pages, duplicate navigation titles, and navigation placement. The results go to a receiver, which `LintResultRenderer` then prints in the chosen format.
 
 `mdu fix` runs the same linter, then applies what it can fix: it converts MkDocs Material syntax, renames `index.md` pages, creates missing section pages, and moves pages flagged by `MDU006`. Whenever a page moves, `MarkdownLinks` rewrites the links to it and the relative links inside it.
+
+## Confluence publishing
+
+`mdu publish confluence` builds the same page tree but does not publish the static HTML output. `ConfluenceCommand` removes front matter and prepares the shared glossary and a PDF attachment when linked. `ConfluenceStorageRenderer` converts the Markdown into storage-format fragments, expands OpenAPI references, rewrites links to deterministic page titles and anchors, and collects attachments. All pages are prepared before the first network write.
+
+`ConfluencePublisher` reads the target and managed-page registry, checks the complete plan, creates private neutral placeholders, and verifies restrictions before sending documentation content. The scoped `ConfluenceClient` checks page space, ancestry and ownership around writes, uploads content-addressed attachments, and publishes completed pages. `--dry-run` performs preparation and read-only validation without creating placeholders or issuing any write request. See [Confluence](../Publish/Confluence.md) for safety boundaries and recovery behavior.
