@@ -4,6 +4,49 @@ namespace Mdu.Test;
 
 public class SiteConfigurationReaderTest
 {
+    [Theory]
+    [InlineData("", true)]
+    [InlineData("attribution: {}", true)]
+    [InlineData("attribution.visible: false", false)]
+    [InlineData("attribution.visible: true", true)]
+    [InlineData("attribution:\n  visible: false", false)]
+    [InlineData("attribution:\n  visible: true", true)]
+    public void ReadsAttributionVisibility(string yaml, bool expected)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-site-config-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "mdu.yml"), yaml);
+            Assert.Equal(expected, SiteConfigurationReader.Read(root).AttributionVisible);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("attribution: false")]
+    [InlineData("attribution.visible: maybe")]
+    [InlineData("attribution:\n  visible: []")]
+    [InlineData("attribution.visible:")]
+    public void RejectsInvalidAttributionVisibility(string yaml)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-site-config-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "mdu.yml"), yaml);
+            var exception = Assert.Throws<InvalidOperationException>(() => SiteConfigurationReader.Read(root));
+            Assert.Contains("attribution", exception.Message);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public void ReadsAndResolvesConfiguredGlossaryRelativeToTheDocumentationRoot()
     {

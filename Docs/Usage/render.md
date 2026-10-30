@@ -40,6 +40,13 @@ An optional `mdu.yml` in the documentation folder sets the site name, light and 
 
 An optional `icons:` value is the folder of your own icon sets. Without it, MDU uses the `.icons` folder of the documentation when there is one. See [Your own icons](../Features/Icons-and-Emojis.md#your-own-icons).
 
+The small **Made with MDU** credit appears at the end of the page content by default. To omit it entirely from the generated HTML, set `attribution.visible: false`. Both the compact form and the nested form below work. The value must be `true` or `false`.
+
+```yaml
+attribution:
+  visible: false
+```
+
 An optional `favicon:` value can be a single asset path for both themes, or a mapping with separate `light` and `dark` paths. MDU emits a light favicon link without a `media` condition as a fallback, followed by a dark link with `media="(prefers-color-scheme: dark)"`. The browser selects the dark link when that condition matches, independently of the page theme; the unconditional light link also lets browsers that do not match the dark condition display a favicon. Alternatively, one SVG can switch its internal styles with `prefers-color-scheme`. Both approaches follow the browser's effective preference, which can come from an OS or user-agent setting, though support varies by browser. For separate paths, selection relies on browser support for the `media` attribute on favicon links; Safari behavior can vary by version, so verify the versions you support. Use PNG or ICO if a browser you support does not display SVG favicons.
 
 ```yaml title="docs/mdu.yml"

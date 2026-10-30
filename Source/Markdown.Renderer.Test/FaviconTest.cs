@@ -6,6 +6,22 @@ namespace Markdown.Renderer.Test;
 public class FaviconTest
 {
     [Fact]
+    public async Task KeepsConfiguredLogoInsideTheBrandBesideThePanelButton()
+    {
+        var html = await RenderAsync(new SiteConfiguration
+        {
+            LogoLight = "assets/light.svg",
+            LogoDark = "assets/dark.svg"
+        });
+
+        var button = html.IndexOf("id=\"navigation-toggle\"", StringComparison.Ordinal);
+        var brand = html.IndexOf("<a class=\"site-brand\"", StringComparison.Ordinal);
+        var logo = html.IndexOf("<span class=\"site-brand-logo-slot\">", StringComparison.Ordinal);
+        Assert.True(button >= 0 && brand > button && logo > brand);
+        Assert.Contains("data-light-src=\"assets/light.svg\" data-dark-src=\"assets/dark.svg\"", html);
+    }
+
+    [Fact]
     public async Task RendersLightAndDarkLinksForDifferentFaviconFiles()
     {
         var html = await RenderAsync(new SiteConfiguration

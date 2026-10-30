@@ -42,6 +42,7 @@ How tabs behave:
 - **Content and headings** share the remaining width without a separate content-width cap. On pages with a table of contents, sidebar resizing reserves room for the content and headings list. On narrower screens where both no longer fit, the headings list is hidden.
 - **Table of contents** can be hidden or shown with the right-hand panel button in the header. Drag its left divider to adjust its width, or focus the divider and use the arrow keys (Shift for larger steps), Home, or End. Both panel widths and the table-of-contents visibility are remembered and applied before the page is displayed.
 - **Panel buttons** use matching left/right icons and a neutral hover background. A filled panel area means the panel is open; an empty area means it is closed. Navigation expansion and header controls are initialized before the page content, without playing startup transitions.
+- A configured site logo remains visible beside the navigation button. Panel resizing leaves browser shortcuts such as Alt+Left and Command+Left untouched. Clicking a divider without dragging does not replace a saved preferred width with a temporarily constrained width.
 - **Breadcrumbs** always keep the full path from the documentation root; selecting a tab does not change it.
 - The root `README.md` stays the landing page. Mark it `top` as well if it should also appear as a tab, such as *Dashboard*.
 

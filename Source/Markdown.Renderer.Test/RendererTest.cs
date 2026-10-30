@@ -21,7 +21,7 @@ public class RendererTest
         Assert.Equal(2, html.Split("class=\"panel-fill\"").Length - 1);
         Assert.True(html.IndexOf("navigationToggle.setAttribute(\"aria-expanded\"", StringComparison.Ordinal) <
                     html.IndexOf("<nav class=\"top-navigation", StringComparison.Ordinal));
-        Assert.True(html.IndexOf("children.hidden = !expanded;", StringComparison.Ordinal) <
+        Assert.True(html.IndexOf("children.hidden = !open;", StringComparison.Ordinal) <
                     html.IndexOf("<main class=\"site-main", StringComparison.Ordinal));
         Assert.Contains(".panel-toggle[aria-expanded=\"false\"] .panel-fill", css);
         Assert.Contains(".panel-toggle:hover", css);
@@ -35,12 +35,13 @@ public class RendererTest
         var css = Resources.CssContent();
 
         Assert.Contains("id=\"sidebar-resizer\" role=\"separator\" aria-label=\"Resize sidebar\"", html);
-        Assert.Contains("aria-orientation=\"vertical\" aria-valuemin=\"200\" aria-valuemax=\"480\" aria-valuenow=\"260\" tabindex=\"0\"", html);
+        Assert.Contains("aria-orientation=\"vertical\" tabindex=\"0\"", html);
+        Assert.Contains("sidebarResizer.setAttribute(\"aria-valuemin\", String(bounds.min));", html);
         Assert.Contains("grid-template-columns: var(--sidebar-width) minmax(0, 1fr);", css);
         Assert.Contains("resizer.addEventListener(\"pointerdown\"", html);
         Assert.Contains("resizer.addEventListener(\"keydown\"", html);
-        Assert.Contains("bindPanelResizer(sidebarResizer, 1, setSidebarWidth);", html);
-        var focusStyles = css.Split(".sidebar-resizer:focus-visible {", 2)[1].Split('}', 2)[0];
+        Assert.Contains("bindPanelResizer(sidebarResizer, 1, setSidebarWidth,", html);
+        var focusStyles = BlockAfter(css, ".sidebar-resizer:focus-visible,\n.toc-resizer:focus-visible {");
         Assert.Contains("border-radius: 2px;", focusStyles);
     }
 
@@ -48,9 +49,10 @@ public class RendererTest
     public void PreservesThePreferredSidebarWidthAcrossViewportChanges()
     {
         var html = Resources.HtmlTemplateContent();
-        var resizeHandler = html.Split("window.addEventListener(\"resize\", () => {", 2)[1].Split("});", 2)[0];
+        var resizeHandler = BlockAfter(html, "window.addEventListener(\"resize\", () => {");
 
-        Assert.Contains("setSidebarWidth(preferredSidebarWidth, false);", resizeHandler);
+        Assert.Contains("syncSidebar();", resizeHandler);
+        Assert.DoesNotContain("setSidebarWidth(", resizeHandler);
         Assert.Contains("preferredSidebarWidth = clampedWidth;", html);
         Assert.Contains("setWidth(pointerStartWidth + direction * (event.clientX - pointerStartX), false);", html);
         Assert.Contains("const step = event.shiftKey ? 50 : 10;", html);
@@ -60,9 +62,9 @@ public class RendererTest
     public void KeepsSidebarAndContentInTheirOwnColumnsOnTheSameRow()
     {
         var css = Resources.CssContent();
-        var sidebarStyles = css.Split(".site-sidebar {", 2)[1].Split('}', 2)[0];
-        var mainStyles = css.Split("\n.site-main {", 2)[1].Split('}', 2)[0];
-        var collapsedStyles = css.Split(".site-layout.sidebar-collapsed .site-main {", 2)[1].Split('}', 2)[0];
+        var sidebarStyles = BlockAfter(css, ".site-sidebar {");
+        var mainStyles = BlockAfter(css, "\n.site-main {");
+        var collapsedStyles = BlockAfter(css, ".site-layout.sidebar-collapsed .site-main {");
 
         Assert.Contains("grid-column: 1;", sidebarStyles);
         Assert.Contains("grid-row: 1;", sidebarStyles);
@@ -75,8 +77,8 @@ public class RendererTest
     public void MatchesTheResizerLineToTheSidebarGuide()
     {
         var css = Resources.CssContent();
-        var resizerStyles = css.Split(".sidebar-resizer::before {", 2)[1].Split('}', 2)[0];
-        var guideStyles = css.Split(".site-nav-row:has(> .site-nav-toggle) + .site-nav-children::before {", 2)[1].Split('}', 2)[0];
+        var resizerStyles = BlockAfter(css, ".sidebar-resizer::before {");
+        var guideStyles = BlockAfter(css, ".site-nav-row:has(> .site-nav-toggle) + .site-nav-children::before {");
 
         foreach (var styles in new[] { resizerStyles, guideStyles })
         {
@@ -95,21 +97,54 @@ public class RendererTest
         Assert.Contains("grid-template-columns: minmax(0, 1fr);", css);
         Assert.Contains("@container (min-width: 600px)", css);
         Assert.Contains("grid-template-columns: minmax(0, 1fr) var(--toc-width);", css);
-        Assert.Contains("const minimumMainWidth = hasTableOfContents && !tocIsCollapsed() ? 390 + preferredTocWidth + mainPadding : 360;", html);
+        Assert.Contains("? panels.tocContentMin + panels.gap + tocWidth : panels.contentMin) + mainPadding;", html);
         Assert.Contains("availableWidth - minimumMainWidth", html);
     }
 
     [Fact]
-    public void RestoresLayoutPreferencesBeforeLoadingTheStylesheet()
+    public void RestoresLayoutPreferencesBeforeRenderingTheBody()
     {
         var html = Resources.HtmlTemplateContent();
-        var stylesheet = html.IndexOf("<link rel=\"stylesheet\"", StringComparison.Ordinal);
-        Assert.True(html.IndexOf("mdu-sidebar-width", StringComparison.Ordinal) < stylesheet);
-        Assert.True(html.IndexOf("mdu-toc-width", StringComparison.Ordinal) < stylesheet);
-        Assert.True(html.IndexOf("mdu-toc-collapsed", StringComparison.Ordinal) < stylesheet);
+        var body = html.IndexOf("<body", StringComparison.Ordinal);
+        Assert.True(html.IndexOf("for (const panel of [panels.sidebar, panels.toc])", StringComparison.Ordinal) < body);
+        Assert.True(html.IndexOf("mdu-toc-collapsed", StringComparison.Ordinal) < body);
         Assert.Contains("aria-label=\"Resize table of contents\"", html);
-        Assert.Contains("bindPanelResizer(tocResizer, -1, setTocWidth);", html);
+        Assert.Contains("bindPanelResizer(tocResizer, -1, setTocWidth,", html);
         Assert.Contains("tocToggle.setAttribute(\"aria-expanded\"", html);
+    }
+
+    [Fact]
+    public async Task OmitsTocControlsReferenceWhenThePageHasNoHeadings()
+    {
+        using var writer = new StringWriter();
+        await new HtmlRenderer().WriteHtml(writer, "test", "", 0, "Plain text", "");
+        var html = writer.ToString();
+
+        Assert.DoesNotContain("aria-controls=\"on-this-page\"", html);
+        Assert.DoesNotContain("%%IS_DASHBOARD%%", html);
+        Assert.DoesNotContain("%%TOC_CONTROLS%%", html);
+    }
+
+    [Fact]
+    public void InitializesNavigationGroupsOnlyOnceAndPreservesBrowserShortcuts()
+    {
+        var html = Resources.HtmlTemplateContent();
+        Assert.Equal(1, html.Split("querySelectorAll(\".site-nav-toggle\")").Length - 1);
+        Assert.Contains("if (event.altKey || event.metaKey || event.ctrlKey) return;", html);
+        Assert.Contains("if (moved) {", html);
+        Assert.Contains("else restoreWidth();", html);
+        Assert.DoesNotContain("layout.style.removeProperty(\"--sidebar-width\")", html);
+        Assert.DoesNotContain("\"%%SITE_LAYOUT_CLASS%%\".includes", html);
+    }
+
+    private static string BlockAfter(string text, string marker)
+    {
+        var start = text.IndexOf(marker, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"Expected block marker: {marker}");
+        start += marker.Length;
+        var end = text.IndexOf('}', start);
+        Assert.True(end >= start, $"Expected closing brace after: {marker}");
+        return text[start..end];
     }
 
     [Fact]

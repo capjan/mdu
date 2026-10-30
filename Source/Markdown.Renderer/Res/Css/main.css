@@ -3,9 +3,17 @@
     color-scheme: light;
     --site-header-height: 56px;
     --top-navigation-height: 43px;
-    --sidebar-width: 260px;
     --sidebar-preferred-width: 260px;
     --toc-preferred-width: 210px;
+    --sidebar-min-width: 200px;
+    --sidebar-max-width: 480px;
+    --toc-min-width: 180px;
+    --toc-max-width: 400px;
+    --panel-content-min: 360px;
+    --toc-content-min: 342px;
+    --panel-gap: 48px;
+    --main-padding: 32px;
+    --toc-threshold: 600px;
     --page-max-width: 1400px;
     /* Space beside the centered page on screens wider than --page-max-width. */
     --page-inset: max(0px, (100% - var(--page-max-width)) / 2);
@@ -276,14 +284,23 @@ body {
 
 .site-brand-logo {
     display: block;
-    position: absolute;
-    inset: 1px;
+    position: relative;
     width: 30px;
     height: 30px;
+    flex: none;
+    grid-area: 1 / 1;
     object-fit: contain;
-    opacity: 0;
+    opacity: 1;
     pointer-events: none;
     transition: opacity 140ms ease;
+}
+
+.site-brand-logo-slot {
+    display: grid;
+    width: 30px;
+    height: 30px;
+    flex: none;
+    margin-right: 0.4rem;
 }
 
 .navigation-toggle {
@@ -384,6 +401,9 @@ body {
 }
 
 .navigation-toggle:focus-visible,
+.toc-toggle:focus-visible,
+.sidebar-resizer:focus-visible,
+.toc-resizer:focus-visible,
 .search-button:focus-visible,
 .repository-link:focus-visible,
 .site-nav-link:focus-visible,
@@ -404,6 +424,11 @@ body {
 
 .site-brand:focus-visible {
     border-radius: 6px;
+}
+
+.sidebar-resizer:focus-visible,
+.toc-resizer:focus-visible {
+    border-radius: 2px;
 }
 
 .page-meta a:focus-visible {
@@ -522,8 +547,8 @@ body {
 }
 
 .site-layout {
-    --main-reserve: 360px;
-    --sidebar-width: clamp(200px, var(--sidebar-preferred-width), calc(100% - var(--main-reserve)));
+    --main-reserve: calc(var(--panel-content-min) + 2 * var(--main-padding));
+    --sidebar-width: clamp(var(--sidebar-min-width), var(--sidebar-preferred-width), calc(100% - var(--main-reserve)));
     display: grid;
     grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
     min-height: calc(100vh - var(--site-header-height) - var(--top-navigation-height));
@@ -531,11 +556,11 @@ body {
 }
 
 .site-layout:has(.on-this-page) {
-    --main-reserve: calc(390px + var(--toc-preferred-width) + 4rem);
+    --main-reserve: calc(var(--toc-content-min) + var(--panel-gap) + var(--toc-preferred-width) + 2 * var(--main-padding));
 }
 
 .toc-collapsed .site-layout {
-    --main-reserve: 360px;
+    --main-reserve: calc(var(--panel-content-min) + 2 * var(--main-padding));
 }
 
 @media (min-width: 761px) {
@@ -679,22 +704,13 @@ body {
     opacity: 1;
 }
 
-.sidebar-resizer:focus-visible {
-    outline: 2px solid var(--link);
-    outline-offset: 3px;
-    border-radius: 2px;
-}
-
 .toc-toggle {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     flex: none;
     margin-left: 0.6rem;
-    padding: 0.5rem;
     border: 0;
-    border-radius: 6px;
-    color: var(--text-secondary);
     background: transparent;
     cursor: pointer;
 }
@@ -743,12 +759,6 @@ body {
 .panels-initializing .sidebar-resizer,
 .panels-initializing .toc-resizer {
     transition: none !important;
-}
-
-.toc-toggle:focus-visible,
-.toc-resizer:focus-visible {
-    outline: 2px solid var(--link);
-    outline-offset: 3px;
 }
 
 .toc-resizer {
@@ -971,7 +981,7 @@ body {
     grid-row: 1;
     width: 100%;
     min-width: 0;
-    padding: 1rem 2rem 3rem;
+    padding: 1rem var(--main-padding) 3rem;
 }
 
 .site-layout.sidebar-collapsed .site-main {
@@ -991,11 +1001,13 @@ body {
         min-height: calc(100vh - var(--site-header-height));
     }
 
-    .site-layout.no-wide-sidebar .site-sidebar {
-        display: block;
+    @media (min-width: 761px) {
+        :root:not(.sidebar-starts-collapsed) .site-layout.no-wide-sidebar:not(.sidebar-collapsed) .site-sidebar {
+            display: block;
+        }
     }
 
-    .site-layout.no-wide-sidebar {
+    .site-layout.no-wide-sidebar:not(.sidebar-collapsed) {
         grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
     }
 
@@ -2954,16 +2966,14 @@ th, td {
     border-top: 1px solid var(--border-subtle);
 }
 
-/* Page-wide credit in the bottom-left corner, aligned with the header brand. */
 .made-with-mdu {
-    padding: 0.75rem calc(var(--page-inset) + 1.5rem);
-    border-top: 1px solid var(--border-subtle);
+    margin-top: 1.5rem;
     color: var(--text-secondary);
-    font-size: 0.8rem;
-    text-align: start;
+    font-size: 0.75rem;
+    text-align: end;
 }
 
-.made-with-mdu a {
+.markdown-content .made-with-mdu a {
     color: inherit;
     text-decoration: underline;
     text-decoration-color: var(--border);
@@ -2971,7 +2981,7 @@ th, td {
     transition: color 120ms ease, text-decoration-color 120ms ease;
 }
 
-.made-with-mdu a:hover {
+.markdown-content .made-with-mdu a:hover {
     color: var(--link);
     text-decoration-color: currentColor;
 }
@@ -4658,11 +4668,11 @@ th, td {
 }
 
 .content-layout {
-    --toc-width: clamp(180px, var(--toc-preferred-width), calc(100cqw - 390px));
+    --toc-width: clamp(var(--toc-min-width), var(--toc-preferred-width), calc(100cqw - var(--toc-content-min) - var(--panel-gap)));
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     align-items: start;
-    gap: 3rem;
+    gap: var(--panel-gap);
 }
 
 .markdown-content {
@@ -4889,28 +4899,12 @@ th, td {
     display: none;
 }
 
-.site-header:not(.has-wide-sidebar) .site-header-icon-slot.has-logo .navigation-toggle {
-    display: none;
-}
-
-.site-header:not(.has-wide-sidebar) .site-header-icon-slot.has-logo .site-brand-logo {
-    opacity: 1;
-}
-
-.site-header:not(.has-wide-sidebar) .site-header-icon-slot:not(.has-logo) {
+.site-header:not(.has-wide-sidebar) .site-header-icon-slot {
     display: none;
 }
 
 @media (max-width: 1220px) {
-    .site-header .site-header-icon-slot .navigation-toggle {
-        display: inline-flex;
-    }
-
-    .site-header .site-header-icon-slot.has-logo .site-brand-logo {
-        opacity: 0;
-    }
-
-    .site-header .site-header-icon-slot:not(.has-logo) {
+    .site-header:not(.has-wide-sidebar) .site-header-icon-slot {
         display: grid;
     }
 }
@@ -4920,16 +4914,9 @@ th, td {
         display: block;
     }
 
-    /* Pages without a wide sidebar, such as the landing page, also need the button that opens the drawer. */
-    .site-header:not(.has-wide-sidebar) .site-header-icon-slot:not(.has-logo) {
-        display: block;
-    }
-
-    .site-header:not(.has-wide-sidebar) .site-header-icon-slot.has-logo .navigation-toggle {
-        display: inline-flex;
-    }
-
-    .site-header:not(.has-wide-sidebar) .site-header-icon-slot.has-logo .site-brand-logo {
-        opacity: 0;
+    .on-this-page,
+    .toc-resizer,
+    .toc-toggle {
+        display: none;
     }
 }

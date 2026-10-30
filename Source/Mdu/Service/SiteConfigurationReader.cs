@@ -20,6 +20,7 @@ public static class SiteConfigurationReader
         var configuration = new SiteConfiguration
         {
             SiteName = ReadScalar(root, "site_name") ?? "Documentation",
+            AttributionVisible = ReadAttributionVisible(root),
             Glossary = ReadGlossary(root),
             Icons = ReadIcons(root),
             LogoLight = ReadAsset(root, "logo", "light"),
@@ -107,6 +108,22 @@ public static class SiteConfigurationReader
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             File.Copy(source, target, true);
         }
+    }
+
+    private static bool ReadAttributionVisible(YamlMappingNode root)
+    {
+        YamlNode? value = null;
+        if (root.Children.TryGetValue(new YamlScalarNode("attribution"), out var attribution))
+        {
+            if (attribution is not YamlMappingNode mapping)
+                throw new InvalidOperationException("The 'attribution' setting in mdu.yml must be a mapping with a 'visible' boolean.");
+            mapping.Children.TryGetValue(new YamlScalarNode("visible"), out value);
+        }
+        if (root.Children.TryGetValue(new YamlScalarNode("attribution.visible"), out var compactValue))
+            value = compactValue;
+        if (value is null) return true;
+        if (value is YamlScalarNode scalar && bool.TryParse(scalar.Value, out var visible)) return visible;
+        throw new InvalidOperationException("The 'attribution.visible' setting in mdu.yml must be true or false.");
     }
 
     private static SitePalette? ReadPalette(YamlMappingNode root, string name)
