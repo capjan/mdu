@@ -253,6 +253,10 @@ public class HtmlRenderer
             ["SEARCH_SCRIPT_LINK"] = HtmlEncoder.Default.Encode(searchScriptLink),
             ["SEARCH_INDEX_LINK"] = HtmlEncoder.Default.Encode(searchIndexLink),
             ["TOC_LAYOUT_CLASS"] = dashboard is null ? " has-on-this-page" : string.Empty,
+            ["HAS_TOC"] = dashboard is null && tocHeadings.Count > 0 ? "true" : "false",
+            ["IS_DASHBOARD"] = dashboard is null ? "false" : "true",
+            ["TOC_CONTROLS"] = dashboard is null && tocHeadings.Count > 0 ? "aria-controls=\"on-this-page\"" : string.Empty,
+            ["HEADER_LAYOUT_CLASS"] = hasWideSidebar ? " has-wide-sidebar" : string.Empty,
             ["NAVIGATION_ITEMS"] = RenderNavigationItems(model.NavigationItems),
             ["TOP_NAVIGATION_ITEMS"] = RenderTopNavigationItems(model.TopNavigationItems),
             ["SIDEBAR_SECTION_TITLE"] = currentTopNavigationItem is not null && hasWideSidebar && !hasUnassignedSidebarPages
@@ -276,6 +280,9 @@ public class HtmlRenderer
             ["PAGE_BREADCRUMBS"] = dashboard is null ? breadcrumbMarkup : string.Empty,
             ["PAGE_TOC"] = dashboard is null ? RenderOnThisPage(tocHeadings) : string.Empty,
             ["PAGE_FOOTER"] = RenderPageFooter(model.NavigationItems, editPageLink, !editLinkInserted, lastModified) + dashboardFootnotes,
+            ["ATTRIBUTION"] = _siteConfiguration.AttributionVisible
+                ? "<footer class=\"made-with-mdu\">Made with <a href=\"https://capjan.github.io/mdu/index.html\" target=\"_blank\" rel=\"noopener noreferrer\">MDU</a></footer>"
+                : string.Empty,
             ["BACK_TO_TOP"] = "<a class=\"back-to-top\" id=\"back-to-top\" href=\"#top\" aria-label=\"Back to top\" title=\"Back to top\"><svg viewBox=\"0 0 20 20\" aria-hidden=\"true\"><path d=\"M10 16V4m-5 5 5-5 5 5\"></path></svg><span>Back to top</span></a>",
             ["REPOSITORY_LINK"] = RenderRepositoryLink(editPageLink),
             ["PAGE_SCRIPTS"] =
@@ -307,8 +314,8 @@ public class HtmlRenderer
         var light = ResolveAssetUrl(prefix, configuration.LogoLight);
         var dark = ResolveAssetUrl(prefix, configuration.LogoDark);
         var logo = light.Length == 0 ? string.Empty :
-            $"<img class=\"site-brand-logo\" src=\"{HtmlEncoder.Default.Encode(light)}\" data-light-src=\"{HtmlEncoder.Default.Encode(light)}\" data-dark-src=\"{HtmlEncoder.Default.Encode(dark)}\" alt=\"\">";
-        return $"<div class=\"site-header-leading\"><div class=\"site-header-icon-slot{(light.Length > 0 ? " has-logo" : string.Empty)}\">{logo}<button class=\"navigation-toggle\" id=\"navigation-toggle\" type=\"button\" aria-expanded=\"true\" aria-controls=\"site-navigation\" aria-label=\"Collapse navigation\" title=\"Collapse navigation\"><svg viewBox=\"0 0 20 20\" aria-hidden=\"true\" focusable=\"false\"><rect x=\"2.5\" y=\"3.5\" width=\"15\" height=\"13\" rx=\"2\"></rect><path d=\"M8 4v12M5 7h1M5 10h1M5 13h1\"></path></svg></button></div><a class=\"site-brand\" href=\"{HtmlEncoder.Default.Encode(prefix + "index.html")}\"><span id=\"site-brand-title\" data-site-title=\"{name}\" data-page-title=\"{heading}\">{name}</span></a></div>";
+            $"<span class=\"site-brand-logo-slot\"><img class=\"site-brand-logo\" src=\"{HtmlEncoder.Default.Encode(light)}\" data-light-src=\"{HtmlEncoder.Default.Encode(light)}\" data-dark-src=\"{HtmlEncoder.Default.Encode(dark)}\" alt=\"\"></span>";
+        return $"<div class=\"site-header-leading\"><div class=\"site-header-icon-slot\"><button class=\"navigation-toggle panel-toggle\" id=\"navigation-toggle\" type=\"button\" aria-expanded=\"true\" aria-controls=\"site-navigation\" aria-label=\"Collapse navigation\" title=\"Collapse navigation\"><svg viewBox=\"0 0 20 20\" aria-hidden=\"true\" focusable=\"false\"><rect x=\"2.5\" y=\"3.5\" width=\"15\" height=\"13\" rx=\"2\"></rect><path class=\"panel-fill\" d=\"M3 4h5v12H3z\"></path><path d=\"M8 4v12\"></path></svg></button></div><a class=\"site-brand\" href=\"{HtmlEncoder.Default.Encode(prefix + "index.html")}\">{logo}<span id=\"site-brand-title\" data-site-title=\"{name}\" data-page-title=\"{heading}\">{name}</span></a></div>";
     }
 
     private static string RenderFavicon(string prefix, SiteConfiguration configuration)

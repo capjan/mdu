@@ -12,14 +12,18 @@ namespace Mdu.Test;
 
 public class FixCommandTest
 {
-    [Fact]
-    public void FixesReadmeWithoutSubpagesAndKeepsLinksWorking()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FixesReadmeWithoutSubpagesAndKeepsLinksWorking(bool invalidHtmlAttribution)
     {
         var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
         var section = Path.Combine(root, "Guide");
         Directory.CreateDirectory(section);
         try
         {
+            if (invalidHtmlAttribution)
+                File.WriteAllText(Path.Combine(root, "mdu.yml"), "attribution: false\n");
             File.WriteAllText(Path.Combine(root, "README.md"),
                 "# Docs\n\n[Page](./Guide/README.md#intro)\n\n[Folder](./Guide/)\n\n[Reference][guide]\n\n[guide]: ./Guide/README.md?view=full#intro\n");
             Directory.CreateDirectory(Path.Combine(root, "api"));

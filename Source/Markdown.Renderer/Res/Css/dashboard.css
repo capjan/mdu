@@ -4,8 +4,12 @@
     display: block;
 }
 
+.site-layout.is-dashboard {
+    --main-padding: clamp(1rem, 2.5vw, 2.5rem);
+}
+
 .site-layout.is-dashboard .site-main {
-    padding-inline: clamp(1rem, 2.5vw, 2.5rem);
+    padding-inline: var(--main-padding);
 }
 
 .site-layout.is-dashboard .markdown-content > .footnotes {
