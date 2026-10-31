@@ -816,7 +816,7 @@ body {
     align-items: center;
     gap: 0;
     margin-left: 0;
-    padding-left: calc(1.125rem + var(--indent-depth) * 0.75rem);
+    padding-left: calc(1.125rem + var(--indent-depth) * 1rem);
     border-radius: 6px;
     transition: background-color 120ms ease;
 }
@@ -860,10 +860,10 @@ body {
     align-items: center;
     justify-content: flex-start;
     align-self: stretch;
-    width: calc(2.375rem + var(--indent-depth) * 0.75rem);
+    width: calc(2.375rem + var(--indent-depth) * 1rem);
     height: auto;
-    margin-left: calc(-1.125rem - var(--indent-depth) * 0.75rem);
-    padding: 0 0 0 calc(1.125rem + var(--indent-depth) * 0.75rem);
+    margin-left: calc(-1.125rem - var(--indent-depth) * 1rem);
+    padding: 0 0 0 calc(1.125rem + var(--indent-depth) * 1rem);
     border: 0;
     border-radius: 5px;
     background: transparent;
@@ -874,8 +874,8 @@ body {
 }
 
 .site-nav-toggle-spacer {
-    width: calc(2.375rem + var(--indent-depth) * 0.75rem);
-    margin-left: calc(-1.125rem - var(--indent-depth) * 0.75rem);
+    width: calc(2.375rem + var(--indent-depth) * 1rem);
+    margin-left: calc(-1.125rem - var(--indent-depth) * 1rem);
 }
 
 .site-nav-toggle:focus-visible {
@@ -925,18 +925,19 @@ body {
     font-weight: 600;
 }
 
-/* An expanded group hangs on a hairline below its chevron; the current page marks its part of that line,
-   like the current heading in the on-this-page list. */
+/* Only the expanded group that directly holds the current page hangs on a hairline below its chevron, so
+   nested open groups never stack lines; the current page marks its part of that line, like the current
+   heading in the on-this-page list. */
 .site-nav-children {
     --nav-guide-depth: var(--indent-depth);
     position: relative;
 }
 
-.site-nav-row:has(> .site-nav-toggle) + .site-nav-children::before {
+.site-nav-row:has(> .site-nav-toggle) + .site-nav-children:has(> .site-nav-item > .site-nav-row.is-current)::before {
     position: absolute;
     top: 0;
     bottom: 0;
-    left: calc(1.125rem + var(--nav-guide-depth) * 0.75rem + 5px);
+    left: calc(1.125rem + var(--nav-guide-depth) * 1rem + 5px);
     width: 1px;
     background: var(--border-subtle);
     content: "";
@@ -946,7 +947,7 @@ body {
     position: absolute;
     top: 0.2rem;
     bottom: 0.2rem;
-    left: calc(1.125rem + var(--nav-guide-depth) * 0.75rem + 4.5px);
+    left: calc(1.125rem + var(--nav-guide-depth) * 1rem + 4.5px);
     width: 2px;
     border-radius: 1px;
     background: var(--link);
@@ -1105,18 +1106,18 @@ body {
     }
 
     .site-layout.has-current-top-section.has-wide-sidebar .site-sidebar .site-nav-item.is-in-current-top-section > .site-nav-row {
-        padding-left: calc(1.125rem + var(--wide-indent-depth) * 0.75rem);
+        padding-left: calc(1.125rem + var(--wide-indent-depth) * 1rem);
     }
 
     .site-layout.has-current-top-section.has-wide-sidebar .site-sidebar .site-nav-item.is-in-current-top-section .site-nav-toggle {
-        width: calc(2.375rem + var(--wide-indent-depth) * 0.75rem);
-        margin-left: calc(-1.125rem - var(--wide-indent-depth) * 0.75rem);
-        padding-left: calc(1.125rem + var(--wide-indent-depth) * 0.75rem);
+        width: calc(2.375rem + var(--wide-indent-depth) * 1rem);
+        margin-left: calc(-1.125rem - var(--wide-indent-depth) * 1rem);
+        padding-left: calc(1.125rem + var(--wide-indent-depth) * 1rem);
     }
 
     .site-layout.has-current-top-section.has-wide-sidebar .site-sidebar .site-nav-item.is-in-current-top-section .site-nav-toggle-spacer {
-        width: calc(2.375rem + var(--wide-indent-depth) * 0.75rem);
-        margin-left: calc(-1.125rem - var(--wide-indent-depth) * 0.75rem);
+        width: calc(2.375rem + var(--wide-indent-depth) * 1rem);
+        margin-left: calc(-1.125rem - var(--wide-indent-depth) * 1rem);
     }
 
     .site-layout.has-current-top-section.has-wide-sidebar .site-sidebar .site-nav-item.is-in-current-top-section > .site-nav-children {
