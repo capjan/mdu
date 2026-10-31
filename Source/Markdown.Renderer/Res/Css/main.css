@@ -1069,13 +1069,9 @@ body {
         display: none;
     }
 
-    /* Keep the sidebar column so the content starts at the same place on every page. */
-    .site-layout.no-wide-sidebar:not(.sidebar-collapsed) {
-        grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
-    }
-
-    .site-layout.no-wide-sidebar:not(.sidebar-collapsed) .site-main {
-        grid-column: 2;
+    /* .site-main defaults to the second column; pages without a sidebar have only one. */
+    .site-layout.no-wide-sidebar .site-main {
+        grid-column: 1;
     }
 
     .site-layout.no-wide-sidebar .sidebar-resizer {
