@@ -333,6 +333,28 @@ public class RepositoryImportTest
     }
 
     [Fact]
+    public void ExcludesAnExistingUnusableImportedGlossaryOutsideRenderAndServe()
+    {
+        var fixture = new GlossaryImportFixture();
+        fixture.WriteImportedConfiguration("glossary: includes/abbreviations.md\n");
+        fixture.WriteRepositoryFile("Docs/includes/abbreviations.md", "No definitions.\n");
+        fixture.WriteRepositoryFile("Docs/includes/Snippets.md", "# Snippets\n");
+        try
+        {
+            var root = Assert.Single(fixture.CreateGraph(required: false));
+            var pages = new[] { root }.Concat(root.Children).Select(page => page.FileInfo.Name).ToArray();
+
+            Assert.Null(root.Glossary);
+            Assert.DoesNotContain("abbreviations.md", pages);
+            Assert.Contains("Snippets.md", pages);
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
     public void AcceptsAnImportedGlossaryOutsideTheDocsFolderAndIgnoresUnrelatedSettings()
     {
         var fixture = new GlossaryImportFixture();

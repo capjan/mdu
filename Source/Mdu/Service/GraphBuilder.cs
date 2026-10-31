@@ -136,6 +136,7 @@ public class GraphBuilder
     private static ImportedGlossary? ReadImportedGlossary(ResolvedGitTreeSource source, string sourceUrl, bool required)
     {
         string? path = null;
+        var exists = false;
         try
         {
             var setting = SiteConfigurationReader.ReadGlossarySetting(source.SourceFolderPath);
@@ -149,19 +150,21 @@ public class GraphBuilder
                 relativePath.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal))
                 throw new InvalidOperationException($"The glossary '{setting}' must stay inside the imported repository.");
 
+            exists = File.Exists(path);
             return new ImportedGlossary(path, Glossary.Parse(File.ReadAllText(path)));
         }
         catch (Exception exception) when (exception is YamlDotNet.Core.YamlException or IOException or
                                               UnauthorizedAccessException or ArgumentException or InvalidOperationException)
         {
-            if (!required) return null;
+            // Like the site glossary, an existing glossary file is never a page, even when it cannot be used.
+            if (!required) return exists ? new ImportedGlossary(path!, null) : null;
             var file = path is null ? string.Empty : $" '{path}'";
             throw new InvalidOperationException(
                 $"Could not read the glossary{file} of imported source '{sourceUrl}': {exception.Message}", exception);
         }
     }
 
-    private sealed record ImportedGlossary(string Path, Glossary Glossary);
+    private sealed record ImportedGlossary(string Path, Glossary? Glossary);
 
     private static string GetMountDirectory(string importRelativePath)
     {
