@@ -89,7 +89,7 @@ public class RendererTest
     {
         var css = Resources.CssContent();
         var resizerStyles = BlockAfter(css, ".sidebar-resizer::before {");
-        var guideStyles = BlockAfter(css, ".site-nav-row:has(> .site-nav-toggle) + .site-nav-children::before {");
+        var guideStyles = BlockAfter(css, ".site-nav-row:has(> .site-nav-toggle) + .site-nav-children:has(> .site-nav-item > .site-nav-row.is-current)::before {");
 
         foreach (var styles in new[] { resizerStyles, guideStyles })
         {
