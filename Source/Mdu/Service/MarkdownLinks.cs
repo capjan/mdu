@@ -76,7 +76,8 @@ public static class MarkdownLinks
                 continue;
 
             var movedSpecPath = movedPaths.GetValueOrDefault(specPath, specPath);
-            if (!pathComparer.Equals(sourcePath, newSourcePath) || !pathComparer.Equals(specPath, movedSpecPath))
+            if (!string.Equals(sourcePath, newSourcePath, StringComparison.Ordinal) ||
+                !string.Equals(specPath, movedSpecPath, StringComparison.Ordinal))
             {
                 var updatedSpecPath = Path.IsPathRooted(openApiSpec.Value)
                     ? movedSpecPath
