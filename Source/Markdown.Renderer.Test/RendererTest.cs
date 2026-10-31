@@ -303,6 +303,67 @@ public class RendererTest
     }
 
     [Fact]
+    public async Task GlossaryScopeOverridesAndInheritsSiteDefinitionsWithoutLeaking()
+    {
+        var renderer = new HtmlRenderer();
+        renderer.SetGlossary("*[API]: Application Programming Interface\n*[CI]: Continuous Integration\n");
+        var importedGlossary = Glossary.Parse("*[CI]: Configuration Item\n*[ADR]: Architecture Decision Record\n");
+        var otherGlossary = Glossary.Parse("*[SLA]: Service Level Agreement\n");
+        const string markdown = "API, CI, ADR and SLA.\n";
+
+        var imported = await RenderPage(renderer, markdown, renderer.GetGlossaryScope(importedGlossary));
+        var other = await RenderPage(renderer, markdown, renderer.GetGlossaryScope(otherGlossary));
+        var site = await RenderPage(renderer, markdown);
+        var pageLocal = await RenderPage(renderer, "*[CI]: Page definition\n\nCI.\n", renderer.GetGlossaryScope(importedGlossary));
+
+        Assert.Contains("<abbr title=\"Application Programming Interface\">API</abbr>", imported);
+        Assert.Contains("<abbr title=\"Configuration Item\">CI</abbr>", imported);
+        Assert.Contains("<abbr title=\"Architecture Decision Record\">ADR</abbr>", imported);
+        Assert.DoesNotContain("Service Level Agreement", imported);
+
+        Assert.Contains("<abbr title=\"Continuous Integration\">CI</abbr>", other);
+        Assert.Contains("<abbr title=\"Service Level Agreement\">SLA</abbr>", other);
+        Assert.DoesNotContain("Architecture Decision Record", other);
+
+        Assert.Contains("<abbr title=\"Continuous Integration\">CI</abbr>", site);
+        Assert.DoesNotContain("Architecture Decision Record", site);
+        Assert.DoesNotContain("Service Level Agreement", site);
+
+        Assert.Contains("<abbr title=\"Page definition\">CI</abbr>", pageLocal);
+    }
+
+    [Fact]
+    public async Task GlossaryScopesFollowTheCurrentSiteGlossary()
+    {
+        var renderer = new HtmlRenderer();
+        var importedGlossary = Glossary.Parse("*[ADR]: Architecture Decision Record\n");
+        renderer.SetGlossary("*[API]: Application Programming Interface\n");
+        Assert.Contains("Application Programming Interface",
+            await RenderPage(renderer, "API.\n", renderer.GetGlossaryScope(importedGlossary)));
+
+        renderer.SetGlossary("*[API]: Changed interface\n");
+        var html = await RenderPage(renderer, "API and ADR.\n", renderer.GetGlossaryScope(importedGlossary));
+        Assert.Contains("<abbr title=\"Changed interface\">API</abbr>", html);
+        Assert.Contains("<abbr title=\"Architecture Decision Record\">ADR</abbr>", html);
+
+        renderer.SetGlossary(null);
+        html = await RenderPage(renderer, "API and ADR.\n", renderer.GetGlossaryScope(importedGlossary));
+        Assert.DoesNotContain("<abbr title=\"Changed interface\">", html);
+        Assert.Contains("<abbr title=\"Architecture Decision Record\">ADR</abbr>", html);
+    }
+
+    [Fact]
+    public void GlossaryWithoutDefinitionsIsRejected() =>
+        Assert.Throws<InvalidOperationException>(() => Glossary.Parse("No abbreviation definitions here."));
+
+    private static async Task<string> RenderPage(HtmlRenderer renderer, string markdown, GlossaryScope? scope = null)
+    {
+        var writer = new StringWriter();
+        await renderer.WriteHtml(writer, "Page", string.Empty, 0, markdown, string.Empty, glossaryScope: scope);
+        return writer.ToString();
+    }
+
+    [Fact]
     public async Task AppliesConfiguredBackgroundToHeaderSurfacesForLightAndDarkThemes()
     {
         var outputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));

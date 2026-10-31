@@ -170,6 +170,245 @@ public class RepositoryImportTest
     }
 
     [Fact]
+    public void AppliesImportedGlossaryToImportedPagesOnlyAndExcludesItFromTheSite()
+    {
+        var root = CreateTemporaryDirectory();
+        var docs = Path.Combine(root, "docs");
+        var architecture = Path.Combine(root, "architecture");
+        var architectureDocs = Path.Combine(architecture, "Docs");
+        var backend = Path.Combine(root, "backend");
+        Directory.CreateDirectory(Path.Combine(docs, "_includes"));
+        Directory.CreateDirectory(Path.Combine(docs, "Architecture"));
+        Directory.CreateDirectory(Path.Combine(architectureDocs, "includes"));
+        Directory.CreateDirectory(Path.Combine(backend, "Docs"));
+        const string architectureUrl = "https://github.com/example/architecture/tree/main/Docs";
+        const string backendUrl = "https://github.com/example/backend/tree/main/Docs";
+        const string terms = "API, CI and ADR.";
+
+        File.WriteAllText(Path.Combine(docs, "mdu.yml"), "glossary: _includes/abbreviations.md\n");
+        File.WriteAllText(Path.Combine(docs, "_includes", "abbreviations.md"),
+            "*[API]: Application Programming Interface\n*[CI]: Continuous Integration\n");
+        File.WriteAllText(Path.Combine(docs, "README.md"), $"# Home\n\n{terms}\n");
+        File.WriteAllText(Path.Combine(docs, "Architecture", "README.md"),
+            $"---\ntitle: Architecture\nmdu:\n  import:\n    source: {architectureUrl}\n---\n");
+        File.WriteAllText(Path.Combine(docs, "Architecture", "Local.md"), $"# Local\n\n{terms}\n");
+        File.WriteAllText(Path.Combine(docs, "Backend.md"),
+            $"---\ntitle: Backend\nmdu:\n  import:\n    source: {backendUrl}\n---\n");
+
+        File.WriteAllText(Path.Combine(architectureDocs, "mdu.yml"), "glossary: includes/abbreviations.md\n");
+        File.WriteAllText(Path.Combine(architectureDocs, "includes", "abbreviations.md"),
+            "*[CI]: Configuration Item\n*[ADR]: Architecture Decision Record\n");
+        File.WriteAllText(Path.Combine(architectureDocs, "includes", "Snippets.md"), "# Snippets\n");
+        File.WriteAllText(Path.Combine(architectureDocs, "README.md"), $"# Architecture\n\n{terms}\n");
+        File.WriteAllText(Path.Combine(backend, "Docs", "README.md"), $"# Backend\n\n{terms}\n");
+
+        var site = Path.Combine(root, "site");
+        try
+        {
+            var builder = CreateGraphBuilder(new FakeSourceResolver(
+                (architectureUrl, CreateResolvedSource(architecture, "architecture")),
+                (backendUrl, CreateResolvedSource(backend, "backend"))));
+            var command = new RenderCommand(builder, new CountNodesVisitor<MarkdownFile>(), new HtmlRenderer(), new SearchIndexBuilder());
+
+            Assert.Equal(0, command.Execute(new RenderCommandSettings { RootPath = docs, OutputPath = site }));
+
+            Assert.False(File.Exists(Path.Combine(site, "Architecture", "includes", "abbreviations.html")));
+            Assert.True(File.Exists(Path.Combine(site, "Architecture", "includes", "Snippets.html")));
+            Assert.DoesNotContain("abbreviations.html", File.ReadAllText(Path.Combine(site, "index.html")));
+            Assert.DoesNotContain("Architecture Decision Record", File.ReadAllText(Path.Combine(site, "search-index.json")));
+
+            var imported = File.ReadAllText(Path.Combine(site, "Architecture", "index.html"));
+            Assert.Contains("<abbr title=\"Application Programming Interface\">API</abbr>", imported);
+            Assert.Contains("<abbr title=\"Configuration Item\">CI</abbr>", imported);
+            Assert.Contains("<abbr title=\"Architecture Decision Record\">ADR</abbr>", imported);
+
+            foreach (var sitePage in new[] { Path.Combine(site, "index.html"), Path.Combine(site, "Architecture", "Local.html"), Path.Combine(site, "Backend", "index.html") })
+            {
+                var html = File.ReadAllText(sitePage);
+                Assert.Contains("<abbr title=\"Application Programming Interface\">API</abbr>", html);
+                Assert.Contains("<abbr title=\"Continuous Integration\">CI</abbr>", html);
+                Assert.DoesNotContain("Architecture Decision Record", html);
+            }
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ReportsAMissingImportedGlossary()
+    {
+        var root = CreateTemporaryDirectory();
+        var docs = Path.Combine(root, "docs");
+        var repository = Path.Combine(root, "repository");
+        Directory.CreateDirectory(docs);
+        Directory.CreateDirectory(Path.Combine(repository, "Docs"));
+        const string sourceUrl = "https://github.com/example/repository/tree/main/Docs";
+        File.WriteAllText(Path.Combine(docs, "README.md"), $"---\nmdu:\n  import:\n    source: {sourceUrl}\n---\n");
+        File.WriteAllText(Path.Combine(repository, "Docs", "README.md"), "# Imported\n");
+        File.WriteAllText(Path.Combine(repository, "Docs", "mdu.yml"), "glossary: includes/missing.md\n");
+
+        try
+        {
+            var resolver = new FakeSourceResolver((sourceUrl, CreateResolvedSource(repository, "repository")));
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                CreateGraphBuilder(resolver).CreateGraph(new VisitorSettings { RootPath = docs }, requireImportedGlossaries: true));
+            Assert.Contains($"of imported source '{sourceUrl}'", exception.Message);
+            Assert.Contains("missing.md", exception.Message);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RejectsAnImportedGlossaryOutsideTheRepository(bool absolute)
+    {
+        var fixture = new GlossaryImportFixture();
+        var secret = Path.Combine(fixture.Root, "secret.md");
+        File.WriteAllText(secret, "*[KEY]: Local secret\n");
+        fixture.WriteImportedConfiguration($"glossary: '{(absolute ? secret : "../../secret.md")}'\n");
+        try
+        {
+            var exception = Assert.Throws<InvalidOperationException>(() => fixture.CreateGraph(required: true));
+            Assert.Contains("must stay inside the imported repository", exception.Message);
+            Assert.Contains($"of imported source '{GlossaryImportFixture.SourceUrl}'", exception.Message);
+
+            var site = Path.Combine(fixture.Root, "site");
+            var command = new RenderCommand(fixture.Builder, new CountNodesVisitor<MarkdownFile>(), new HtmlRenderer(), new SearchIndexBuilder());
+            Assert.Equal(1, command.Execute(new RenderCommandSettings { RootPath = fixture.Docs, OutputPath = site }));
+            Assert.False(File.Exists(Path.Combine(site, "index.html")));
+
+            Assert.Null(Assert.Single(fixture.CreateGraph(required: false)).Glossary);
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
+    public void RejectsAnImportedGlossaryWithoutDefinitionsBeforeWritingTheSite()
+    {
+        var fixture = new GlossaryImportFixture();
+        fixture.WriteImportedConfiguration("glossary: includes/abbreviations.md\n");
+        var glossary = fixture.WriteRepositoryFile("Docs/includes/abbreviations.md", "No definitions.\n");
+        var site = Path.Combine(fixture.Root, "site");
+        try
+        {
+            var exception = Assert.Throws<InvalidOperationException>(() => fixture.CreateGraph(required: true));
+            Assert.Contains($"'{glossary}'", exception.Message);
+            Assert.Contains($"of imported source '{GlossaryImportFixture.SourceUrl}'", exception.Message);
+            Assert.Contains("does not contain any abbreviation definitions", exception.Message);
+
+            var command = new RenderCommand(fixture.Builder, new CountNodesVisitor<MarkdownFile>(), new HtmlRenderer(), new SearchIndexBuilder());
+            Assert.Equal(1, command.Execute(new RenderCommandSettings { RootPath = fixture.Docs, OutputPath = site }));
+            Assert.False(File.Exists(Path.Combine(site, "index.html")));
+            Assert.False(File.Exists(Path.Combine(site, "documentation.pdf")));
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
+    public void TreatsAnUnusableImportedGlossaryAsAbsentOutsideRenderAndServe()
+    {
+        var fixture = new GlossaryImportFixture();
+        fixture.WriteImportedConfiguration("glossary: [not, a, path]\n");
+        try
+        {
+            var root = Assert.Single(fixture.CreateGraph(required: false));
+            Assert.Null(root.Glossary);
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
+    public void ExcludesAnExistingUnusableImportedGlossaryOutsideRenderAndServe()
+    {
+        var fixture = new GlossaryImportFixture();
+        fixture.WriteImportedConfiguration("glossary: includes/abbreviations.md\n");
+        fixture.WriteRepositoryFile("Docs/includes/abbreviations.md", "No definitions.\n");
+        fixture.WriteRepositoryFile("Docs/includes/Snippets.md", "# Snippets\n");
+        try
+        {
+            var root = Assert.Single(fixture.CreateGraph(required: false));
+            var pages = new[] { root }.Concat(root.Children).Select(page => page.FileInfo.Name).ToArray();
+
+            Assert.Null(root.Glossary);
+            Assert.DoesNotContain("abbreviations.md", pages);
+            Assert.Contains("Snippets.md", pages);
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
+    public void AcceptsAnImportedGlossaryOutsideTheDocsFolderAndIgnoresUnrelatedSettings()
+    {
+        var fixture = new GlossaryImportFixture();
+        fixture.WriteImportedConfiguration("glossary: ../shared/abbreviations.md\nicons: ''\n");
+        fixture.WriteRepositoryFile("shared/abbreviations.md", "*[ADR]: Architecture Decision Record\n");
+        try
+        {
+            var root = Assert.Single(fixture.CreateGraph(required: true));
+            Assert.NotNull(root.Glossary);
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    private sealed class GlossaryImportFixture : IDisposable
+    {
+        public const string SourceUrl = "https://github.com/example/glossary/tree/main/Docs";
+
+        public GlossaryImportFixture()
+        {
+            Root = CreateTemporaryDirectory();
+            Docs = Path.Combine(Root, "docs");
+            Repository = Path.Combine(Root, "repository");
+            Directory.CreateDirectory(Docs);
+            Directory.CreateDirectory(Path.Combine(Repository, "Docs"));
+            File.WriteAllText(Path.Combine(Docs, "README.md"), $"---\nmdu:\n  import:\n    source: {SourceUrl}\n---\n");
+            WriteRepositoryFile("Docs/README.md", "# Imported\n");
+            Builder = CreateGraphBuilder(new FakeSourceResolver((SourceUrl, CreateResolvedSource(Repository, "glossary"))));
+        }
+
+        public string Root { get; }
+        public string Docs { get; }
+        public string Repository { get; }
+        public GraphBuilder Builder { get; }
+
+        public void WriteImportedConfiguration(string yaml) => WriteRepositoryFile("Docs/mdu.yml", yaml);
+
+        public string WriteRepositoryFile(string relativePath, string content)
+        {
+            var path = Path.Combine(Repository, relativePath.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, content);
+            return path;
+        }
+
+        public MarkdownFile[] CreateGraph(bool required) =>
+            Builder.CreateGraph(new VisitorSettings { RootPath = Docs }, requireImportedGlossaries: required);
+
+        public void Dispose() => Directory.Delete(Root, recursive: true);
+    }
+
+    [Fact]
     public void RequiresASourceForAnImportDeclaration()
     {
         var root = CreateTemporaryDirectory();

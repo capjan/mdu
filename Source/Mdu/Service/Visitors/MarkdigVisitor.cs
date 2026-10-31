@@ -137,7 +137,8 @@ public class MarkdigVisitor : BaseVisitor
                     pdfUrl,
                     Dashboard.ReadFrontMatter(entity.FrontMatter),
                     pdfDownloadUrls,
-                    pdfDownloadNames).GetAwaiter().GetResult();
+                    pdfDownloadNames,
+                    GetGlossaryScope(entity)).GetAwaiter().GetResult();
 
             File.Move(temporaryPath, outputFileName, true);
             WriteAliasPage(entity, outputFileName);
@@ -186,6 +187,9 @@ public class MarkdigVisitor : BaseVisitor
         return (urls, names);
     }
 
+    private GlossaryScope? GetGlossaryScope(MarkdownFile page) =>
+        page.Glossary is null ? null : _htmlFoundation.GetGlossaryScope(page.Glossary);
+
     private IReadOnlyList<string> WriteSpecificationPages(
         MarkdownFile entity,
         string outputFileName,
@@ -232,7 +236,8 @@ public class MarkdigVisitor : BaseVisitor
                         GetLastModified(entity),
                         pdfUrl,
                         pdfDownloadUrls: pdfDownloadUrls,
-                        pdfDownloadNames: pdfDownloadNames).GetAwaiter().GetResult();
+                        pdfDownloadNames: pdfDownloadNames,
+                        glossaryScope: GetGlossaryScope(entity)).GetAwaiter().GetResult();
 
                 File.Move(temporaryPath, specOutputPath, true);
                 generatedPagePaths.Add(specOutputPath);

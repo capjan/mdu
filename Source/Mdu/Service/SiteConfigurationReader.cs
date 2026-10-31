@@ -60,6 +60,17 @@ public static class SiteConfigurationReader
     public static string? GetGlossaryPath(string rootPath, SiteConfiguration configuration) =>
         configuration.Glossary is null ? null : Path.GetFullPath(configuration.Glossary, rootPath);
 
+    /// <summary>Reads only the <c>glossary</c> setting, so errors in unrelated settings of the file do not matter.</summary>
+    public static string? ReadGlossarySetting(string rootPath)
+    {
+        var path = Path.Combine(rootPath, "mdu.yml");
+        if (!File.Exists(path)) return null;
+
+        var stream = new YamlStream();
+        stream.Load(new StringReader(File.ReadAllText(path)));
+        return stream.Documents.FirstOrDefault()?.RootNode is YamlMappingNode root ? ReadGlossary(root) : null;
+    }
+
     public static string? TryResolveGlossaryPath(string rootPath)
     {
         try
