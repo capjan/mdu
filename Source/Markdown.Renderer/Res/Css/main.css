@@ -303,6 +303,27 @@ body {
     margin-right: 0.4rem;
 }
 
+/* A logo with light and dark variants contains one image per theme. The hidden one uses filter instead of opacity,
+   which the header already uses to show and hide the whole logo. */
+.site-brand-logo-dark,
+:root[data-theme="dark"] .site-brand-logo-light {
+    filter: opacity(0);
+}
+
+:root[data-theme="dark"] .site-brand-logo-dark {
+    filter: none;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root[data-theme="auto"] .site-brand-logo-light {
+        filter: opacity(0);
+    }
+
+    :root[data-theme="auto"] .site-brand-logo-dark {
+        filter: none;
+    }
+}
+
 .navigation-toggle {
     position: relative;
     z-index: 1;

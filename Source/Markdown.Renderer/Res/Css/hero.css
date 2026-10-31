@@ -154,9 +154,13 @@ body:has(.top-navigation.is-empty)::after {
     transition: transform 220ms cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 160ms ease, background-color 300ms ease;
 }
 
-/* The scroll script shows both logo variants on hero pages and fades between them. */
-.site-brand-logo.is-hidden-variant {
+/* Over a full-width hero the header is transparent, so the logo uses its light-on-dark variant there too. */
+:root.is-over-hero .site-brand-logo-light {
     filter: opacity(0);
+}
+
+:root.is-over-hero .site-brand-logo-dark {
+    filter: none;
 }
 
 /* While the bars switch between transparent and solid, their text, icons, borders, and logo fade together with the

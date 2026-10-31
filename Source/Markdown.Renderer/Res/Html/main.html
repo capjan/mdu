@@ -250,30 +250,7 @@
         themeToggle.setAttribute("aria-label", `Theme: ${themeNames[currentTheme]}. Click to switch to ${themeNames[nextTheme]}.`);
     };
 
-    const brandLogo = document.querySelector(".site-brand-logo");
-    const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
-    const isDark = () => root.dataset.theme === "dark" || root.dataset.theme === "auto" && systemDark.matches;
-    // On a page with a full-width hero both logo variants are in the header, so the logo can fade between them.
-    const darkLogo = brandLogo && document.querySelector(".hero-full") ? brandLogo.cloneNode() : null;
-    if (darkLogo) {
-        brandLogo.src = brandLogo.dataset.lightSrc;
-        darkLogo.src = brandLogo.dataset.darkSrc;
-        brandLogo.after(darkLogo);
-    }
-    // Over a full-width hero the header is transparent, so the logo uses its light-on-dark variant there too.
-    const updateLogo = () => {
-        const useDark = isDark() || root.classList.contains("is-over-hero");
-        if (darkLogo) {
-            brandLogo.classList.toggle("is-hidden-variant", useDark);
-            darkLogo.classList.toggle("is-hidden-variant", !useDark);
-        } else if (brandLogo) {
-            brandLogo.src = useDark ? brandLogo.dataset.darkSrc : brandLogo.dataset.lightSrc;
-        }
-    };
-    if (darkLogo) new MutationObserver(updateLogo).observe(root, { attributes: true, attributeFilter: ["class"] });
-
     updateThemeLabel();
-    updateLogo();
     themeToggle.addEventListener("click", () => {
         const currentTheme = root.dataset.theme;
         const nextTheme = themes[(themes.indexOf(currentTheme) + 1) % themes.length];
@@ -282,9 +259,7 @@
             localStorage.setItem("mdu-theme", nextTheme);
         } catch { }
         updateThemeLabel();
-        updateLogo();
     });
-    systemDark.addEventListener("change", updateLogo);
 
     const layout = document.getElementById("site-layout");
     const header = document.getElementById("site-header");

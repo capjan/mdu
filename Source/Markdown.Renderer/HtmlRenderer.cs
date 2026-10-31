@@ -336,8 +336,11 @@ public class HtmlRenderer
         var heading = HtmlEncoder.Default.Encode(pageHeading.Length > 0 ? pageHeading : configuration.SiteName);
         var light = ResolveAssetUrl(prefix, configuration.LogoLight);
         var dark = ResolveAssetUrl(prefix, configuration.LogoDark);
+        // Both variants are in the markup so the stylesheet shows the one for the current theme before the first paint.
         var logo = light.Length == 0 ? string.Empty :
-            $"<span class=\"site-brand-logo-slot\"><img class=\"site-brand-logo\" src=\"{HtmlEncoder.Default.Encode(light)}\" data-light-src=\"{HtmlEncoder.Default.Encode(light)}\" data-dark-src=\"{HtmlEncoder.Default.Encode(dark)}\" alt=\"\"></span>";
+            dark.Length == 0 || string.Equals(light, dark, StringComparison.Ordinal)
+                ? $"<span class=\"site-brand-logo-slot\"><img class=\"site-brand-logo\" src=\"{HtmlEncoder.Default.Encode(light)}\" alt=\"\"></span>"
+                : $"<span class=\"site-brand-logo-slot\"><img class=\"site-brand-logo site-brand-logo-light\" src=\"{HtmlEncoder.Default.Encode(light)}\" alt=\"\"><img class=\"site-brand-logo site-brand-logo-dark\" src=\"{HtmlEncoder.Default.Encode(dark)}\" alt=\"\"></span>";
         return $"<div class=\"site-header-leading\"><div class=\"site-header-icon-slot\"><button class=\"navigation-toggle panel-toggle\" id=\"navigation-toggle\" type=\"button\" aria-expanded=\"true\" aria-controls=\"site-navigation\" aria-label=\"Collapse navigation\" title=\"Collapse navigation\"><svg viewBox=\"0 0 20 20\" aria-hidden=\"true\" focusable=\"false\"><rect x=\"2.5\" y=\"3.5\" width=\"15\" height=\"13\" rx=\"2\"></rect><path class=\"panel-fill\" d=\"M3 4h5v12H3z\"></path><path d=\"M8 4v12\"></path></svg></button></div><a class=\"site-brand\" href=\"{HtmlEncoder.Default.Encode(prefix + "index.html")}\">{logo}<span id=\"site-brand-title\" data-site-title=\"{name}\" data-page-title=\"{heading}\">{name}</span></a></div>";
     }
 
