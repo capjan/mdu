@@ -47,6 +47,16 @@ public class RendererTest
     }
 
     [Fact]
+    public void PagesWithoutASidebarDoNotReserveTheSidebarColumn()
+    {
+        var css = Resources.CssContent();
+
+        Assert.Contains("grid-template-columns: minmax(0, 1fr);", BlockAfter(css, ".site-layout.no-wide-sidebar {"));
+        Assert.Contains("grid-column: 1;", BlockAfter(css, ".site-layout.no-wide-sidebar .site-main {"));
+        Assert.DoesNotContain(".site-layout.no-wide-sidebar:not(.sidebar-collapsed) .site-main", css);
+    }
+
+    [Fact]
     public void PreservesThePreferredSidebarWidthAcrossViewportChanges()
     {
         var html = Resources.HtmlTemplateContent();
