@@ -77,7 +77,8 @@ public class GraphBuilder
             throw new InvalidOperationException("An mdu.import page must contain front matter only; put its content in the imported README.md or index.md.");
 
         var source = _sourceResolver.Resolve(importPage.ImportSource!);
-        var importedPages = GetMarkdownFilesAt(null, new DirectoryInfo(source.SourceFolderPath), searchPattern, searchOptions, null).ToArray();
+        var glossaryPath = ResolveImportedGlossaryPath(source, importPage.ImportSource!);
+        var importedPages = GetMarkdownFilesAt(null, new DirectoryInfo(source.SourceFolderPath), searchPattern, searchOptions, glossaryPath).ToArray();
         if (importedPages.Length != 1 ||
             !IsSectionRoot(importedPages[0].FileInfo.Name))
             throw new InvalidOperationException(
@@ -103,6 +104,7 @@ public class GraphBuilder
             page.SiteRelativePath = Path.Combine(mountDirectory, sourceRelativePath);
             page.EditPageLink = GetEditPageLink(source, page.FileInfo);
             page.SourceRootPath = source.RepositoryPath;
+            page.GlossaryPath = glossaryPath;
         }
 
         importedRoot.SiteRelativePath = rootRelativePath;
@@ -122,6 +124,21 @@ public class GraphBuilder
         foreach (var child in localChildren) child.Parent = importedRoot;
         importedRoot.Children = importedRoot.Children.Concat(localChildren).ToArray();
         return importedRoot;
+    }
+
+    private static string? ResolveImportedGlossaryPath(ResolvedGitTreeSource source, string sourceUrl)
+    {
+        try
+        {
+            return SiteConfigurationReader.ResolveGlossaryPath(
+                source.SourceFolderPath,
+                SiteConfigurationReader.ReadForContent(source.SourceFolderPath));
+        }
+        catch (Exception exception) when (exception is YamlDotNet.Core.YamlException or InvalidOperationException)
+        {
+            throw new InvalidOperationException(
+                $"Could not read the glossary of imported source '{sourceUrl}': {exception.Message}", exception);
+        }
     }
 
     private static string GetMountDirectory(string importRelativePath)

@@ -22,6 +22,8 @@ public class MarkdownFile: INode<MarkdownFile>
     public string? AliasRelativePath { get; set; }
     public string? SourceRootPath { get; set; }
     public string? ImportMarkerPath { get; set; }
+    /// <summary>The glossary of the imported repository this page comes from; null for pages of the site itself.</summary>
+    public string? GlossaryPath { get; set; }
 
     public string ReadMarkdown() => MarkdownContent ?? File.ReadAllText(FileInfo.FullName);
 

@@ -57,6 +57,8 @@ public class HtmlRenderer
         RegexOptions.Compiled | RegexOptions.Singleline);
     private readonly MarkdownPipeline _basePipeline;
     private MarkdownPipeline _pipeline;
+    private SharedAbbreviation[] _glossaryDefinitions = [];
+    private readonly Dictionary<string, GlossaryScope> _glossaryScopes = new(StringComparer.Ordinal);
     private readonly LinkReplacer _linkReplacer = new LinkReplacer();
     private string? _basePath;
     private IReadOnlyList<string> _iconSearchAssets = Array.Empty<string>();
@@ -91,23 +93,50 @@ public class HtmlRenderer
     {
         if (markdown is null)
         {
+            _glossaryDefinitions = [];
             _pipeline = _basePipeline;
+            _glossaryScopes.Clear();
             return;
         }
 
-        var sharedAbbreviations = new SharedAbbreviationsExtension();
-        var pipeline = CreatePipeline(sharedAbbreviations);
-        var document = Markdig.Markdown.Parse(markdown, pipeline);
-        var definitions = document.GetAbbreviations();
-        var sharedDefinitions = definitions?.Select(pair => new SharedAbbreviation(
-            pair.Key,
-            pair.Value.Label ?? pair.Key,
-            pair.Value.Text.ToString())).ToArray() ?? [];
-        if (sharedDefinitions.Length == 0)
-            throw new InvalidOperationException("The configured glossary does not contain any abbreviation definitions.");
+        var definitions = ReadGlossaryDefinitions(markdown);
+        _pipeline = CreateGlossaryPipeline(definitions);
+        _glossaryDefinitions = definitions;
+        _glossaryScopes.Clear();
+    }
 
-        sharedAbbreviations.SetDefinitions(sharedDefinitions);
-        _pipeline = pipeline;
+    /// <summary>
+    /// Returns the abbreviations of a nested glossary, such as the one of an imported repository, layered over the
+    /// site glossary. Its definitions win on conflicts; site definitions it does not redefine still apply.
+    /// </summary>
+    public GlossaryScope GetGlossaryScope(string glossaryPath)
+    {
+        var key = Path.GetFullPath(glossaryPath);
+        if (_glossaryScopes.TryGetValue(key, out var scope)) return scope;
+
+        var definitions = ReadGlossaryDefinitions(File.ReadAllText(key));
+        var redefined = definitions.Select(definition => definition.Key).ToHashSet(StringComparer.Ordinal);
+        scope = new GlossaryScope(CreateGlossaryPipeline(
+            _glossaryDefinitions.Where(definition => !redefined.Contains(definition.Key)).Concat(definitions).ToArray()));
+        _glossaryScopes[key] = scope;
+        return scope;
+    }
+
+    private SharedAbbreviation[] ReadGlossaryDefinitions(string markdown)
+    {
+        var definitions = Markdig.Markdown.Parse(markdown, _basePipeline).GetAbbreviations()?
+            .Select(pair => new SharedAbbreviation(pair.Key, pair.Value.Label ?? pair.Key, pair.Value.Text.ToString()))
+            .ToArray() ?? [];
+        if (definitions.Length == 0)
+            throw new InvalidOperationException("The configured glossary does not contain any abbreviation definitions.");
+        return definitions;
+    }
+
+    private static MarkdownPipeline CreateGlossaryPipeline(SharedAbbreviation[] definitions)
+    {
+        var sharedAbbreviations = new SharedAbbreviationsExtension();
+        sharedAbbreviations.SetDefinitions(definitions);
+        return CreatePipeline(sharedAbbreviations);
     }
     /// <summary>
     /// The icon search files written to the base path because a rendered page contains an icon search.
@@ -127,9 +156,10 @@ public class HtmlRenderer
 
     private MarkdownDocument ParseMarkdown(string markdown, string? pdfDownloadUrl = null,
         IReadOnlyDictionary<string, string>? pdfDownloadUrls = null,
-        IReadOnlyDictionary<string, string>? pdfDownloadNames = null)
+        IReadOnlyDictionary<string, string>? pdfDownloadNames = null,
+        MarkdownPipeline? pipeline = null)
     {
-        var document = Markdig.Markdown.Parse(markdown, _pipeline);
+        var document = Markdig.Markdown.Parse(markdown, pipeline ?? _pipeline);
         _linkReplacer.ReplaceAll(document, pdfDownloadUrl, pdfDownloadUrls, pdfDownloadNames);
         return document;
     }
@@ -177,20 +207,22 @@ public class HtmlRenderer
         string? pdfDownloadUrl = null,
         DashboardOptions? dashboard = null,
         IReadOnlyDictionary<string, string>? pdfDownloadUrls = null,
-        IReadOnlyDictionary<string, string>? pdfDownloadNames = null)
+        IReadOnlyDictionary<string, string>? pdfDownloadNames = null,
+        GlossaryScope? glossaryScope = null)
     {
         var prefix = string.Concat(Enumerable.Repeat("../", nestingDeep));
         var cssFileLink = prefix + "css/main.css";
         var searchScriptLink = prefix + "js/search.js";
         var searchIndexLink = prefix + "search-index.json";
+        var pipeline = glossaryScope?.Pipeline ?? _pipeline;
         
-        var document = ParseMarkdown(markdown, pdfDownloadUrl, pdfDownloadUrls, pdfDownloadNames);
+        var document = ParseMarkdown(markdown, pdfDownloadUrl, pdfDownloadUrls, pdfDownloadNames, pipeline);
         var hasIconSearch = document.Descendants<FencedCodeBlock>()
             .Any(block => block.Info == IconSearch.CodeBlockLanguage);
         if (hasIconSearch) EnsureIconSearchAssets();
         var hasHero = document.Descendants<FencedCodeBlock>()
             .Any(block => block.Info == Hero.CodeBlockLanguage);
-        var renderedMarkdown = dashboard is null ? document.ToHtml(_pipeline) : Dashboard.Render(document, _pipeline, dashboard);
+        var renderedMarkdown = dashboard is null ? document.ToHtml(pipeline) : Dashboard.Render(document, pipeline, dashboard);
         // Only rendered phase controls need the playback script, not diagrams without phases or invalid ones.
         var hasIsometricDiagram = renderedMarkdown.Contains(DiagramRenderer.IsometricPhaseControlsMarker, StringComparison.Ordinal);
         renderedMarkdown = MediaLinkEmbedder.ReplaceStandaloneLinks(renderedMarkdown, out var mediaProviders);
@@ -201,7 +233,7 @@ public class HtmlRenderer
         if (!string.IsNullOrWhiteSpace(pageIcon))
         {
             var iconName = pageIcon.Trim().Trim(':').Replace('/', '-');
-            var iconHtml = Markdig.Markdown.Parse($":{iconName}:", _pipeline).ToHtml(_pipeline)
+            var iconHtml = Markdig.Markdown.Parse($":{iconName}:", pipeline).ToHtml(pipeline)
                 .Replace("<p>", string.Empty, StringComparison.Ordinal)
                 .Replace("</p>\n", string.Empty, StringComparison.Ordinal)
                 .Trim();

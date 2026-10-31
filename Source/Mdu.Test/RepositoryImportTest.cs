@@ -170,6 +170,100 @@ public class RepositoryImportTest
     }
 
     [Fact]
+    public void AppliesImportedGlossaryToImportedPagesOnlyAndExcludesItFromTheSite()
+    {
+        var root = CreateTemporaryDirectory();
+        var docs = Path.Combine(root, "docs");
+        var architecture = Path.Combine(root, "architecture");
+        var architectureDocs = Path.Combine(architecture, "Docs");
+        var backend = Path.Combine(root, "backend");
+        Directory.CreateDirectory(Path.Combine(docs, "_includes"));
+        Directory.CreateDirectory(Path.Combine(docs, "Architecture"));
+        Directory.CreateDirectory(Path.Combine(architectureDocs, "includes"));
+        Directory.CreateDirectory(Path.Combine(backend, "Docs"));
+        const string architectureUrl = "https://github.com/example/architecture/tree/main/Docs";
+        const string backendUrl = "https://github.com/example/backend/tree/main/Docs";
+        const string terms = "API, CI and ADR.";
+
+        File.WriteAllText(Path.Combine(docs, "mdu.yml"), "glossary: _includes/abbreviations.md\n");
+        File.WriteAllText(Path.Combine(docs, "_includes", "abbreviations.md"),
+            "*[API]: Application Programming Interface\n*[CI]: Continuous Integration\n");
+        File.WriteAllText(Path.Combine(docs, "README.md"), $"# Home\n\n{terms}\n");
+        File.WriteAllText(Path.Combine(docs, "Architecture", "README.md"),
+            $"---\ntitle: Architecture\nmdu:\n  import:\n    source: {architectureUrl}\n---\n");
+        File.WriteAllText(Path.Combine(docs, "Architecture", "Local.md"), $"# Local\n\n{terms}\n");
+        File.WriteAllText(Path.Combine(docs, "Backend.md"),
+            $"---\ntitle: Backend\nmdu:\n  import:\n    source: {backendUrl}\n---\n");
+
+        File.WriteAllText(Path.Combine(architectureDocs, "mdu.yml"), "glossary: includes/abbreviations.md\n");
+        File.WriteAllText(Path.Combine(architectureDocs, "includes", "abbreviations.md"),
+            "*[CI]: Configuration Item\n*[ADR]: Architecture Decision Record\n");
+        File.WriteAllText(Path.Combine(architectureDocs, "includes", "Snippets.md"), "# Snippets\n");
+        File.WriteAllText(Path.Combine(architectureDocs, "README.md"), $"# Architecture\n\n{terms}\n");
+        File.WriteAllText(Path.Combine(backend, "Docs", "README.md"), $"# Backend\n\n{terms}\n");
+
+        var site = Path.Combine(root, "site");
+        try
+        {
+            var builder = CreateGraphBuilder(new FakeSourceResolver(
+                (architectureUrl, CreateResolvedSource(architecture, "architecture")),
+                (backendUrl, CreateResolvedSource(backend, "backend"))));
+            var command = new RenderCommand(builder, new CountNodesVisitor<MarkdownFile>(), new HtmlRenderer(), new SearchIndexBuilder());
+
+            Assert.Equal(0, command.Execute(new RenderCommandSettings { RootPath = docs, OutputPath = site }));
+
+            Assert.False(File.Exists(Path.Combine(site, "Architecture", "includes", "abbreviations.html")));
+            Assert.True(File.Exists(Path.Combine(site, "Architecture", "includes", "Snippets.html")));
+            Assert.DoesNotContain("abbreviations.html", File.ReadAllText(Path.Combine(site, "index.html")));
+            Assert.DoesNotContain("Architecture Decision Record", File.ReadAllText(Path.Combine(site, "search-index.json")));
+
+            var imported = File.ReadAllText(Path.Combine(site, "Architecture", "index.html"));
+            Assert.Contains("<abbr title=\"Application Programming Interface\">API</abbr>", imported);
+            Assert.Contains("<abbr title=\"Configuration Item\">CI</abbr>", imported);
+            Assert.Contains("<abbr title=\"Architecture Decision Record\">ADR</abbr>", imported);
+
+            foreach (var sitePage in new[] { Path.Combine(site, "index.html"), Path.Combine(site, "Architecture", "Local.html"), Path.Combine(site, "Backend", "index.html") })
+            {
+                var html = File.ReadAllText(sitePage);
+                Assert.Contains("<abbr title=\"Application Programming Interface\">API</abbr>", html);
+                Assert.Contains("<abbr title=\"Continuous Integration\">CI</abbr>", html);
+                Assert.DoesNotContain("Architecture Decision Record", html);
+            }
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ReportsAMissingImportedGlossary()
+    {
+        var root = CreateTemporaryDirectory();
+        var docs = Path.Combine(root, "docs");
+        var repository = Path.Combine(root, "repository");
+        Directory.CreateDirectory(docs);
+        Directory.CreateDirectory(Path.Combine(repository, "Docs"));
+        const string sourceUrl = "https://github.com/example/repository/tree/main/Docs";
+        File.WriteAllText(Path.Combine(docs, "README.md"), $"---\nmdu:\n  import:\n    source: {sourceUrl}\n---\n");
+        File.WriteAllText(Path.Combine(repository, "Docs", "README.md"), "# Imported\n");
+        File.WriteAllText(Path.Combine(repository, "Docs", "mdu.yml"), "glossary: includes/missing.md\n");
+
+        try
+        {
+            var resolver = new FakeSourceResolver((sourceUrl, CreateResolvedSource(repository, "repository")));
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                CreateGraphBuilder(resolver).CreateGraph(new VisitorSettings { RootPath = docs }));
+            Assert.Contains($"glossary of imported source '{sourceUrl}'", exception.Message);
+            Assert.Contains("missing.md", exception.Message);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void RequiresASourceForAnImportDeclaration()
     {
         var root = CreateTemporaryDirectory();

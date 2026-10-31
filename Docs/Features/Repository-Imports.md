@@ -23,4 +23,17 @@ MDU imports the folder's page tree at the declaration's position. The imported f
 
 Edit links on imported pages point to the matching file in the source repository. GitHub-style URLs use their edit route, GitLab URLs use GitLab's edit route, and source-style hosts open the source file page where their edit action is available.
 
+## Abbreviations in imported documentation
+
+If the imported folder has an `mdu.yml` with a [`glossary`](Abbreviations.md#shared-glossary), MDU treats that file as the glossary of the import, not as a page. Its definitions apply to the imported pages. The glossary of the importing site still applies there, and on a conflict the imported definition wins:
+
+| Abbreviation | Site glossary | Imported glossary | Meaning on imported pages |
+| --- | --- | --- | --- |
+| API | Application Programming Interface | — | Application Programming Interface |
+| CI | Continuous Integration | Configuration Item | Configuration Item |
+| ADR | — | Architecture Decision Record | Architecture Decision Record |
+
+Pages outside the import, including local pages placed below it and other imports, do not see the imported definitions. Definitions on a page still take precedence over both glossaries. An imported folder without a glossary uses the site glossary.
+
+## Requirements
 Git must be installed. MDU retrieves repositories with the Git command-line tool, so public repositories work without credentials and private repositories use the authentication already configured for Git. Do not put credentials in the source URL. Rendering an import contacts the HTTPS host named in its front matter, so only render imports from repositories you trust.

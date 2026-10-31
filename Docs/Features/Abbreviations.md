@@ -39,6 +39,8 @@ Use the same definition syntax in that file:
 
 The glossary applies across the site. Its source file is excluded from the generated pages, navigation, search index, lint page graph, and combined PDF. If no `mdu.yml` glossary is configured, local definitions continue to work as usual.
 
+An [imported repository](Repository-Imports.md#abbreviations-in-imported-documentation) can bring its own glossary. It is excluded from the site in the same way and adds to or overrides the site glossary on the imported pages only.
+
 In the HTML site, hover over or focus an abbreviation to open its preview. On touch screens, tap the abbreviation. The PDF shows the term as ordinary text without an interactive preview.
 
 ## Migrating from Material for MkDocs

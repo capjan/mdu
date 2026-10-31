@@ -303,6 +303,86 @@ public class RendererTest
     }
 
     [Fact]
+    public async Task GlossaryScopeOverridesAndInheritsSiteDefinitionsWithoutLeaking()
+    {
+        var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var importedGlossary = Path.Combine(root, "imported.md");
+        var otherGlossary = Path.Combine(root, "other.md");
+        File.WriteAllText(importedGlossary, "*[CI]: Configuration Item\n*[ADR]: Architecture Decision Record\n");
+        File.WriteAllText(otherGlossary, "*[SLA]: Service Level Agreement\n");
+        try
+        {
+            var renderer = new HtmlRenderer();
+            renderer.SetGlossary("*[API]: Application Programming Interface\n*[CI]: Continuous Integration\n");
+            const string markdown = "API, CI, ADR and SLA.\n";
+
+            var imported = await RenderPage(renderer, markdown, renderer.GetGlossaryScope(importedGlossary));
+            var other = await RenderPage(renderer, markdown, renderer.GetGlossaryScope(otherGlossary));
+            var site = await RenderPage(renderer, markdown);
+            var pageLocal = await RenderPage(renderer, "*[CI]: Page definition\n\nCI.\n", renderer.GetGlossaryScope(importedGlossary));
+
+            Assert.Contains("<abbr title=\"Application Programming Interface\">API</abbr>", imported);
+            Assert.Contains("<abbr title=\"Configuration Item\">CI</abbr>", imported);
+            Assert.Contains("<abbr title=\"Architecture Decision Record\">ADR</abbr>", imported);
+            Assert.DoesNotContain("Service Level Agreement", imported);
+
+            Assert.Contains("<abbr title=\"Continuous Integration\">CI</abbr>", other);
+            Assert.Contains("<abbr title=\"Service Level Agreement\">SLA</abbr>", other);
+            Assert.DoesNotContain("Architecture Decision Record", other);
+
+            Assert.Contains("<abbr title=\"Continuous Integration\">CI</abbr>", site);
+            Assert.DoesNotContain("Architecture Decision Record", site);
+            Assert.DoesNotContain("Service Level Agreement", site);
+
+            Assert.Contains("<abbr title=\"Page definition\">CI</abbr>", pageLocal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task GlossaryScopesFollowTheCurrentSiteGlossary()
+    {
+        var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var importedGlossary = Path.Combine(root, "imported.md");
+        File.WriteAllText(importedGlossary, "*[ADR]: Architecture Decision Record\n");
+        try
+        {
+            var renderer = new HtmlRenderer();
+            renderer.SetGlossary("*[API]: Application Programming Interface\n");
+            Assert.Contains("Application Programming Interface",
+                await RenderPage(renderer, "API.\n", renderer.GetGlossaryScope(importedGlossary)));
+
+            renderer.SetGlossary("*[API]: Changed interface\n");
+            File.WriteAllText(importedGlossary, "*[ADR]: Changed record\n");
+            var html = await RenderPage(renderer, "API and ADR.\n", renderer.GetGlossaryScope(importedGlossary));
+
+            Assert.Contains("<abbr title=\"Changed interface\">API</abbr>", html);
+            Assert.Contains("<abbr title=\"Changed record\">ADR</abbr>", html);
+
+            renderer.SetGlossary(null);
+            html = await RenderPage(renderer, "API and ADR.\n", renderer.GetGlossaryScope(importedGlossary));
+            Assert.DoesNotContain("<abbr title=\"Changed interface\">", html);
+            Assert.Contains("<abbr title=\"Changed record\">ADR</abbr>", html);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static async Task<string> RenderPage(HtmlRenderer renderer, string markdown, GlossaryScope? scope = null)
+    {
+        var writer = new StringWriter();
+        await renderer.WriteHtml(writer, "Page", string.Empty, 0, markdown, string.Empty, glossaryScope: scope);
+        return writer.ToString();
+    }
+
+    [Fact]
     public async Task AppliesConfiguredBackgroundToHeaderSurfacesForLightAndDarkThemes()
     {
         var outputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
