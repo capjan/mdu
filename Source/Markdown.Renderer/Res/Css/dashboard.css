@@ -269,12 +269,12 @@
     content: "";
     display: inline-block;
     width: 100%;
-    margin: 0 -100% 0 0.6rem;
+    margin: 0 calc(-100% - 0.6rem) 0 0.6rem;
     border-top: 1px dashed var(--dashboard-line);
     vertical-align: middle;
 }
 
-.markdown-content .dashboard-group > [role="row"]:nth-child(2) > [role="gridcell"] > h3 {
+.markdown-content .dashboard-group > [role="row"]:is(:nth-child(2), .is-first-subheading) > [role="gridcell"] > h3 {
     margin-top: 0.5rem;
 }
 
