@@ -250,7 +250,35 @@
     text-transform: uppercase;
 }
 
-.dashboard-group h2 .headerlink {
+/* Third-level headings divide a group: smaller than a tile title, in full text color and sentence case so they read
+   below the group label, with a dashed rule that stays quieter than the label's solid line. */
+.markdown-content .dashboard-group h3 {
+    overflow-x: clip;
+    margin: 1.25rem 0 0.25rem;
+    padding: 0 0 0 0.6rem;
+    color: var(--text-primary);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0;
+    line-height: 1.4;
+}
+
+/* The heading stays a block, so inline markup flows as text. The negative right margin keeps the rule on the last
+   text line, and the heading clips it at its edge. */
+.markdown-content .dashboard-group h3::after {
+    content: "";
+    display: inline-block;
+    width: 100%;
+    margin: 0 calc(-100% - 0.6rem) 0 0.6rem;
+    border-top: 1px dashed var(--dashboard-line);
+    vertical-align: middle;
+}
+
+.markdown-content .dashboard-group > [role="row"]:is(:nth-child(2), .is-first-subheading) > [role="gridcell"] > h3 {
+    margin-top: 0.5rem;
+}
+
+.dashboard-group :is(h2, h3) .headerlink {
     display: none;
 }
 
@@ -258,6 +286,11 @@
     margin: 0 0 0.5rem 0.6rem;
     color: var(--dashboard-muted);
     font-size: 0.875rem;
+}
+
+.dashboard-group > [role="row"]:has(> [role="gridcell"] > h3) + [role="row"] > [role="gridcell"] > p {
+    margin: -0.1rem 0 0.35rem 0.6rem;
+    font-size: 0.75rem;
 }
 
 .markdown-content ul.dashboard-tiles {
