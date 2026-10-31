@@ -253,14 +253,137 @@ public class RepositoryImportTest
         {
             var resolver = new FakeSourceResolver((sourceUrl, CreateResolvedSource(repository, "repository")));
             var exception = Assert.Throws<InvalidOperationException>(() =>
-                CreateGraphBuilder(resolver).CreateGraph(new VisitorSettings { RootPath = docs }));
-            Assert.Contains($"glossary of imported source '{sourceUrl}'", exception.Message);
+                CreateGraphBuilder(resolver).CreateGraph(new VisitorSettings { RootPath = docs }, requireImportedGlossaries: true));
+            Assert.Contains($"of imported source '{sourceUrl}'", exception.Message);
             Assert.Contains("missing.md", exception.Message);
         }
         finally
         {
             Directory.Delete(root, recursive: true);
         }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RejectsAnImportedGlossaryOutsideTheRepository(bool absolute)
+    {
+        var fixture = new GlossaryImportFixture();
+        var secret = Path.Combine(fixture.Root, "secret.md");
+        File.WriteAllText(secret, "*[KEY]: Local secret\n");
+        fixture.WriteImportedConfiguration($"glossary: '{(absolute ? secret : "../../secret.md")}'\n");
+        try
+        {
+            var exception = Assert.Throws<InvalidOperationException>(() => fixture.CreateGraph(required: true));
+            Assert.Contains("must stay inside the imported repository", exception.Message);
+            Assert.Contains($"of imported source '{GlossaryImportFixture.SourceUrl}'", exception.Message);
+
+            var site = Path.Combine(fixture.Root, "site");
+            var command = new RenderCommand(fixture.Builder, new CountNodesVisitor<MarkdownFile>(), new HtmlRenderer(), new SearchIndexBuilder());
+            Assert.Equal(1, command.Execute(new RenderCommandSettings { RootPath = fixture.Docs, OutputPath = site }));
+            Assert.False(File.Exists(Path.Combine(site, "index.html")));
+
+            Assert.Null(Assert.Single(fixture.CreateGraph(required: false)).Glossary);
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
+    public void RejectsAnImportedGlossaryWithoutDefinitionsBeforeWritingTheSite()
+    {
+        var fixture = new GlossaryImportFixture();
+        fixture.WriteImportedConfiguration("glossary: includes/abbreviations.md\n");
+        var glossary = fixture.WriteRepositoryFile("Docs/includes/abbreviations.md", "No definitions.\n");
+        var site = Path.Combine(fixture.Root, "site");
+        try
+        {
+            var exception = Assert.Throws<InvalidOperationException>(() => fixture.CreateGraph(required: true));
+            Assert.Contains($"'{glossary}'", exception.Message);
+            Assert.Contains($"of imported source '{GlossaryImportFixture.SourceUrl}'", exception.Message);
+            Assert.Contains("does not contain any abbreviation definitions", exception.Message);
+
+            var command = new RenderCommand(fixture.Builder, new CountNodesVisitor<MarkdownFile>(), new HtmlRenderer(), new SearchIndexBuilder());
+            Assert.Equal(1, command.Execute(new RenderCommandSettings { RootPath = fixture.Docs, OutputPath = site }));
+            Assert.False(File.Exists(Path.Combine(site, "index.html")));
+            Assert.False(File.Exists(Path.Combine(site, "documentation.pdf")));
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
+    public void TreatsAnUnusableImportedGlossaryAsAbsentOutsideRenderAndServe()
+    {
+        var fixture = new GlossaryImportFixture();
+        fixture.WriteImportedConfiguration("glossary: [not, a, path]\n");
+        try
+        {
+            var root = Assert.Single(fixture.CreateGraph(required: false));
+            Assert.Null(root.Glossary);
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
+    public void AcceptsAnImportedGlossaryOutsideTheDocsFolderAndIgnoresUnrelatedSettings()
+    {
+        var fixture = new GlossaryImportFixture();
+        fixture.WriteImportedConfiguration("glossary: ../shared/abbreviations.md\nicons: ''\n");
+        fixture.WriteRepositoryFile("shared/abbreviations.md", "*[ADR]: Architecture Decision Record\n");
+        try
+        {
+            var root = Assert.Single(fixture.CreateGraph(required: true));
+            Assert.NotNull(root.Glossary);
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    private sealed class GlossaryImportFixture : IDisposable
+    {
+        public const string SourceUrl = "https://github.com/example/glossary/tree/main/Docs";
+
+        public GlossaryImportFixture()
+        {
+            Root = CreateTemporaryDirectory();
+            Docs = Path.Combine(Root, "docs");
+            Repository = Path.Combine(Root, "repository");
+            Directory.CreateDirectory(Docs);
+            Directory.CreateDirectory(Path.Combine(Repository, "Docs"));
+            File.WriteAllText(Path.Combine(Docs, "README.md"), $"---\nmdu:\n  import:\n    source: {SourceUrl}\n---\n");
+            WriteRepositoryFile("Docs/README.md", "# Imported\n");
+            Builder = CreateGraphBuilder(new FakeSourceResolver((SourceUrl, CreateResolvedSource(Repository, "glossary"))));
+        }
+
+        public string Root { get; }
+        public string Docs { get; }
+        public string Repository { get; }
+        public GraphBuilder Builder { get; }
+
+        public void WriteImportedConfiguration(string yaml) => WriteRepositoryFile("Docs/mdu.yml", yaml);
+
+        public string WriteRepositoryFile(string relativePath, string content)
+        {
+            var path = Path.Combine(Repository, relativePath.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, content);
+            return path;
+        }
+
+        public MarkdownFile[] CreateGraph(bool required) =>
+            Builder.CreateGraph(new VisitorSettings { RootPath = Docs }, requireImportedGlossaries: required);
+
+        public void Dispose() => Directory.Delete(Root, recursive: true);
     }
 
     [Fact]

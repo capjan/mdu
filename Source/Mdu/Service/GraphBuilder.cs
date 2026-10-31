@@ -21,7 +21,12 @@ public class GraphBuilder
         _sourceResolver = sourceResolver ?? new GitTreeSourceResolver();
     }
 
-    public MarkdownFile[] CreateGraph(IVisitorSettings settings, string? excludedMarkdownPath = null)
+    /// <param name="requireImportedGlossaries">
+    /// When true, an unusable glossary of an imported repository is an error. Otherwise the import is treated as
+    /// having no glossary, matching how commands other than render and serve treat the site glossary.
+    /// </param>
+    public MarkdownFile[] CreateGraph(IVisitorSettings settings, string? excludedMarkdownPath = null,
+        bool requireImportedGlossaries = false)
     {
         var searchOptions = new EnumerationOptions
         {
@@ -41,7 +46,7 @@ public class GraphBuilder
         foreach (var page in Flatten(graph))
             page.SiteRelativePath = Path.GetRelativePath(rootPath, page.FileInfo.FullName);
 
-        graph = ExpandImports(graph, searchPattern, searchOptions);
+        graph = ExpandImports(graph, searchPattern, searchOptions, requireImportedGlossaries);
         ValidateSitePaths(graph);
         return graph;
     }
@@ -49,7 +54,8 @@ public class GraphBuilder
     private MarkdownFile[] ExpandImports(
         MarkdownFile[] pages,
         string searchPattern,
-        EnumerationOptions searchOptions)
+        EnumerationOptions searchOptions,
+        bool requireImportedGlossaries)
     {
         var result = pages.ToArray();
         for (var index = 0; index < result.Length; index++)
@@ -57,11 +63,11 @@ public class GraphBuilder
             var page = result[index];
             if (!string.IsNullOrWhiteSpace(page.ImportSource))
             {
-                result[index] = ImportPages(page, searchPattern, searchOptions);
+                result[index] = ImportPages(page, searchPattern, searchOptions, requireImportedGlossaries);
                 continue;
             }
 
-            page.Children = ExpandImports(page.Children, searchPattern, searchOptions);
+            page.Children = ExpandImports(page.Children, searchPattern, searchOptions, requireImportedGlossaries);
         }
 
         return result;
@@ -70,15 +76,16 @@ public class GraphBuilder
     private MarkdownFile ImportPages(
         MarkdownFile importPage,
         string searchPattern,
-        EnumerationOptions searchOptions)
+        EnumerationOptions searchOptions,
+        bool requireImportedGlossaries)
     {
         var importBody = RemoveFrontMatter(importPage.ReadMarkdown(), importPage.FrontMatter).Trim();
         if (!string.IsNullOrWhiteSpace(importBody))
             throw new InvalidOperationException("An mdu.import page must contain front matter only; put its content in the imported README.md or index.md.");
 
         var source = _sourceResolver.Resolve(importPage.ImportSource!);
-        var glossaryPath = ResolveImportedGlossaryPath(source, importPage.ImportSource!);
-        var importedPages = GetMarkdownFilesAt(null, new DirectoryInfo(source.SourceFolderPath), searchPattern, searchOptions, glossaryPath).ToArray();
+        var glossary = ReadImportedGlossary(source, importPage.ImportSource!, requireImportedGlossaries);
+        var importedPages = GetMarkdownFilesAt(null, new DirectoryInfo(source.SourceFolderPath), searchPattern, searchOptions, glossary?.Path).ToArray();
         if (importedPages.Length != 1 ||
             !IsSectionRoot(importedPages[0].FileInfo.Name))
             throw new InvalidOperationException(
@@ -104,7 +111,7 @@ public class GraphBuilder
             page.SiteRelativePath = Path.Combine(mountDirectory, sourceRelativePath);
             page.EditPageLink = GetEditPageLink(source, page.FileInfo);
             page.SourceRootPath = source.RepositoryPath;
-            page.GlossaryPath = glossaryPath;
+            page.Glossary = glossary?.Glossary;
         }
 
         importedRoot.SiteRelativePath = rootRelativePath;
@@ -120,26 +127,41 @@ public class GraphBuilder
                 OpenApiMarkdownRenderer.ResolveSpecPath(page.FileInfo.FullName, specPath, source.RepositoryPath);
         }
 
-        var localChildren = ExpandImports(importPage.Children, searchPattern, searchOptions);
+        var localChildren = ExpandImports(importPage.Children, searchPattern, searchOptions, requireImportedGlossaries);
         foreach (var child in localChildren) child.Parent = importedRoot;
         importedRoot.Children = importedRoot.Children.Concat(localChildren).ToArray();
         return importedRoot;
     }
 
-    private static string? ResolveImportedGlossaryPath(ResolvedGitTreeSource source, string sourceUrl)
+    private static ImportedGlossary? ReadImportedGlossary(ResolvedGitTreeSource source, string sourceUrl, bool required)
     {
+        string? path = null;
         try
         {
-            return SiteConfigurationReader.ResolveGlossaryPath(
-                source.SourceFolderPath,
-                SiteConfigurationReader.ReadForContent(source.SourceFolderPath));
+            var setting = SiteConfigurationReader.ReadGlossarySetting(source.SourceFolderPath);
+            if (setting is null) return null;
+
+            path = Path.GetFullPath(setting, source.SourceFolderPath);
+            // Like OpenAPI documents, a glossary must not expose files outside the imported repository.
+            var relativePath = Path.GetRelativePath(Path.GetFullPath(source.RepositoryPath), path);
+            if (Path.IsPathRooted(relativePath) || relativePath == ".." ||
+                relativePath.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) ||
+                relativePath.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal))
+                throw new InvalidOperationException($"The glossary '{setting}' must stay inside the imported repository.");
+
+            return new ImportedGlossary(path, Glossary.Parse(File.ReadAllText(path)));
         }
-        catch (Exception exception) when (exception is YamlDotNet.Core.YamlException or InvalidOperationException)
+        catch (Exception exception) when (exception is YamlDotNet.Core.YamlException or IOException or
+                                              UnauthorizedAccessException or ArgumentException or InvalidOperationException)
         {
+            if (!required) return null;
+            var file = path is null ? string.Empty : $" '{path}'";
             throw new InvalidOperationException(
-                $"Could not read the glossary of imported source '{sourceUrl}': {exception.Message}", exception);
+                $"Could not read the glossary{file} of imported source '{sourceUrl}': {exception.Message}", exception);
         }
     }
+
+    private sealed record ImportedGlossary(string Path, Glossary Glossary);
 
     private static string GetMountDirectory(string importRelativePath)
     {

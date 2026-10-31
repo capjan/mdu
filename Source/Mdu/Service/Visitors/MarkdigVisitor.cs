@@ -188,7 +188,7 @@ public class MarkdigVisitor : BaseVisitor
     }
 
     private GlossaryScope? GetGlossaryScope(MarkdownFile page) =>
-        page.GlossaryPath is null ? null : _htmlFoundation.GetGlossaryScope(page.GlossaryPath);
+        page.Glossary is null ? null : _htmlFoundation.GetGlossaryScope(page.Glossary);
 
     private IReadOnlyList<string> WriteSpecificationPages(
         MarkdownFile entity,

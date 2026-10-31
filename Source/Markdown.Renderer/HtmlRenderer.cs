@@ -57,8 +57,8 @@ public class HtmlRenderer
         RegexOptions.Compiled | RegexOptions.Singleline);
     private readonly MarkdownPipeline _basePipeline;
     private MarkdownPipeline _pipeline;
-    private SharedAbbreviation[] _glossaryDefinitions = [];
-    private readonly Dictionary<string, GlossaryScope> _glossaryScopes = new(StringComparer.Ordinal);
+    private Glossary? _glossary;
+    private readonly Dictionary<Glossary, GlossaryScope> _glossaryScopes = new();
     private readonly LinkReplacer _linkReplacer = new LinkReplacer();
     private string? _basePath;
     private IReadOnlyList<string> _iconSearchAssets = Array.Empty<string>();
@@ -70,7 +70,7 @@ public class HtmlRenderer
         _pipeline = _basePipeline;
     }
 
-    private static MarkdownPipeline CreatePipeline(SharedAbbreviationsExtension? sharedAbbreviations = null)
+    internal static MarkdownPipeline CreatePipeline(SharedAbbreviationsExtension? sharedAbbreviations = null)
     {
         var pipelineBuilder = new MarkdownPipelineBuilder();
         pipelineBuilder
@@ -93,15 +93,15 @@ public class HtmlRenderer
     {
         if (markdown is null)
         {
-            _glossaryDefinitions = [];
+            _glossary = null;
             _pipeline = _basePipeline;
             _glossaryScopes.Clear();
             return;
         }
 
-        var definitions = ReadGlossaryDefinitions(markdown);
-        _pipeline = CreateGlossaryPipeline(definitions);
-        _glossaryDefinitions = definitions;
+        var glossary = Glossary.Parse(markdown);
+        _pipeline = CreateGlossaryPipeline(glossary.Definitions);
+        _glossary = glossary;
         _glossaryScopes.Clear();
     }
 
@@ -109,27 +109,16 @@ public class HtmlRenderer
     /// Returns the abbreviations of a nested glossary, such as the one of an imported repository, layered over the
     /// site glossary. Its definitions win on conflicts; site definitions it does not redefine still apply.
     /// </summary>
-    public GlossaryScope GetGlossaryScope(string glossaryPath)
+    public GlossaryScope GetGlossaryScope(Glossary glossary)
     {
-        var key = Path.GetFullPath(glossaryPath);
-        if (_glossaryScopes.TryGetValue(key, out var scope)) return scope;
+        if (_glossaryScopes.TryGetValue(glossary, out var scope)) return scope;
 
-        var definitions = ReadGlossaryDefinitions(File.ReadAllText(key));
-        var redefined = definitions.Select(definition => definition.Key).ToHashSet(StringComparer.Ordinal);
+        var redefined = glossary.Definitions.Select(definition => definition.Key).ToHashSet(StringComparer.Ordinal);
+        var siteDefinitions = _glossary?.Definitions ?? [];
         scope = new GlossaryScope(CreateGlossaryPipeline(
-            _glossaryDefinitions.Where(definition => !redefined.Contains(definition.Key)).Concat(definitions).ToArray()));
-        _glossaryScopes[key] = scope;
+            siteDefinitions.Where(definition => !redefined.Contains(definition.Key)).Concat(glossary.Definitions).ToArray()));
+        _glossaryScopes[glossary] = scope;
         return scope;
-    }
-
-    private SharedAbbreviation[] ReadGlossaryDefinitions(string markdown)
-    {
-        var definitions = Markdig.Markdown.Parse(markdown, _basePipeline).GetAbbreviations()?
-            .Select(pair => new SharedAbbreviation(pair.Key, pair.Value.Label ?? pair.Key, pair.Value.Text.ToString()))
-            .ToArray() ?? [];
-        if (definitions.Length == 0)
-            throw new InvalidOperationException("The configured glossary does not contain any abbreviation definitions.");
-        return definitions;
     }
 
     private static MarkdownPipeline CreateGlossaryPipeline(SharedAbbreviation[] definitions)

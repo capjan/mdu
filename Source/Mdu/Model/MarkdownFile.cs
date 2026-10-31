@@ -1,5 +1,6 @@
 
 using Core.Collections.NodeGraph;
+using Markdown.Renderer;
 
 namespace Mdu.Model;
 
@@ -23,7 +24,7 @@ public class MarkdownFile: INode<MarkdownFile>
     public string? SourceRootPath { get; set; }
     public string? ImportMarkerPath { get; set; }
     /// <summary>The glossary of the imported repository this page comes from; null for pages of the site itself.</summary>
-    public string? GlossaryPath { get; set; }
+    public Glossary? Glossary { get; set; }
 
     public string ReadMarkdown() => MarkdownContent ?? File.ReadAllText(FileInfo.FullName);
 

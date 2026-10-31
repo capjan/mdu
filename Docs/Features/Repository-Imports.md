@@ -35,5 +35,8 @@ If the imported folder has an `mdu.yml` with a [`glossary`](Abbreviations.md#sha
 
 Pages outside the import, including local pages placed below it and other imports, do not see the imported definitions. Definitions on a page still take precedence over both glossaries. An imported folder without a glossary uses the site glossary.
 
+The glossary must be a file inside the imported repository; it may lie outside the imported folder. `mdu render` and `mdu serve` stop when the glossary of an import is missing, outside the repository, or has no definitions. Other commands then treat the import as having no glossary.
+
 ## Requirements
+
 Git must be installed. MDU retrieves repositories with the Git command-line tool, so public repositories work without credentials and private repositories use the authentication already configured for Git. Do not put credentials in the source URL. Rendering an import contacts the HTTPS host named in its front matter, so only render imports from repositories you trust.
