@@ -36,7 +36,8 @@ public static class PageMover
         RejectSymbolicLinks(rootPath, targetPath, target);
         if (string.Equals(sourcePath, targetPath, StringComparison.Ordinal))
             throw new InvalidOperationException($"{source} is already at that path.");
-        if ((File.Exists(targetPath) || Directory.Exists(targetPath)) && !comparer.Equals(sourcePath, targetPath))
+        if ((File.Exists(targetPath) || Directory.Exists(targetPath)) &&
+            (!comparer.Equals(sourcePath, targetPath) || !ResolvesToSameEntry(sourcePath, targetPath)))
             throw new InvalidOperationException($"{Path.GetRelativePath(rootPath, targetPath)} already exists.");
         if (isDirectory && IsInside(sourcePath, targetPath) && !comparer.Equals(sourcePath, targetPath))
             throw new InvalidOperationException("A folder cannot move into itself.");
@@ -157,6 +158,37 @@ public static class PageMover
     {
         var hasBom = File.ReadAllBytes(path).AsSpan().StartsWith(Encoding.UTF8.Preamble);
         File.WriteAllText(path, content, new UTF8Encoding(hasBom));
+    }
+
+    private static bool ResolvesToSameEntry(string firstPath, string secondPath)
+    {
+        var firstActualPath = ResolveExistingPath(firstPath);
+        var secondActualPath = ResolveExistingPath(secondPath);
+        var firstRoot = Path.GetPathRoot(firstActualPath)!;
+        var secondRoot = Path.GetPathRoot(secondActualPath)!;
+        return string.Equals(firstRoot, secondRoot, StringComparison.OrdinalIgnoreCase) &&
+               string.Equals(firstActualPath[firstRoot.Length..], secondActualPath[secondRoot.Length..], StringComparison.Ordinal);
+    }
+
+    private static string ResolveExistingPath(string path)
+    {
+        var fullPath = Path.GetFullPath(path);
+        var root = Path.GetPathRoot(fullPath)!;
+        var actualPath = root;
+        foreach (var segment in fullPath[root.Length..]
+                     .Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries))
+        {
+            var entries = Directory.EnumerateFileSystemEntries(actualPath).ToArray();
+            var entry = entries.FirstOrDefault(candidate =>
+                           string.Equals(Path.GetFileName(candidate), segment, StringComparison.Ordinal))
+                       ?? entries.FirstOrDefault(candidate =>
+                           string.Equals(Path.GetFileName(candidate), segment, StringComparison.OrdinalIgnoreCase));
+            if (entry is null)
+                throw new IOException($"Could not resolve the existing path {path}.");
+            actualPath = entry;
+        }
+
+        return actualPath;
     }
 
     private static bool IsInside(string directory, string path)

@@ -3,6 +3,25 @@ using Mdu.Service;
 
 namespace Mdu.Test;
 
+internal sealed class CaseSensitiveFileSystemFactAttribute : FactAttribute
+{
+    public CaseSensitiveFileSystemFactAttribute()
+    {
+        var probePath = Path.Combine(Path.GetTempPath(), $"mdu-case-{Guid.NewGuid():N}a");
+        var alternatePath = probePath[..^1] + "A";
+        File.WriteAllText(probePath, string.Empty);
+        try
+        {
+            if (File.Exists(alternatePath))
+                Skip = "Requires a case-sensitive filesystem.";
+        }
+        finally
+        {
+            File.Delete(probePath);
+        }
+    }
+}
+
 public class PageCommandTest : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "mdu-page-" + Guid.NewGuid().ToString("N"));
@@ -189,6 +208,20 @@ public class PageCommandTest : IDisposable
 
         Assert.Contains("setup.md", Directory.GetFiles(_root).Select(Path.GetFileName));
         Assert.Contains("[Setup](setup.md#install)", Read("README.md"));
+    }
+
+    [CaseSensitiveFileSystemFact]
+    public void RefusesMoveWhenCaseSensitiveTargetAlreadyExists()
+    {
+        Write("Setup.md", "# Source\n");
+        Write("setup.md", "# Target\n");
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            PageMover.Plan(_root, Path.Combine(_root, "Setup.md"), Path.Combine(_root, "setup.md"), includeHidden: true));
+
+        Assert.Contains("setup.md already exists", exception.Message);
+        Assert.Equal("# Source\n", Read("Setup.md"));
+        Assert.Equal("# Target\n", Read("setup.md"));
     }
 
     [Theory]
