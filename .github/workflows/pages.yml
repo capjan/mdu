@@ -1,12 +1,10 @@
 name: Deploy Pages
 
 on:
-  push:
+  workflow_run:
+    workflows: [".NET"]
+    types: [completed]
     branches: [main]
-    paths:
-      - 'Docs/**'
-      - 'Source/**'
-      - '.github/workflows/pages.yml'
   workflow_dispatch:
 
 permissions:
@@ -20,6 +18,8 @@ concurrency:
 
 jobs:
   deploy:
+    # Deploy only the commit that passed CI on a push to main, or on manual dispatch.
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -28,6 +28,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
         with:
+          ref: ${{ github.event.workflow_run.head_sha }}
           # The full history dates each page's "Last updated" line.
           fetch-depth: 0
 
