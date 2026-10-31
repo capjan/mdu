@@ -32,30 +32,55 @@ jobs:
           # The full history dates each page's "Last updated" line.
           fetch-depth: 0
 
+      # A late or re-run CI success must not replace the docs of a newer main commit.
+      - name: Check that the tested commit is still the tip of main
+        id: latest
+        env:
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != "workflow_run" ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git fetch --quiet origin main
+          main_sha=$(git rev-parse FETCH_HEAD)
+          if [ "$main_sha" = "$TESTED_SHA" ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Skipping deployment: $TESTED_SHA is no longer the tip of main ($main_sha)."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up .NET
+        if: steps.latest.outputs.deploy == 'true'
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.402 # Temporary pin: the 10.0.403 download returns HTTP 409.
 
       - name: Configure GitHub Pages
+        if: steps.latest.outputs.deploy == 'true'
         uses: actions/configure-pages@v6
 
       - name: Render documentation
+        if: steps.latest.outputs.deploy == 'true'
         run: dotnet run --project Source/Mdu/Mdu.csproj --configuration Release -- render Docs site --editPageRoot https://github.com/capjan/mdu/edit/main/Docs
 
       - name: Add demo video assets
+        if: steps.latest.outputs.deploy == 'true'
         run: |
           mkdir -p site/assets
           curl --fail --location --retry 3 --output site/assets/mdu-demoscene.mp4 https://github.com/capjan/mdu/releases/download/v4.6.1/mdu-demoscene.mp4
           curl --fail --location --retry 3 --output site/assets/mdu-demoscene-preview.png https://github.com/capjan/mdu/releases/download/v4.6.1/mdu-demoscene-preview.png
 
       - name: Upload Pages artifact
+        if: steps.latest.outputs.deploy == 'true'
         uses: actions/upload-pages-artifact@v5
         with:
           path: site
 
       - name: Deploy to GitHub Pages
         id: deployment
+        if: steps.latest.outputs.deploy == 'true'
         uses: actions/deploy-pages@v5
         # The upstream action still loads Node's deprecated core punycode module.
         env:
