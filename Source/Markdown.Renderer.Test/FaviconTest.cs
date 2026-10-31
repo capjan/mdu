@@ -18,7 +18,20 @@ public class FaviconTest
         var brand = html.IndexOf("<a class=\"site-brand\"", StringComparison.Ordinal);
         var logo = html.IndexOf("<span class=\"site-brand-logo-slot\">", StringComparison.Ordinal);
         Assert.True(button >= 0 && brand > button && logo > brand);
-        Assert.Contains("data-light-src=\"assets/light.svg\" data-dark-src=\"assets/dark.svg\"", html);
+        Assert.Contains("<img class=\"site-brand-logo site-brand-logo-light\" src=\"assets/light.svg\" alt=\"\"><img class=\"site-brand-logo site-brand-logo-dark\" src=\"assets/dark.svg\" alt=\"\">", html);
+    }
+
+    [Fact]
+    public async Task RendersOneLogoImageWhenLogoFilesAreTheSame()
+    {
+        var html = await RenderAsync(new SiteConfiguration
+        {
+            LogoLight = "assets/logo.svg",
+            LogoDark = "assets/logo.svg"
+        });
+
+        Assert.Contains("<span class=\"site-brand-logo-slot\"><img class=\"site-brand-logo\" src=\"assets/logo.svg\" alt=\"\"></span>", html);
+        Assert.DoesNotContain("site-brand-logo-dark", html);
     }
 
     [Fact]
