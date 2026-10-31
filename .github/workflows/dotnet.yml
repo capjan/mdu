@@ -44,6 +44,21 @@ jobs:
     - name: Lint Documentation
       run: dotnet run --project Source/Mdu/Mdu.csproj --configuration Release --no-build -- lint ./Docs
 
+  windows-pdf-tests:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v7
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: 10.0.402 # Temporary pin: the 10.0.403 download returns HTTP 409.
+
+    - name: Test PDF selection and generated file handling
+      run: dotnet test Source/Mdu.Test/Mdu.Test.csproj --configuration Release --filter "FullyQualifiedName~PdfCommandTest|FullyQualifiedName~SitePdfTest" --blame-hang --blame-hang-timeout 2m
+
   native-aot-smoke:
     runs-on: ubuntu-22.04
 

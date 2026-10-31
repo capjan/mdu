@@ -125,17 +125,24 @@ public class HtmlRenderer
         WriteCssFileTo(cssFilePath);
     }
 
-    private MarkdownDocument ParseMarkdown(string markdown, string? pdfDownloadUrl = null)
+    private MarkdownDocument ParseMarkdown(string markdown, string? pdfDownloadUrl = null,
+        IReadOnlyDictionary<string, string>? pdfDownloadUrls = null,
+        IReadOnlyDictionary<string, string>? pdfDownloadNames = null)
     {
         var document = Markdig.Markdown.Parse(markdown, _pipeline);
-        _linkReplacer.ReplaceAll(document, pdfDownloadUrl);
+        _linkReplacer.ReplaceAll(document, pdfDownloadUrl, pdfDownloadUrls, pdfDownloadNames);
         return document;
     }
 
-    public bool ContainsPdfLink(string markdown) =>
+    public IReadOnlyList<string> FindPdfLinks(string markdown) =>
         Markdig.Markdown.Parse(markdown, _pipeline)
             .Descendants<LinkInline>()
-            .Any(link => LinkReplacer.IsPdfLink(link.Url));
+            .Where(link => !link.IsImage && LinkReplacer.IsPdfLink(link.Url))
+            .Select(link => link.Url!)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+    public bool ContainsPdfLink(string markdown) => FindPdfLinks(markdown).Count > 0;
 
     public IReadOnlyCollection<string> FindMediaProviders(string markdown)
     {
@@ -168,14 +175,16 @@ public class HtmlRenderer
         IReadOnlyList<NavigationItem>? topNavigationItems = null,
         DateTimeOffset? lastModified = null,
         string? pdfDownloadUrl = null,
-        DashboardOptions? dashboard = null)
+        DashboardOptions? dashboard = null,
+        IReadOnlyDictionary<string, string>? pdfDownloadUrls = null,
+        IReadOnlyDictionary<string, string>? pdfDownloadNames = null)
     {
         var prefix = string.Concat(Enumerable.Repeat("../", nestingDeep));
         var cssFileLink = prefix + "css/main.css";
         var searchScriptLink = prefix + "js/search.js";
         var searchIndexLink = prefix + "search-index.json";
         
-        var document = ParseMarkdown(markdown, pdfDownloadUrl);
+        var document = ParseMarkdown(markdown, pdfDownloadUrl, pdfDownloadUrls, pdfDownloadNames);
         var hasIconSearch = document.Descendants<FencedCodeBlock>()
             .Any(block => block.Info == IconSearch.CodeBlockLanguage);
         if (hasIconSearch) EnsureIconSearchAssets();
@@ -291,7 +300,7 @@ public class HtmlRenderer
         var renderedHtml = TemplateTokenRegex.Replace(Resources.HtmlTemplateContent(), match =>
             values.TryGetValue(match.Groups["name"].Value, out var value) ? value : match.Value);
         
-        await writer.WriteAsync(renderedHtml);
+        await writer.WriteAsync(renderedHtml).ConfigureAwait(false);
     }
 
     private void EnsureIconSearchAssets()

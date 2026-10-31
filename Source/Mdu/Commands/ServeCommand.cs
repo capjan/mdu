@@ -34,7 +34,6 @@ public sealed class ServeCommand
     private string _outputPath = string.Empty;
     private string? _glossaryPath;
     private string? _iconsPath;
-    private bool _hasPdfLink;
 
     private Dictionary<string, MarkdownFile> _pages => _dependencyIndex.Pages;
     private Dictionary<string, HashSet<string>> _assetsByPage => _dependencyIndex.AssetsByPage;
@@ -199,7 +198,6 @@ public sealed class ServeCommand
         var pdfOutputPath = Path.Combine(_outputPath, "documentation.pdf");
         if (_pdfCommand.WriteSitePdfIfLinked(_rootPath, pdfOutputPath, graph) != 0)
             throw new InvalidOperationException("Could not render the documentation PDF.");
-        _hasPdfLink = File.Exists(pdfOutputPath);
         var rendererVisitor = new MarkdigVisitor(
             _rootPath,
             _outputPath,
@@ -510,9 +508,8 @@ public sealed class ServeCommand
         {
             _searchIndexBuilder.WriteIndex(_outputPath);
             var pdfOutputPath = Path.Combine(_outputPath, "documentation.pdf");
-            if (_pdfCommand.WriteSitePdfIfLinked(_rootPath, pdfOutputPath, _navigationRoots) != 0)
+            if (_pdfCommand.WriteSitePdfIfLinked(_rootPath, pdfOutputPath, _navigationRoots, reuseUnchanged: true) != 0)
                 throw new InvalidOperationException("Could not render the documentation PDF.");
-            _hasPdfLink = File.Exists(pdfOutputPath);
         }
 
         var assetChanges = relevantChanges
@@ -607,7 +604,7 @@ public sealed class ServeCommand
             Path.Combine(_outputPath, "js", "search.js"),
             Path.Combine(_outputPath, "search-index.json")
         };
-        if (_hasPdfLink) currentFiles.Add(Path.Combine(_outputPath, "documentation.pdf"));
+        currentFiles.UnionWith(_pdfCommand.GeneratedSitePdfPaths);
         currentFiles.UnionWith(_renderer.IconSearchAssets);
 
         foreach (var page in _pages.Values)

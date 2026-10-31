@@ -13,6 +13,7 @@ public sealed record PdfSourceSection(string Title, string RelativeHtmlPath, str
 public sealed class PdfRenderer(HtmlRenderer htmlRenderer)
 {
     public bool ContainsPdfLink(string markdown) => htmlRenderer.ContainsPdfLink(markdown);
+    public IReadOnlyList<string> FindPdfLinks(string markdown) => htmlRenderer.FindPdfLinks(markdown);
 
     public void WritePdf(Stream output, string title, IReadOnlyList<PdfSourceSection> sections, bool includeFrontMatter = true)
     {
@@ -57,6 +58,7 @@ internal sealed class PdfLayout
     internal const double Bottom = 48;
     // Keep 17px HTML body text at the same physical size as 10.5pt PDF body text.
     private const double SvgCssPixelsToPdfPoints = 10.5 / 17.0;
+    private const int ShortCodeLineLimit = 8;
     private readonly HtmlRenderer _htmlRenderer;
     private readonly string _documentTitle;
     private readonly List<PdfPageContent> _pages = [];
@@ -99,10 +101,13 @@ internal sealed class PdfLayout
         var blocks = document.DocumentElement!.ChildNodes.Cast<XmlNode>().ToArray();
         if (_y > Top)
         {
-            EnsureRoom(23 + MinimumSectionStartHeight(blocks));
-            _y += 10;
-            DrawLine(Left, _y, PageWidth - Right, _y, PdfColor.LightBorder, 0.6);
-            _y += 13;
+            EnsureRoom(23 + MinimumStartHeight(blocks, 0));
+            if (_y > Top)
+            {
+                _y += 10;
+                DrawLine(Left, _y, PageWidth - Right, _y, PdfColor.LightBorder, 0.6);
+                _y += 13;
+            }
         }
 
         _destinations[_sectionPath] = new PdfDestination(_pages.Count - 1, PageHeight - _y);
@@ -114,56 +119,73 @@ internal sealed class PdfLayout
         var blocks = nodes.ToArray();
         for (var index = 0; index < blocks.Length; index++)
         {
-            if (blocks[index] is XmlElement heading && IsHeading(heading))
-            {
-                var headingSize = HeadingSize(heading);
-                var next = NextContentBlock(blocks, index + 1);
-                EnsureRoom(11 + headingSize * 1.35 + 5 + MinimumBlockHeight(next));
-            }
+            if (blocks[index] is XmlElement heading && KeepsFollowingBlock(heading))
+                EnsureRoom(MinimumStartHeight(blocks[index..], indent));
             RenderBlock(blocks[index], indent);
         }
     }
 
-    private static XmlNode? NextContentBlock(IReadOnlyList<XmlNode> blocks, int start)
-    {
-        for (var index = start; index < blocks.Count; index++)
-            if (blocks[index] is not XmlText text || !string.IsNullOrWhiteSpace(text.Value))
-                return blocks[index];
-        return null;
-    }
-
-    private static double MinimumBlockHeight(XmlNode? node)
+    private double MinimumBlockHeight(XmlNode? node, int indent)
     {
         if (node is not XmlElement element) return node is null ? 0 : 18;
         switch (element.LocalName.ToLowerInvariant())
         {
-            case "p": return 4 + 2 * 10.5 * 1.35;
-            case "pre": return 16;
-            case "table": return 21;
-            case "ul": case "ol": return 18;
+            case "p":
+                var paragraphLines = ParagraphLines(element, 10.5, indent).Length;
+                return 4 + (paragraphLines <= 3 ? paragraphLines : 2) * 10.5 * 1.35;
+            case "pre":
+                var codeLines = CodeLineCount(element, indent);
+                return (codeLines <= ShortCodeLineLimit ? codeLines : 2) * 11 + 5;
+            case "table":
+                var (_, rows) = PrepareTable(element, indent);
+                return TableStartHeight(rows);
+            case "ul": case "ol":
+                var firstItem = element.ChildNodes.OfType<XmlElement>().FirstOrDefault(child => child.LocalName == "li");
+                var itemLines = firstItem is null ? 0 : ParagraphLines(firstItem, 10.5, indent + 12).Length;
+                return 2 + (itemLines <= 3 ? itemLines : 2) * 10.5 * 1.35;
             case "h1": case "h2": case "h3": case "h4": case "h5": case "h6":
-                return 11 + HeadingSize(element) * 1.35 + 5;
+                return HeadingHeight(element, indent);
             case "figure" when HasClass(element, "diagram"):
                 var diagram = DiagramSvg(element);
                 return diagram is null ? 18 : SvgBlockHeight(diagram, 470, 300) + 10;
             case "div" when HasClass(element, "math-display"):
                 var formula = element.ChildNodes.OfType<XmlElement>().FirstOrDefault(child => child.LocalName == "svg");
                 return formula is null ? 18 : SvgBlockHeight(formula, 470, 72) + 10;
+            case "svg": return SvgBlockHeight(element, 470, 260) + 10;
+            case "div": case "blockquote":
+                return MinimumStartHeight(element.ChildNodes.Cast<XmlNode>().ToArray(),
+                    indent + (element.LocalName == "blockquote" || HasClass(element, "markdown-alert") ? 12 : 0));
             default: return 18;
         }
     }
 
-    private static double MinimumSectionStartHeight(IReadOnlyList<XmlNode> blocks)
+    private double MinimumStartHeight(IReadOnlyList<XmlNode> blocks, int indent)
     {
-        var firstIndex = 0;
-        while (firstIndex < blocks.Count && blocks[firstIndex] is XmlText text && string.IsNullOrWhiteSpace(text.Value))
-            firstIndex++;
-        if (firstIndex == blocks.Count) return 0;
-        if (blocks[firstIndex] is not XmlElement heading || !IsHeading(heading))
-            return MinimumBlockHeight(blocks[firstIndex]);
+        var height = 0.0;
+        foreach (var block in blocks)
+        {
+            if (block is not XmlElement && (block is not XmlText text || string.IsNullOrWhiteSpace(text.Value))) continue;
+            if (block is XmlElement element && KeepsFollowingBlock(element))
+                height += IsHeading(element) ? HeadingHeight(element, indent) :
+                    4 + ParagraphLines(element, 10.5, indent).Length * 10.5 * 1.35 + 8;
+            else
+                return height + MinimumBlockHeight(block, indent);
+        }
+        return height;
+    }
 
-        var next = NextContentBlock(blocks, firstIndex + 1);
-        return 11 + HeadingSize(heading) * 1.35 + 5 + MinimumBlockHeight(next);
+    private static bool KeepsFollowingBlock(XmlElement element) =>
+        IsHeading(element) || HasClass(element, "markdown-alert-title");
+
+    private List<PdfRun>[] ParagraphLines(XmlElement element, double size, int indent) =>
+        WrapRuns(ReadInlineRuns(element.ChildNodes.Cast<XmlNode>(),
+                IsHeading(element) ? PdfTextStyle.Heading(size) : PdfTextStyle.Body, _sectionPath),
+            size, PageWidth - Left - Right - indent, mergeText: false);
+
+    private double HeadingHeight(XmlElement heading, int indent)
+    {
+        var size = HeadingSize(heading);
+        return 11 + ParagraphLines(heading, size, indent).Length * size * 1.35 + 5;
     }
 
     // Isometric diagrams wrap their SVG in phase controls, so the SVG is not always a direct child of the figure.
@@ -204,15 +226,15 @@ internal sealed class PdfLayout
         {
             case "h1": case "h2": case "h3": case "h4": case "h5": case "h6":
                 var headingSize = HeadingSize(element);
-                EnsureRoom(headingSize * 1.35 + 11);
                 var headingStyle = PdfTextStyle.Heading(headingSize);
                 var headingRuns = ReadInlineRuns(element.ChildNodes.Cast<XmlNode>(), headingStyle, _sectionPath);
                 if (element.HasAttribute("id"))
                     headingRuns.Insert(0, new PdfRun(string.Empty, headingStyle, Anchor: element.GetAttribute("id")));
-                WriteParagraph(headingRuns, headingSize, indent, 11, 5);
+                WriteParagraph(headingRuns, headingSize, indent, 11, 5, keepTogether: true);
                 return;
             case "p":
-                WriteParagraph(ReadInlineRuns(element.ChildNodes.Cast<XmlNode>(), PdfTextStyle.Body, _sectionPath), 10.5, indent, 4, 8);
+                WriteParagraph(ReadInlineRuns(element.ChildNodes.Cast<XmlNode>(), PdfTextStyle.Body, _sectionPath),
+                    10.5, indent, 4, 8, keepTogether: HasClass(element, "markdown-alert-title"));
                 return;
             case "pre":
                 RenderCode(element, indent);
@@ -224,6 +246,7 @@ internal sealed class PdfLayout
                 RenderTable(element, indent);
                 return;
             case "blockquote":
+                EnsureRoom(MinimumBlockHeight(element, indent));
                 var quotePage = _pages.Count - 1;
                 var quoteTop = _y;
                 RenderBlocks(element.ChildNodes.Cast<XmlNode>(), indent + 12);
@@ -233,6 +256,7 @@ internal sealed class PdfLayout
             case "button":
                 return;
             case "hr":
+                EnsureRoom(16);
                 _y += 4;
                 DrawLine(Left + indent, _y, PageWidth - Right, _y, PdfColor.LightBorder, 0.8);
                 _y += 12;
@@ -254,6 +278,7 @@ internal sealed class PdfLayout
                 }
                 if (HasClass(element, "markdown-alert"))
                 {
+                    EnsureRoom(MinimumBlockHeight(element, indent));
                     var alertPage = _pages.Count - 1;
                     var alertTop = _y;
                     RenderBlocks(element.ChildNodes.Cast<XmlNode>(), indent + 12);
@@ -330,6 +355,29 @@ internal sealed class PdfLayout
 
     private void RenderCode(XmlElement pre, int indent)
     {
+        var lines = WrapCodeLines(pre, indent);
+        const double fontSize = 8.5;
+        const double lineHeight = 11;
+        var codeLeft = Left + indent + 8;
+        var maxWidth = PageWidth - Right - codeLeft - 8;
+        EnsureRoom((lines.Count <= ShortCodeLineLimit ? lines.Count : 2) * lineHeight + 5);
+        foreach (var segments in lines)
+        {
+            EnsureRoom(lineHeight + 5);
+            FillRect(codeLeft - 5, _y - 2, maxWidth + 10, lineHeight + 3, PdfColor.CodeBackground);
+            var x = codeLeft;
+            foreach (var segment in segments)
+            {
+                DrawText(segment.Text, x, _y + fontSize, fontSize, PdfFont.Courier, segment.Color);
+                x += TextWidth(segment.Text, fontSize, PdfFont.Courier);
+            }
+            _y += lineHeight;
+        }
+        _y += 7;
+    }
+
+    private static List<List<(string Text, PdfColor Color)>> WrapCodeLines(XmlElement pre, int indent)
+    {
         var codeRuns = new List<(string Text, PdfColor Color)>();
         ReadCodeRuns(pre, PdfColor.Text, codeRuns);
         var lines = new List<List<(string Text, PdfColor Color)>> { new() };
@@ -343,57 +391,41 @@ internal sealed class PdfLayout
             }
         }
         if (lines.Count > 1 && lines[^1].Count == 0) lines.RemoveAt(lines.Count - 1);
-        var fontSize = 8.5;
-        var lineHeight = 11;
-        var codeLeft = Left + indent + 8;
-        var maxWidth = PageWidth - Right - codeLeft - 8;
+        const double fontSize = 8.5;
+        var maxWidth = PageWidth - Left - Right - indent - 16;
+        var wrapped = new List<List<(string Text, PdfColor Color)>>();
         foreach (var segments in lines)
         {
-            var x = codeLeft;
-            var hasDrawnLine = false;
+            wrapped.Add([]);
+            var width = 0.0;
             foreach (var segment in segments)
             {
                 var remaining = segment.Text;
                 while (remaining.Length > 0)
                 {
-                    var previousPage = _pages.Count - 1;
-                    EnsureRoom(lineHeight + 5);
-                    if (_pages.Count - 1 != previousPage)
-                    {
-                        x = codeLeft;
-                        hasDrawnLine = false;
-                    }
-                    var availableWidth = Math.Max(0, codeLeft + maxWidth - x);
+                    var availableWidth = Math.Max(0, maxWidth - width);
                     var take = GetTextLengthWithinWidth(remaining, fontSize, availableWidth, PdfFont.Courier);
                     if (take == 0)
                     {
-                        if (x > codeLeft)
+                        if (width > 0)
                         {
-                            _y += lineHeight;
-                            x = codeLeft;
-                            hasDrawnLine = false;
+                            wrapped.Add([]);
+                            width = 0;
                             continue;
                         }
                         take = TextElementLength(remaining, 0);
                     }
-                    if (!hasDrawnLine)
-                        FillRect(codeLeft - 5, _y - 2, maxWidth + 10, lineHeight + 3, PdfColor.CodeBackground);
                     var text = remaining[..take];
-                    DrawText(text, x, _y + fontSize, fontSize, PdfFont.Courier, segment.Color);
-                    x += TextWidth(text, fontSize, PdfFont.Courier);
+                    wrapped[^1].Add((text, segment.Color));
+                    width += TextWidth(text, fontSize, PdfFont.Courier);
                     remaining = remaining[take..];
-                    hasDrawnLine = true;
                 }
             }
-            if (!hasDrawnLine)
-            {
-                EnsureRoom(lineHeight + 5);
-                FillRect(codeLeft - 5, _y - 2, maxWidth + 10, lineHeight + 3, PdfColor.CodeBackground);
-            }
-            _y += lineHeight;
         }
-        _y += 7;
+        return wrapped;
     }
+
+    private static int CodeLineCount(XmlElement pre, int indent) => WrapCodeLines(pre, indent).Count;
 
     private static void ReadCodeRuns(XmlNode node, PdfColor color, List<(string Text, PdfColor Color)> runs)
     {
@@ -417,11 +449,70 @@ internal sealed class PdfLayout
 
     private void RenderTable(XmlElement table, int indent)
     {
+        var (columnWidths, rows) = PrepareTable(table, indent);
+        if (rows.Length == 0) return;
+        var contentHeight = PageHeight - Top - Bottom;
+        var headers = rows.TakeWhile(row => row.Cells.Any(cell => cell.Header)).ToArray();
+        var headerHeight = headers.Sum(row => row.Height);
+        var repeatHeaders = headerHeight + 30 < contentHeight;
+        EnsureRoom(TableStartHeight(rows));
+
+        foreach (var row in rows)
+        {
+            var line = 0;
+            while (line < row.LineCount)
+            {
+                var remainingHeight = (row.LineCount - line) * 10.5 + 8;
+                var availableHeight = PageHeight - Bottom - _y;
+                var repeatingHeight = repeatHeaders && !headers.Contains(row) ? headerHeight : 0;
+                // Large rows use the remaining space instead of leaving half a page empty.
+                if (remainingHeight + 1 > availableHeight &&
+                    (row.Height <= contentHeight / 2 && remainingHeight + repeatingHeight + 1 <= contentHeight ||
+                     availableHeight < 30))
+                    ContinueTable(row);
+
+                var capacity = Math.Max(1, (int)Math.Floor((PageHeight - Bottom - _y - 9) / 10.5));
+                var count = Math.Min(capacity, row.LineCount - line);
+                if (row.LineCount - line - count == 1 && count > 2) count--;
+                DrawRow(row, line, count);
+                line += count;
+                if (line < row.LineCount) ContinueTable(row);
+            }
+        }
+        _y += 8;
+
+        void ContinueTable(WrappedTableRow row)
+        {
+            StartPage();
+            if (repeatHeaders && !headers.Contains(row))
+                foreach (var header in headers) DrawRow(header, 0, header.LineCount, repeated: true);
+        }
+
+        void DrawRow(WrappedTableRow row, int firstLine, int count, bool repeated = false)
+        {
+            var height = count * 10.5 + 8;
+            var width = columnWidths.Sum();
+            if (row.Cells.Any(cell => cell.Header)) FillRect(Left + indent, _y, width, height, PdfColor.HeaderBackground);
+            DrawLine(Left + indent, _y + height, Left + indent + width, _y + height, PdfColor.LightBorder, 0.5);
+            var x = Left + indent + 5;
+            for (var column = 0; column < columnWidths.Length; column++)
+            {
+                var header = column < row.Cells.Length && row.Cells[column].Header;
+                for (var index = firstLine; index < Math.Min(firstLine + count, row.Lines[column].Length); index++)
+                    DrawTableRuns(row.Lines[column][index], x, _y, index - firstLine, header, 8.5, !repeated);
+                x += columnWidths[column];
+            }
+            _y += height;
+        }
+    }
+
+    private (double[] ColumnWidths, WrappedTableRow[] Rows) PrepareTable(XmlElement table, int indent)
+    {
         var rows = Descendants(table, "tr").Select(row => row.ChildNodes.OfType<XmlElement>()
             .Where(cell => cell.LocalName is "td" or "th")
-            .Select(cell => new TableCell(ReadInlineRuns(cell.ChildNodes.Cast<XmlNode>(), PdfTextStyle.Body, _sectionPath), cell.LocalName == "th"))
+            .Select(cell => new TableCell(ReadInlineRuns([cell], PdfTextStyle.Body, _sectionPath), cell.LocalName == "th"))
             .ToArray()).Where(row => row.Length > 0).ToArray();
-        if (rows.Length == 0) return;
+        if (rows.Length == 0) return ([], []);
 
         var columns = rows.Max(row => row.Length);
         var width = PageWidth - Left - Right - indent;
@@ -433,47 +524,54 @@ internal sealed class PdfLayout
         if (totalWidth > width)
             for (var column = 0; column < columns; column++) columnWidths[column] *= width / totalWidth;
 
-        foreach (var row in rows)
+        var wrappedRows = rows.Select(row =>
         {
             var wrapped = new List<PdfRun>[columns][];
-            var rowHeight = 12.0;
             for (var column = 0; column < columns; column++)
             {
                 var cell = column < row.Length ? row[column] : new TableCell([], false);
-                wrapped[column] = WrapTableRuns(cell.Runs, 8.5, columnWidths[column] - 10, cell.Header);
-                rowHeight = Math.Max(rowHeight, wrapped[column].Length * 10.5 + 8);
+                wrapped[column] = WrapRuns(cell.Runs, 8.5, columnWidths[column] - 10, cell.Header);
             }
-            EnsureRoom(rowHeight + 1);
-            if (row.Any(cell => cell.Header)) FillRect(Left + indent, _y, width, rowHeight, PdfColor.HeaderBackground);
-            DrawLine(Left + indent, _y + rowHeight, Left + indent + width, _y + rowHeight, PdfColor.LightBorder, 0.5);
-            var x = Left + indent + 5;
-            for (var column = 0; column < columns; column++)
-            {
-                var cell = column < row.Length ? row[column] : new TableCell([], false);
-                for (var line = 0; line < wrapped[column].Length; line++)
-                    DrawTableRuns(wrapped[column][line], x, _y, line, cell.Header, 8.5);
-                x += columnWidths[column];
-            }
-            _y += rowHeight;
-        }
-        _y += 8;
+            return new WrappedTableRow(row, wrapped);
+        }).ToArray();
+        return (columnWidths, wrappedRows);
     }
 
-    private static List<PdfRun>[] WrapTableRuns(IReadOnlyList<PdfRun> runs, double fontSize, double maxWidth, bool header)
+    private sealed record WrappedTableRow(TableCell[] Cells, List<PdfRun>[][] Lines)
+    {
+        public int LineCount => Lines.Max(column => column.Length);
+        public double Height => LineCount * 10.5 + 8;
+    }
+
+    private static double TableStartHeight(WrappedTableRow[] rows)
+    {
+        var headers = rows.TakeWhile(row => row.Cells.Any(cell => cell.Header)).ToArray();
+        var headerHeight = headers.Sum(row => row.Height);
+        var firstHeight = rows.Skip(headers.Length).FirstOrDefault()?.Height ?? 0;
+        var contentHeight = PageHeight - Top - Bottom;
+        if (firstHeight > contentHeight / 2 || headerHeight + firstHeight + 1 > contentHeight)
+            firstHeight = Math.Min(firstHeight, 29);
+        return headerHeight + firstHeight + 1;
+    }
+
+    private static List<PdfRun>[] WrapRuns(IReadOnlyList<PdfRun> runs, double fontSize, double maxWidth,
+        bool header = false, bool mergeText = true)
     {
         var lines = new List<List<PdfRun>> { new() };
         var width = 0.0;
+        var pendingAnchors = new List<PdfRun>();
         foreach (var run in runs)
         {
             var style = TableStyle(run.Style, header);
             if (run.Anchor is not null)
-                lines[^1].Add(new PdfRun(string.Empty, style, Anchor: run.Anchor));
+                pendingAnchors.Add(new PdfRun(string.Empty, style, Anchor: run.Anchor));
             if (run.Svg is not null)
             {
                 var dimensions = PdfSvgRenderer.Measure(run.Svg);
                 var iconHeight = InlineIconHeight(fontSize);
                 var iconWidth = iconHeight * dimensions.Width / Math.Max(1, dimensions.Height);
-                if (width > 0 && width + iconWidth > maxWidth) NewLine();
+                if (width > 0 && width + iconWidth + 2 > maxWidth) NewLine();
+                FlushAnchors();
                 lines[^1].Add(new PdfRun(string.Empty, style, run.Svg));
                 width += iconWidth + 2;
                 continue;
@@ -494,13 +592,18 @@ internal sealed class PdfLayout
 
                 if (string.IsNullOrWhiteSpace(token))
                 {
-                    if (width > 0) AddText(" ", style);
+                    if (width > 0 && lines[^1].LastOrDefault()?.Text.EndsWith(' ') != true)
+                    {
+                        if (width + TextWidth(" ", style.Size ?? fontSize, style.Font) <= maxWidth)
+                            AddText(" ", style);
+                    }
                     continue;
                 }
 
                 AddWord(token, style);
             }
         }
+        FlushAnchors();
         return lines.ToArray();
 
         void AddWord(string word, PdfTextStyle style)
@@ -531,7 +634,8 @@ internal sealed class PdfLayout
 
         void AddText(string text, PdfTextStyle style)
         {
-            if (lines[^1].Count > 0 && lines[^1][^1].Svg is null && lines[^1][^1].Style == style)
+            if (!string.IsNullOrWhiteSpace(text)) FlushAnchors();
+            if (mergeText && lines[^1].Count > 0 && lines[^1][^1].Svg is null && lines[^1][^1].Style == style)
                 lines[^1][^1] = lines[^1][^1] with { Text = lines[^1][^1].Text + text };
             else
                 lines[^1].Add(new PdfRun(text, style));
@@ -543,23 +647,29 @@ internal sealed class PdfLayout
             lines.Add([]);
             width = 0;
         }
+
+        void FlushAnchors()
+        {
+            lines[^1].AddRange(pendingAnchors);
+            pendingAnchors.Clear();
+        }
     }
 
-    private void DrawTableRuns(IReadOnlyList<PdfRun> runs, double x, double rowTop, int line, bool header, double fontSize)
+    private void DrawTableRuns(IReadOnlyList<PdfRun> runs, double x, double rowTop, int line, bool header, double fontSize,
+        bool markAnchors = true)
     {
         var top = rowTop + line * 10.5;
         var baseline = top + 10;
         foreach (var run in runs)
         {
             var style = TableStyle(run.Style, header);
-            if (run.Anchor is not null) MarkAnchor(run.Anchor, top);
+            if (markAnchors && run.Anchor is not null) MarkAnchor(run.Anchor, top);
             if (run.Svg is not null)
             {
                 var dimensions = PdfSvgRenderer.Measure(run.Svg);
                 x += DrawInlineSvg(run.Svg, dimensions, x, top, 10.5, InlineIconHeight(fontSize));
                 continue;
             }
-
             if (run.Text.Length == 0) continue;
             var size = style.Size ?? 8.5;
             x += DrawStyledText(run.Text, style, x, top, baseline, size, 10.5, 9.5);
@@ -674,101 +784,56 @@ internal sealed class PdfLayout
         foreach (XmlNode child in element.ChildNodes) ReadInline(child, childStyle, sectionPath, runs);
     }
 
-    private void WriteParagraph(IReadOnlyList<PdfRun> runs, double fontSize, int indent, double before, double after)
+    private void WriteParagraph(IReadOnlyList<PdfRun> runs, double fontSize, int indent, double before, double after,
+        bool keepTogether = false)
     {
-        _y += before;
-        var startX = Left + indent;
-        var x = startX;
-        var right = PageWidth - Right;
-        var lineHeight = fontSize * 1.35;
-        EnsureRoom(lineHeight);
-        var lineTop = _y;
-        var hasContent = false;
-        var lastWasSpace = false;
-        var pendingAnchors = new List<string>();
-        foreach (var run in runs)
+        if (runs.All(run => run.Svg is null && string.IsNullOrWhiteSpace(run.Text)))
         {
-            if (run.Anchor is not null) pendingAnchors.Add(run.Anchor);
-            if (run.Svg is not null)
+            _y += before;
+            foreach (var run in runs)
+                if (run.Anchor is not null) MarkAnchor(run.Anchor);
+            _y += after;
+            return;
+        }
+        var lines = WrapRuns(runs, fontSize, PageWidth - Left - Right - indent, mergeText: false);
+        var lineHeight = fontSize * 1.35;
+        var minimumLines = keepTogether || lines.Length <= 3 ? lines.Length : 2;
+        EnsureRoom((_y > Top ? before : 0) + minimumLines * lineHeight);
+        if (_y > Top) _y += before;
+        var line = 0;
+        while (line < lines.Length)
+        {
+            var capacity = (int)Math.Floor((PageHeight - Bottom - _y + 0.001) / lineHeight);
+            if (capacity < Math.Min(2, lines.Length - line))
             {
-                var dimensions = PdfSvgRenderer.Measure(run.Svg);
-                var iconWidth = InlineIconHeight(fontSize) * dimensions.Width / Math.Max(1, dimensions.Height);
-                if (x > startX && x + iconWidth > right) NewLine();
-                MarkPendingAnchors();
-                x += DrawInlineSvg(run.Svg, dimensions, x, lineTop, lineHeight, InlineIconHeight(fontSize));
-                hasContent = true;
+                StartPage();
                 continue;
             }
-            foreach (var token in SplitInlineTokens(run.Text))
+            if (lines.Length - line == 3 && capacity == 2)
             {
-                if (token.Contains('\n'))
+                StartPage();
+                continue;
+            }
+            var count = Math.Min(capacity, lines.Length - line);
+            if (lines.Length - line - count == 1 && count > 1) count--;
+            for (var index = 0; index < count; index++, line++)
+            {
+                var x = Left + indent;
+                foreach (var run in lines[line])
                 {
-                    var pieces = token.Split('\n');
-                    for (var piece = 0; piece < pieces.Length; piece++)
+                    if (run.Anchor is not null) MarkAnchor(run.Anchor);
+                    if (run.Svg is not null)
                     {
-                        if (pieces[piece].Length > 0) PlaceText(pieces[piece], run.Style);
-                        if (piece < pieces.Length - 1) NewLine();
+                        x += DrawInlineSvg(run.Svg, PdfSvgRenderer.Measure(run.Svg), x, _y, lineHeight, InlineIconHeight(fontSize));
+                        continue;
                     }
-                    lastWasSpace = false;
-                    continue;
+                    var size = run.Style.Size ?? fontSize;
+                    x += DrawStyledText(run.Text, run.Style, x, _y, _y + size * 0.95, size, lineHeight);
                 }
-
-                if (string.IsNullOrWhiteSpace(token))
-                {
-                    if (x > startX && !lastWasSpace) PlaceText(" ", run.Style);
-                    lastWasSpace = true;
-                    continue;
-                }
-                lastWasSpace = false;
-
-                var width = TextWidth(token, fontSize, run.Style.Font);
-                if (x > startX && x + width > right)
-                    NewLine();
-                if (x + width > right && x <= startX)
-                {
-                    foreach (var line in WrapText(token, fontSize, right - x, run.Style.Font))
-                    {
-                        PlaceText(line, run.Style);
-                        if (line.Length < token.Length) NewLine();
-                    }
-                }
-                else
-                {
-                    PlaceText(token, run.Style);
-                }
+                _y += lineHeight;
             }
         }
-        if (pendingAnchors.Count > 0) MarkPendingAnchors();
-        if (hasContent) _y = lineTop + lineHeight;
         _y += after;
-
-        void PlaceText(string text, PdfTextStyle style)
-        {
-            if (string.IsNullOrEmpty(text)) return;
-            if (x == startX && string.IsNullOrWhiteSpace(text)) return;
-            if (!string.IsNullOrWhiteSpace(text)) MarkPendingAnchors();
-            var size = style.Size ?? fontSize;
-            var baseline = lineTop + size * 0.95;
-            var width = DrawStyledText(text, style, x, lineTop, baseline, size, lineHeight);
-            x += width;
-            hasContent = true;
-        }
-
-        void MarkPendingAnchors()
-        {
-            foreach (var anchor in pendingAnchors) MarkAnchor(anchor, lineTop);
-            pendingAnchors.Clear();
-        }
-
-        void NewLine()
-        {
-            _y = lineTop + lineHeight;
-            EnsureRoom(lineHeight);
-            lineTop = _y;
-            x = startX;
-            hasContent = false;
-            lastWasSpace = false;
-        }
     }
 
     private double DrawStyledText(
@@ -832,7 +897,12 @@ internal sealed class PdfLayout
 
     private void EnsureRoom(double height)
     {
-        if (_y + height <= PageHeight - Bottom) return;
+        if (_y <= Top || _y + height <= PageHeight - Bottom) return;
+        StartPage();
+    }
+
+    private void StartPage()
+    {
         _page = NewPage();
         _y = Top;
     }

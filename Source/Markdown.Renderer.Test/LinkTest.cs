@@ -3,6 +3,92 @@ namespace Markdown.Renderer.Test;
 public class LinkTest
 {
     [Theory]
+    [InlineData("API Guide", "API Guide.pdf")]
+    [InlineData("../API: \"Guide\"?*", "-API- -Guide---.pdf")]
+    [InlineData("...", "documentation.pdf")]
+    [InlineData("CON", "_CON.pdf")]
+    [InlineData("API\nGuide", "API-Guide.pdf")]
+    [InlineData("API . ", "API.pdf")]
+    [InlineData("API & Guide", "API &amp; Guide.pdf")]
+    public async Task UsesSafeDownloadNamesWithoutChangingPdfUrls(string title, string expected)
+    {
+        using var writer = new StringWriter();
+        await new HtmlRenderer().WriteHtml(writer, "PDF", "", 0,
+            "[Topic](mdu:pdf?root=Topic/README.md) [All](mdu:pdf) [Ordinary](manual.pdf)", "",
+            pdfDownloadUrl: "../documentation.pdf",
+            pdfDownloadUrls: new Dictionary<string, string>
+            {
+                ["mdu:pdf?root=Topic/README.md"] = "../_mdu-pdf/hash.pdf"
+            },
+            pdfDownloadNames: new Dictionary<string, string>
+            {
+                ["mdu:pdf?root=Topic/README.md"] = title
+            });
+        var html = writer.ToString();
+        Assert.Contains($"href=\"../_mdu-pdf/hash.pdf\" download=\"{expected}\"", html);
+        Assert.Contains("href=\"../documentation.pdf\" download=\"documentation.pdf\"", html);
+        Assert.Contains("<a href=\"manual.pdf\">Ordinary</a>", html);
+    }
+
+    [Theory]
+    [InlineData("mdu:pdf", null)]
+    [InlineData("mdu:pdf?root=README.md", "README.md")]
+    [InlineData("MDU:PDF?root=../API%20Guide/README.md", "../API Guide/README.md")]
+    public void ReadsPdfRoot(string url, string? expected)
+    {
+        Assert.True(LinkReplacer.IsPdfLink(url));
+        Assert.Equal(expected, LinkReplacer.GetPdfRoot(url));
+    }
+
+    [Theory]
+    [InlineData("mdu:pdf?root=")]
+    [InlineData("mdu:pdf?root=README.md&other=1")]
+    [InlineData("mdu:pdf?root=README.md#heading")]
+    [InlineData("mdu:pdf?root=%ZZ.md")]
+    [InlineData("mdu:pdf?unknown=README.md")]
+    public void RejectsMalformedPdfLinks(string url) =>
+        Assert.Throws<InvalidOperationException>(() => LinkReplacer.GetPdfRoot(url));
+
+    [Fact]
+    public void FindsOnlyRealPdfLinks()
+    {
+        var renderer = new HtmlRenderer();
+        var links = renderer.FindPdfLinks("""
+            [All](mdu:pdf)
+            [Topic][pdf]
+
+            [pdf]: mdu:pdf?root=Topic/README.md
+
+            `[Code](mdu:pdf?root=Code.md)`
+
+            ```markdown
+            [Example](mdu:pdf?root=Example.md)
+            ```
+
+            ![Image](mdu:pdf?root=Image.md)
+            """);
+
+        Assert.Equal(["mdu:pdf", "mdu:pdf?root=Topic/README.md"], links);
+    }
+
+    [Fact]
+    public async Task RewritesEachScopedPdfLinkIndependently()
+    {
+        using var writer = new StringWriter();
+        await new HtmlRenderer().WriteHtml(writer, "PDF", "", 0,
+            "[All](mdu:pdf) [Topic](mdu:pdf?root=Topic/README.md) `[Example](mdu:pdf?root=Topic/README.md)`", "",
+            pdfDownloadUrl: "documentation.pdf",
+            pdfDownloadUrls: new Dictionary<string, string>
+            {
+                ["mdu:pdf?root=Topic/README.md"] = "_mdu-pdf/topic.pdf"
+            });
+        var html = writer.ToString();
+        Assert.Contains("href=\"documentation.pdf\"", html);
+        Assert.Contains("href=\"_mdu-pdf/topic.pdf\"", html);
+        Assert.Contains("<code>[Example](mdu:pdf?root=Topic/README.md)</code>", html);
+    }
+
+    [Theory]
     [InlineData("guide.md?view=raw#setup", "guide.html?view=raw#setup")]
     [InlineData("README.md#start", "index.html#start")]
     [InlineData("../../README.md", "../../index.html")]

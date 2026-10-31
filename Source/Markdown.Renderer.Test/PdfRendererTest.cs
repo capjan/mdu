@@ -6,6 +6,238 @@ namespace Markdown.Renderer.Test;
 
 public class PdfRendererTest
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void KeepsEightWrappedCodeLinesTogetherUsingActualCharacterBoundaries(bool highlighted)
+    {
+        var text = "CodeStart" + new string('a', 647) + "CodeEnd";
+        var code = highlighted
+            ? $"<pre><code><span class=\"keyword\">{text[..100]}</span><span class=\"string\">{text[100..]}</span></code></pre>"
+            : $"```text\n{text}\n```";
+        var result = Layout(Filler(46) + "\n\n" + code);
+        var page = PageContaining(result, "CodeStart");
+        Assert.Equal(1, page);
+        var codeText = string.Concat(ReadTextOperations(result.Pages[page].Content.ToString()).Select(operation => operation.Text));
+        Assert.Equal(text, codeText);
+        Assert.Equal(8, Regex.Matches(result.Pages[page].Content.ToString(), " re f").Count);
+        AssertContentWithinMargins(result);
+    }
+
+    [Theory]
+    [InlineData("<p></p>")]
+    [InlineData("<p><button>Ignored</button></p>")]
+    [InlineData("<p><span id=\"empty-anchor\"></span></p>")]
+    public void EmptyParagraphsOnlyAddBlockSpacing(string emptyParagraph)
+    {
+        var baseline = Layout("<p>Before</p><p>After</p>");
+        var actual = Layout($"<p>Before</p>{emptyParagraph}<p>After</p>");
+        var baselineY = ReadTextOperations(baseline.Pages[0].Content.ToString()).Single(operation => operation.Text == "After").Y;
+        var actualY = ReadTextOperations(actual.Pages[0].Content.ToString()).Single(operation => operation.Text == "After").Y;
+        Assert.Equal(12, baselineY - actualY, 3);
+        if (emptyParagraph.Contains("empty-anchor", StringComparison.Ordinal))
+            Assert.True(actual.Destinations.ContainsKey("page.html#empty-anchor"));
+    }
+
+    [Theory]
+    [InlineData(43)]
+    [InlineData(45)]
+    [InlineData(47)]
+    [InlineData(49)]
+    public void KeepsWrappedHeadingChainsWithTheirFirstParagraph(int fillerLines)
+    {
+        var heading = "HeadingStart " + string.Join(" ", Enumerable.Repeat("long heading", 14)) + " HeadingEnd";
+        var result = Layout($"{Filler(fillerLines)}\n\n<h2>{heading}</h2><h3>Subheading</h3>" +
+            "<p>BodyStart<br />BodyMiddle<br />BodyEnd</p>");
+
+        var page = PageContaining(result, "HeadingStart");
+        Assert.Equal(page, PageContaining(result, "HeadingEnd"));
+        Assert.Equal(page, PageContaining(result, "Subheading"));
+        Assert.Equal(page, PageContaining(result, "BodyStart"));
+        Assert.Equal(page, PageContaining(result, "BodyEnd"));
+        AssertContentWithinMargins(result);
+    }
+
+    [Theory]
+    [InlineData(45)]
+    [InlineData(47)]
+    [InlineData(49)]
+    public void KeepsAlertTitleAndTextTogetherWithoutAnAccentOnThePreviousPage(int fillerLines)
+    {
+        var result = Layout(Filler(fillerLines) + "\n\n> [!TIP]\n> AlertBody");
+
+        var page = PageContaining(result, "Tip");
+        Assert.Equal(page, PageContaining(result, "AlertBody"));
+        if (page > 0) Assert.DoesNotContain("2.5 w", result.Pages[page - 1].Content.ToString());
+        AssertContentWithinMargins(result);
+    }
+
+    [Theory]
+    [InlineData(45, 4)]
+    [InlineData(47, 6)]
+    [InlineData(49, 3)]
+    [InlineData(0, 110)]
+    public void SplitsParagraphsWithoutLeavingSingleLinesOnEitherPage(int fillerLines, int paragraphLines)
+    {
+        var paragraph = "<p>" + string.Join("<br />", Enumerable.Range(0, paragraphLines)
+            .Select(index => $"ParagraphLine{index:D3}")) + "</p>";
+        var result = Layout(Filler(fillerLines) + "\n\n" + paragraph);
+        var pages = Enumerable.Range(0, paragraphLines).GroupBy(index => PageContaining(result, $"ParagraphLine{index:D3}"));
+
+        Assert.All(pages, page => Assert.True(page.Count() >= 2, $"One paragraph line on page {page.Key + 1}."));
+        AssertContentWithinMargins(result);
+    }
+
+    [Fact]
+    public void SplitsAnOversizedTableRowAndRepeatsHeadersWithoutLosingLinksOrAnchors()
+    {
+        var cell = string.Join("<br />", Enumerable.Range(0, 210).Select(index =>
+            $"<span id=\"row-{index}\"></span><a href=\"https://example.com/{index}\">CellLine{index:D3}</a>"));
+        var result = Layout("<table><tr><th id=\"table-heading\">ColumnHeader</th><th>ValueHeader</th></tr>" +
+            $"<tr><td>{cell}</td><td>CompanionCell</td></tr></table>");
+
+        Assert.True(result.Pages.Count >= 3);
+        foreach (var page in result.Pages)
+        {
+            Assert.Contains(Hex("ColumnHeader"), page.Content.ToString());
+            Assert.Contains(Hex("CellLine"), page.Content.ToString());
+        }
+        Assert.Equal(0, result.Destinations["page.html#table-heading"].PageIndex);
+        for (var index = 0; index < 210; index++)
+        {
+            var label = $"CellLine{index:D3}";
+            var page = PageContaining(result, label);
+            Assert.Equal(page, result.Destinations[$"page.html#row-{index}"].PageIndex);
+            Assert.Single(result.Pages.SelectMany(item => item.Links).Where(link => link.Uri == $"https://example.com/{index}"));
+            Assert.Equal(1, result.Pages.Sum(item => Regex.Matches(item.Content.ToString(), Hex(label)).Count));
+        }
+        AssertContentWithinMargins(result);
+    }
+
+    [Fact]
+    public void KeepsNormalTableRowsTogetherAndStartsWithHeaderAndData()
+    {
+        var rows = string.Concat(Enumerable.Range(0, 80).Select(index =>
+            $"<tr><td>FirstCell{index:D3}<br />SecondLine{index:D3}</td><td>OtherCell{index:D3}</td></tr>"));
+        var result = Layout(Filler(49) + "\n\n<table><tr><th>TableHeading</th><th>OtherHeading</th></tr>" + rows + "</table>");
+
+        for (var index = 0; index < 80; index++)
+        {
+            var page = PageContaining(result, $"FirstCell{index:D3}");
+            Assert.Equal(page, PageContaining(result, $"SecondLine{index:D3}"));
+            Assert.Equal(page, PageContaining(result, $"OtherCell{index:D3}"));
+        }
+        foreach (var page in result.Pages.Where(page => page.Content.ToString().Contains(Hex("TableHeading"), StringComparison.Ordinal)))
+            Assert.Contains(Hex("FirstCell"), page.Content.ToString());
+        AssertContentWithinMargins(result);
+    }
+
+    [Fact]
+    public void SplitsEvenATableHeaderTallerThanThePageWithoutBlankPages()
+    {
+        var header = string.Join("<br />", Enumerable.Range(0, 150).Select(index => $"HeaderLine{index:D3}"));
+        var result = Layout($"<table><tr><th>{header}</th></tr><tr><td>FinalBodyCell</td></tr></table>");
+
+        Assert.True(result.Pages.Count >= 3);
+        Assert.All(result.Pages, page => Assert.Contains(" Tj ET", page.Content.ToString()));
+        for (var index = 0; index < 150; index++) PageContaining(result, $"HeaderLine{index:D3}");
+        PageContaining(result, "FinalBodyCell");
+        AssertContentWithinMargins(result);
+    }
+
+    [Fact]
+    public void KeepsShortCodeTogetherButLetsLongCodeUseTheRemainingPage()
+    {
+        var shortCode = string.Join("\n", Enumerable.Range(0, 6).Select(index => $"ShortCode{index:D3}"));
+        var shortResult = Layout(Filler(47) + $"\n\n```text\n{shortCode}\n```");
+        Assert.Equal(PageContaining(shortResult, "ShortCode000"), PageContaining(shortResult, "ShortCode005"));
+
+        var longCode = string.Join("\n", Enumerable.Range(0, 100).Select(index => $"LongCode{index:D3}"));
+        var longResult = Layout(Filler(43) + $"\n\n```text\n{longCode}\n```");
+        Assert.Equal(0, PageContaining(longResult, "LongCode000"));
+        Assert.True(PageContaining(longResult, "LongCode099") > 0);
+        AssertContentWithinMargins(shortResult);
+        AssertContentWithinMargins(longResult);
+    }
+
+    [Theory]
+    [InlineData(43)]
+    [InlineData(47)]
+    [InlineData(49)]
+    public void KeepsHeadingWithTheFollowingDiagram(int fillerLines)
+    {
+        var result = Layout(Filler(fillerLines) + """
+
+
+            ## DiagramHeading
+
+            <svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">
+            <rect width="400" height="400" fill="#eeeeee" />
+            <text x="20" y="40">DiagramBody</text>
+            </svg>
+            """);
+
+        Assert.Equal(PageContaining(result, "DiagramHeading"), PageContaining(result, "DiagramBody"));
+        AssertContentWithinMargins(result);
+    }
+
+    [Fact]
+    public void StartsANewSectionAtTheTopWithoutASeparatorOrExtraHeadingSpacing()
+    {
+        var layout = new PdfLayout(new HtmlRenderer(), "");
+        layout.RenderSection(new PdfSourceSection("First", "first.html", Filler(51)));
+        layout.RenderSection(new PdfSourceSection("Second", "second.html", "# SecondTitle\n\nBody"));
+        var result = layout.Complete();
+        var destination = result.Destinations["second.html"];
+
+        Assert.Equal(1, destination.PageIndex);
+        Assert.Equal(PdfLayout.PageHeight - PdfLayout.Top, destination.Top, 3);
+        var page = result.Pages[destination.PageIndex].Content.ToString();
+        Assert.DoesNotContain("0.6 w", page);
+        var title = ReadTextOperations(page).Single(operation => operation.Text == "SecondTitle");
+        Assert.Equal(PdfLayout.PageHeight - PdfLayout.Top - 22 * 0.95, title.Y, 3);
+    }
+
+    private static PdfLayoutResult Layout(string markdown)
+    {
+        var layout = new PdfLayout(new HtmlRenderer(), "");
+        layout.RenderSection(new PdfSourceSection("Pagination", "page.html", markdown));
+        return layout.Complete();
+    }
+
+    private static string Filler(int lines) => lines == 0 ? "" :
+        "<p>" + string.Join("<br />", Enumerable.Range(0, lines).Select(index => $"Filler{index:D3}")) + "</p>";
+
+    private static string Hex(string text) => Convert.ToHexString(Encoding.Latin1.GetBytes(text));
+
+    private static int PageContaining(PdfLayoutResult result, string text) =>
+        Assert.Single(result.Pages.Select((page, index) => (page, index))
+            .Where(item => item.page.Content.ToString().Contains(Hex(text), StringComparison.Ordinal))).index;
+
+    private static IEnumerable<(double X, double Y, string Text)> ReadTextOperations(string content) =>
+        Regex.Matches(content, @"BT /F\d+ [\d.]+ Tf 1 0 0 1 (?<x>[-\d.]+) (?<y>[-\d.]+) Tm <(?<hex>[0-9A-F]*)> Tj ET")
+            .Select(match => (
+                double.Parse(match.Groups["x"].Value, CultureInfo.InvariantCulture),
+                double.Parse(match.Groups["y"].Value, CultureInfo.InvariantCulture),
+                Encoding.Latin1.GetString(Convert.FromHexString(match.Groups["hex"].Value))));
+
+    private static void AssertContentWithinMargins(PdfLayoutResult result)
+    {
+        foreach (var page in result.Pages)
+        {
+            foreach (var operation in ReadTextOperations(page.Content.ToString()))
+            {
+                Assert.InRange(operation.Y, PdfLayout.Bottom, PdfLayout.PageHeight - PdfLayout.Top);
+                Assert.InRange(operation.X, PdfLayout.Left, PdfLayout.PageWidth - PdfLayout.Right);
+            }
+            foreach (var link in page.Links)
+            {
+                Assert.InRange(link.Bottom, PdfLayout.Bottom, PdfLayout.PageHeight - PdfLayout.Top);
+                Assert.InRange(link.Top, PdfLayout.Bottom, PdfLayout.PageHeight - PdfLayout.Top);
+            }
+        }
+    }
+
     [Fact]
     public void CompositeStatePdfLinkCoversItsWholeFrameAndKeepsTheChildDestination()
     {

@@ -207,6 +207,51 @@ public class RendererTest
     }
 
     [Fact]
+    public async Task WriteHtmlDoesNotRequireTheCallingSynchronizationContext()
+    {
+        using var writer = new PausedWriter();
+        var previousContext = SynchronizationContext.Current;
+        Task render;
+        try
+        {
+            SynchronizationContext.SetSynchronizationContext(new NonDispatchingSynchronizationContext());
+            render = new HtmlRenderer().WriteHtml(writer, "test", "", 0, "# Test", "");
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previousContext);
+        }
+
+        Assert.False(render.IsCompleted);
+        writer.Complete();
+        await render.WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.Contains("<title>test</title>", writer.Written);
+    }
+
+    private sealed class PausedWriter : StringWriter
+    {
+        private readonly TaskCompletionSource _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public string? Written { get; private set; }
+
+        public override Task WriteAsync(string? value)
+        {
+            Written = value;
+            return _completion.Task;
+        }
+
+        public void Complete() => _completion.SetResult();
+    }
+
+    private sealed class NonDispatchingSynchronizationContext : SynchronizationContext
+    {
+        public override void Post(SendOrPostCallback callback, object? state)
+        {
+            // A continuation posted here would never run, as with a blocked synchronous caller.
+        }
+    }
+
+    [Fact]
     public void RendersLocalAbbreviationsWithoutReplacingCode()
     {
         var renderer = new HtmlRenderer();
