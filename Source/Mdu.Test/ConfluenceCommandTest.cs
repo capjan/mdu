@@ -8,8 +8,35 @@ using Mdu.Service.Visitors;
 
 namespace Mdu.Test;
 
+[Collection("Process state")]
 public class ConfluenceCommandTest
 {
+    [Theory]
+    [InlineData("title: dashboard", false)]
+    [InlineData("description: dashboard layout examples", false)]
+    [InlineData("layout: article\ndashboard:\n  clock: true", false)]
+    [InlineData("layout: dashboard", true)]
+    [InlineData("layout: DASHBOARD", true)]
+    public void WarnsOnlyForActualDashboardLayout(string metadata, bool warns)
+    {
+        var root = Path.GetTempPath();
+        var page = new MarkdownFile(new FileInfo(Path.Combine(root, "README.md")), null)
+        {
+            MarkdownContent = $"---\n{metadata}\n---\n# Home",
+            FrontMatter = $"---\n{metadata}\n---",
+            Title = "Home"
+        };
+        var output = new StringWriter();
+        var original = Console.Out;
+        try
+        {
+            Console.SetOut(output);
+            ConfluenceCommand.PrepareSources([page], root);
+        }
+        finally { Console.SetOut(original); }
+        Assert.Equal(warns, output.ToString().Contains("dashboard layout is not exported", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void PreservesTreeAndSourceFilesWithoutConfluenceMetadata()
     {
@@ -83,13 +110,15 @@ public class ConfluenceCommandTest
             var sources = ConfluenceCommand.PrepareSources(graph, docs);
             var target = new ConfluenceTarget("https://wiki.example.test", "DOC");
             var nested = sources.Single(source => source.Path == "Nested/README.md");
-            var result = new ConfluenceStorageRenderer(target, sources).Render(sources.Single(source => source.Path == "README.md"));
+            var renderer = new ConfluenceStorageRenderer(target, sources);
+            var result = renderer.ResolvePageLinks(renderer.Render(sources.Single(source => source.Path == "README.md")),
+                new Dictionary<string, string> { ["README.md"] = "100", [nested.Path] = "101" });
             var xml = System.Xml.Linq.XElement.Parse("<root xmlns:ac=\"http://atlassian.com/content\" xmlns:ri=\"http://atlassian.com/resource/identifier\">" +
                 result.Storage + "</root>");
             System.Xml.Linq.XNamespace ri = "http://atlassian.com/resource/identifier";
             Assert.Equal(2, xml.Descendants(ri + "page").Count());
             Assert.All(xml.Descendants(ri + "page"), page => Assert.Equal(target.PageTitle(nested), page.Attribute(ri + "content-title")?.Value));
-            Assert.Contains(Uri.EscapeDataString(target.PageTitle(nested)),
+            Assert.Contains("pages/viewpage.action?pageId=101#",
                 System.Text.Encoding.UTF8.GetString(Assert.Single(result.Assets).Content));
             Assert.Contains("mdu:", File.ReadAllText(Path.Combine(docs, "Nested.md")));
         }

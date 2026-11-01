@@ -98,7 +98,7 @@ New pages remain readable only by the publisher until their content and edit pro
 
 - The page tree comes from the same Markdown graph as HTML rendering, including repository imports.
 - Content properties store the export identity, logical source path, and format version; the managed root holds a per-page registry.
-- Identical bodies and titles are not rewritten. Storage comparisons ignore server-generated macro IDs and XML namespace declaration placement, but preserve content, macro parameters, and whitespace. Identical attachments are recognized by their content-addressed names and checksum comments.
+- Identical bodies and titles are not rewritten. Generated macros explicitly declare schema version 1. Storage comparisons ignore server-generated macro IDs, XML namespace declaration placement, and an explicit page-link space key equal to the configured space (equivalent to a relative reference). Other space keys, schema versions, content, macro parameters, and whitespace are not ignored. Identical attachments are recognized by their content-addressed names and checksum comments.
 - Managed pages are discovered by traversing paginated direct page children. The root registry additionally checks registered pages, including those moved outside the managed tree.
 - A title conflict with an unrelated page, unexpected parent, missing registered page, weakened edit restriction, or HTTP version conflict stops publication.
 - MDU never guesses renames. A moved or renamed source path becomes a new managed page; the old page is retained and reported as stale.
@@ -106,6 +106,10 @@ New pages remain readable only by the publisher until their content and edit pro
 - A whole publication is not transactional. Existing readers can see a mixture of old and new pages during deployment.
 - Partial runs normally resume without duplicates. If initial creation succeeds but writing the ownership property fails, MDU deliberately refuses to adopt the unmarked placeholder on retry. An administrator must inspect and remove that specific placeholder before retrying.
 - Restoring a deleted or moved managed page is an administrative recovery action, not an automatic import into another location.
+- A source hierarchy change can also cause a parent mismatch without changing the logical page path, for example when adding a folder's `README.md`. MDU deliberately does not move existing pages automatically. Restore the previous source hierarchy, or publish under a new export ID and have an administrator retire the old export after verification.
+- Do not manually delete stale managed pages to clean up an active export. Their registry entries remain intentionally: a missing page cannot be distinguished safely from lost view permissions. Restore the registered page with its original ID and access, or publish a new export identity if the old export cannot be recovered. Registry entries are not automatically pruned.
+
+An unchanged export still performs GET requests to validate space, ancestry, ownership, edit protection, and attachment checksums. Zero writes does not mean zero network traffic. These checks are retained rather than replaced by a persistent cache that could miss administrative changes; actual latency depends on the page count and the installation.
 
 Run only **one publisher per target at a time**. Use CI concurrency/resource groups; the command does not provide a distributed lock across pipelines or repositories.
 
@@ -130,11 +134,14 @@ The mirror uses Confluence's storage format, not a copy of the complete HTML web
 | Hero, icon search, unsupported diagrams, isometric animation | Source code with an explicit diagnostic |
 | Dashboard layout | Ordinary Markdown content, with an explicit diagnostic |
 | Raw HTML in Markdown | Escaped text with an explicit diagnostic |
+| HTML comments in Markdown | Omitted; comment syntax inside code blocks and inline code is preserved |
 | Website navigation, theme, search, scripts | Not transferred; Confluence provides its own interface |
 
 Inline OpenAPI specifications have no separate original file attachment. Generated interactive OpenAPI controls become static content; collapsible details are expanded. SVG display and link behavior depend on the target installation and must be checked in the pilot.
 
-Local links must resolve inside the export tree. Local link query strings, protocol-relative URLs, unsafe URL schemes, missing files, attachments outside their source root, and symlink attachments are rejected before publishing. Imported assets may stay inside their imported repository root.
+Local links must resolve inside the export tree. Local link query strings, protocol-relative URLs, unsafe URL schemes, missing files, attachments outside their source root, and symlink attachments are rejected before publishing. Imported assets may stay inside their imported repository root. Attachment boundaries use both operating-system path separators, including Windows.
+
+Internal diagram links are prepared as logical page references, then resolved to Confluence page-ID URLs after the managed pages are known, before SVG upload. The resulting SVG is content-addressed again and its attachment references are updated. Page titles and export identities remain unchanged. Dry-run resolves existing targets without creating pages; the provisional references for new pages are never uploaded. Page-ID links avoid the special-character limitations of the old `/display/SPACE/Title` URL format. See Atlassian's [page URL formats](https://support.atlassian.com/confluence/kb/the-differences-between-various-url-formats-for-a-confluence-page/).
 
 ## Pipeline examples
 

@@ -60,6 +60,9 @@ jobs:
     - name: Test case-only page rename, PDF selection, and generated file handling
       run: dotnet test Source/Mdu.Test/Mdu.Test.csproj --configuration Release --filter "FullyQualifiedName~PageCommandTest.RenamesAPageWhenOnlyTheCaseChanges|FullyQualifiedName~PageCommandTest.CaseOnlyRenameDoesNotResolveCaseDifferentAncestorsOutsideDocsRoot|FullyQualifiedName~PdfCommandTest|FullyQualifiedName~SitePdfTest" --blame-hang --blame-hang-timeout 2m
 
+    - name: Test Confluence attachment path boundaries on Windows
+      run: dotnet test Source/Markdown.Confluence.Test/Markdown.Confluence.Test.csproj --configuration Release --filter "FullyQualifiedName~RejectsRealAttachmentsOutsideSourceRootOnEveryPlatform"
+
   native-aot-smoke:
     runs-on: ubuntu-22.04
 

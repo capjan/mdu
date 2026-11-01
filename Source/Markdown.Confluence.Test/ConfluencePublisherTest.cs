@@ -4,10 +4,11 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Xml.Linq;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Markdown.Confluence.Test;
 
-public class ConfluencePublisherTest
+public class ConfluencePublisherTest(ITestOutputHelper testOutput)
 {
     private static ConfluenceTarget Target(string? parent = "10") => new("https://wiki.example.test/confluence", "DOC", parent);
     private static ConfluenceSource[] Sources() =>
@@ -253,6 +254,140 @@ public class ConfluencePublisherTest
         Assert.All(server.Pages.Values.Where(page => page.Id != "10"), page => Assert.True(page.Private));
     }
 
+    [Fact]
+    public async Task SameSpaceResourceNormalizationDoesNotRewriteUnchangedPages()
+    {
+        var server = new FakeConfluence { NormalizeStorage = storage => NormalizeResources(storage, "DOC", "1") };
+        using var client = new ConfluenceClient(Target(), "test-pat", server);
+        var publisher = new ConfluencePublisher(client, TextWriter.Null);
+        await publisher.Publish(Sources(), false);
+        server.Writes.Clear();
+        await publisher.Publish(Sources(), true);
+        await publisher.Publish(Sources(), false);
+        Assert.Empty(server.Writes);
+    }
+
+    [Theory]
+    [InlineData("OTHER", "1")]
+    [InlineData("DOC", "2")]
+    public async Task ChangedLinkSpaceOrMacroSchemaStillFailsVerification(string space, string schema)
+    {
+        var server = new FakeConfluence { NormalizeStorage = storage => NormalizeResources(storage, space, schema) };
+        using var client = new ConfluenceClient(Target(), "test-pat", server);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new ConfluencePublisher(client, TextWriter.Null).Publish(Sources(), false));
+        Assert.All(server.Pages.Values.Where(page => page.Id != "10"), page => Assert.True(page.Private));
+    }
+
+    [Fact]
+    public async Task LiftingReadRestrictionsPreservesPublisherOnlyEditProtection()
+    {
+        var server = new FakeConfluence();
+        using var client = new ConfluenceClient(Target(), "test-pat", server);
+        await client.Preflight(default);
+        var root = await client.CreatePage(Target().RootTitle, "10", "$root", default);
+        var id = root["id"]!.GetValue<string>();
+        Assert.True(server.Pages[id].Private);
+        Assert.True(server.Pages[id].EditProtected);
+        server.Writes.Clear();
+        await client.PublishVisibility(id, "$root", default);
+        Assert.False(server.Pages[id].Private);
+        Assert.True(server.Pages[id].EditProtected);
+        Assert.Single(server.Writes);
+    }
+
+    [Fact]
+    public async Task ChangedSourceParentStopsBeforeWrites()
+    {
+        var server = new FakeConfluence();
+        using var client = new ConfluenceClient(Target(), "test-pat", server);
+        var publisher = new ConfluencePublisher(client, TextWriter.Null);
+        await publisher.Publish(Sources(), false);
+        var sources = Sources().Append(new ConfluenceSource("Section.md", "README.md", "Section",
+            "# Section", "/docs/Section.md", "/docs")).ToArray();
+        sources[1] = sources[1] with { ParentPath = "Section.md" };
+        server.Writes.Clear();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => publisher.Publish(sources, false));
+        Assert.Empty(server.Writes);
+    }
+
+    [Fact]
+    public async Task DeletedStaleRegisteredPageStopsWithRecoveryDiagnosticBeforeWrites()
+    {
+        var server = new FakeConfluence();
+        using var client = new ConfluenceClient(Target(), "test-pat", server);
+        var publisher = new ConfluencePublisher(client, TextWriter.Null);
+        await publisher.Publish(Sources(), false);
+        var stale = server.Pages.Values.Single(page => page.Owner?["path"]?.GetValue<string>() == "Next.md");
+        server.Pages.Remove(stale.Id);
+        server.Writes.Clear();
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            publisher.Publish([Sources()[0] with { Markdown = "# Home" }], false));
+        Assert.Contains("Next.md", error.Message);
+        Assert.Contains("missing or inaccessible", error.Message);
+        Assert.Empty(server.Writes);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UnchangedSubtreeReadCostIsBoundedAndNoWritesAreSent(bool withAttachment)
+    {
+        var server = new FakeConfluence();
+        using var client = new ConfluenceClient(Target(), "test-pat", server);
+        var publisher = new ConfluencePublisher(client, TextWriter.Null);
+        var sources = Sources();
+        ConfluenceAsset? pdf = null;
+        if (withAttachment)
+        {
+            sources[0] = sources[0] with { Markdown = sources[0].Markdown + "\n\n[PDF](mdu:pdf)" };
+            pdf = new ConfluenceAsset("mdu-test.pdf", [1, 2, 3], false);
+        }
+        await publisher.Publish(sources, false, pdf: pdf);
+        server.Reads.Clear();
+        server.Writes.Clear();
+        await publisher.Publish(sources, false, pdf: pdf);
+        Assert.InRange(server.Reads.Count, 1, 100);
+        Assert.Empty(server.Writes);
+        testOutput.WriteLine($"Unchanged export: {server.Reads.Count} GET requests for 2 pages, root, registry and {(withAttachment ? 1 : 0)} attachments.");
+    }
+
+    [Fact]
+    public async Task DiagramAttachmentsUsePageIdLinksAndRemainStableAcrossRuns()
+    {
+        var server = new FakeConfluence();
+        using var client = new ConfluenceClient(Target(), "test-pat", server);
+        var publisher = new ConfluencePublisher(client, TextWriter.Null);
+        var sources = Sources();
+        sources[0] = sources[0] with
+        {
+            Markdown = "# Home\n\n```mermaid\nflowchart LR\nA --> B\nclick A href \"Next.md#details\"\n```"
+        };
+        await publisher.Publish(sources, false);
+        var next = server.Pages.Values.Single(page => page.Owner?["path"]?.GetValue<string>() == "Next.md");
+        var svg = XElement.Parse(Encoding.UTF8.GetString(Assert.Single(server.UploadedFiles.Values)));
+        var href = svg.Descendants().Attributes("href").Single().Value;
+        Assert.StartsWith($"https://wiki.example.test/confluence/pages/viewpage.action?pageId={next.Id}#", href);
+        Assert.EndsWith("-details", href);
+        Assert.DoesNotContain("mdu-confluence-page:", href);
+        server.Writes.Clear();
+        await publisher.Publish(sources, true);
+        await publisher.Publish(sources, false);
+        Assert.Empty(server.Writes);
+    }
+
+    private static string NormalizeResources(string storage, string space, string schema)
+    {
+        XNamespace ac = "http://atlassian.com/content";
+        XNamespace ri = "http://atlassian.com/resource/identifier";
+        var root = XElement.Parse("<root xmlns:ac=\"http://atlassian.com/content\" xmlns:ri=\"http://atlassian.com/resource/identifier\">" +
+            AddMacroIds(storage) + "</root>", LoadOptions.PreserveWhitespace);
+        foreach (var macro in root.Descendants(ac + "structured-macro"))
+            macro.SetAttributeValue(ac + "schema-version", schema);
+        foreach (var page in root.Descendants(ri + "page"))
+            page.SetAttributeValue(ri + "space-key", space == "DOC" ? null : space);
+        return string.Concat(root.Nodes().Select(node => node.ToString(SaveOptions.DisableFormatting)));
+    }
+
     private static string AddMacroIds(string storage)
     {
         XNamespace ac = "http://atlassian.com/content";
@@ -318,7 +453,9 @@ internal sealed class FakeConfluence : HttpMessageHandler
 
     public Dictionary<string, Page> Pages { get; } = new(StringComparer.Ordinal);
     public List<string> Writes { get; } = [];
+    public List<string> Reads { get; } = [];
     public Dictionary<string, JsonObject> Attachments { get; } = new(StringComparer.Ordinal);
+    public Dictionary<string, byte[]> UploadedFiles { get; } = new(StringComparer.Ordinal);
     public bool IgnoreCreationRestrictions;
     public bool IgnoreRestrictionUpdates;
     public bool FailNextUpdate;
@@ -339,6 +476,7 @@ internal sealed class FakeConfluence : HttpMessageHandler
         var query = request.RequestUri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries)
             .Select(part => part.Split('=', 2)).ToDictionary(parts => parts[0], parts => Uri.UnescapeDataString(parts.ElementAtOrDefault(1) ?? ""));
         var read = request.Method == HttpMethod.Get;
+        if (read) Reads.Add(request.RequestUri.PathAndQuery);
         if (!read) Writes.Add(request.Method.Method + " " + request.RequestUri.AbsolutePath);
         JsonNode? payload = null;
         if (request.Content is not null && request.Content.Headers.ContentType?.MediaType == "application/json")
@@ -399,6 +537,7 @@ internal sealed class FakeConfluence : HttpMessageHandler
             var file = form.Single(part => part.Headers.ContentDisposition?.Name?.Trim('"') == "file");
             var comment = await form.Single(part => part.Headers.ContentDisposition?.Name?.Trim('"') == "comment").ReadAsStringAsync(cancellationToken);
             var name = file.Headers.ContentDisposition!.FileName!.Trim('"');
+            UploadedFiles[current.Id + "/" + name] = await file.ReadAsByteArrayAsync(cancellationToken);
             var attachment = new JsonObject
             {
                 ["id"] = (++_id).ToString(), ["title"] = name,

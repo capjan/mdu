@@ -100,7 +100,9 @@ public sealed class ConfluenceClient : IDisposable
             var value = property["value"] as JsonObject ?? throw new InvalidOperationException("Invalid Confluence page registry.");
             var path = RequiredText(value, "path");
             var id = RequiredText(value, "id");
-            var page = await ReadPage(id, cancellationToken);
+            ConfluenceTarget.ValidateId(id);
+            var page = await Request(HttpMethod.Get, $"content/{id}?expand={Expansion}", null, cancellationToken, allowNotFound: true) ??
+                throw new InvalidOperationException($"Registered Confluence page '{path}' (ID {id}) is missing or inaccessible. Restore the page or its access before retrying; registry entries are not removed automatically.");
             CheckPage(page, id);
             CheckOwner(page, path);
             if (managed.TryGetValue(path, out var found) && RequiredText(found, "id") != id)
@@ -172,7 +174,7 @@ public sealed class ConfluenceClient : IDisposable
         }, cancellationToken);
         page = await AssertManaged(id, path, cancellationToken);
         CheckParent(page, parentId);
-        if (Text(page, "title") != title || !ConfluenceStorage.AreEquivalent(Storage(page), storage))
+        if (Text(page, "title") != title || !ConfluenceStorage.AreEquivalent(Storage(page), storage, Target.SpaceKey))
             throw new InvalidOperationException($"Confluence did not preserve the published content of page {id}.");
         return page;
     }

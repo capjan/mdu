@@ -17,6 +17,7 @@ public sealed class ConfluenceStorageRenderer
 {
     private static readonly XNamespace Ac = "http://atlassian.com/content";
     private static readonly XNamespace Ri = "http://atlassian.com/resource/identifier";
+    private const string PageLinkPrefix = "mdu-confluence-page:";
     private static readonly Lazy<string> DiagramStyles = new(() =>
     {
         using var stream = typeof(Renderer.HtmlRenderer).Assembly.GetManifestResourceStream("Markdown.Renderer.Res.Css.main.css")
@@ -27,6 +28,7 @@ public sealed class ConfluenceStorageRenderer
     private readonly ConfluenceTarget _target;
     private readonly IReadOnlyDictionary<string, ConfluenceSource> _sources;
     private readonly Dictionary<string, ConfluenceSource> _linkSources = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _diagramAssets = new(StringComparer.Ordinal);
     private readonly MarkdownPipeline _pipeline;
     private readonly ConfluenceAsset? _pdf;
 
@@ -93,10 +95,59 @@ public sealed class ConfluenceStorageRenderer
         var parsed = Markdig.Markdown.Parse(markdown, _pipeline);
         var spans = parsed.Descendants().Where(node => node is HtmlBlock or HtmlInline)
             .Select(node => node.Span).OrderByDescending(span => span.Start).ToArray();
-        if (spans.Length > 0) diagnostics.Add("Raw source HTML is exported as text, not executed.");
         foreach (var span in spans)
-            markdown = markdown[..span.Start] + HtmlEncoder.Default.Encode(markdown.Substring(span.Start, span.Length)) + markdown[(span.End + 1)..];
+        {
+            var html = Regex.Replace(markdown.Substring(span.Start, span.Length), @"<!--(?:.*?-->|.*\z)", "", RegexOptions.Singleline);
+            if (!string.IsNullOrWhiteSpace(html)) diagnostics.Add("Raw source HTML is exported as text, not executed.");
+            markdown = markdown[..span.Start] + HtmlEncoder.Default.Encode(html) + markdown[(span.End + 1)..];
+        }
         return markdown;
+    }
+
+    public ConfluenceDocument ResolvePageLinks(ConfluenceDocument document, IReadOnlyDictionary<string, string> pageIds)
+    {
+        var renamed = new Dictionary<string, string>(StringComparer.Ordinal);
+        var assets = new List<ConfluenceAsset>();
+        foreach (var asset in document.Assets)
+        {
+            if (!_diagramAssets.Contains(asset.Name))
+            {
+                assets.Add(asset);
+                continue;
+            }
+            var svg = XElement.Parse(Encoding.UTF8.GetString(asset.Content));
+            var links = svg.DescendantsAndSelf().Attributes().Where(attribute =>
+                attribute.Name.LocalName == "href" && attribute.Value.StartsWith(PageLinkPrefix, StringComparison.Ordinal)).ToArray();
+            if (links.Length == 0)
+            {
+                assets.Add(asset);
+                continue;
+            }
+            foreach (var link in links)
+            {
+                var parts = link.Value[PageLinkPrefix.Length..].Split('#', 2);
+                var path = Uri.UnescapeDataString(parts[0]);
+                if (!_sources.ContainsKey(path) || !pageIds.TryGetValue(path, out var id))
+                    throw new InvalidOperationException($"Diagram link has no managed Confluence page ID: {path}");
+                ConfluenceTarget.ValidateId(id);
+                link.Value = new Uri(_target.BaseUri, $"pages/viewpage.action?pageId={id}").AbsoluteUri +
+                    (parts.Length == 2 ? "#" + parts[1] : "");
+            }
+            var bytes = Encoding.UTF8.GetBytes(svg.ToString(SaveOptions.DisableFormatting));
+            var name = "mdu-" + ConfluenceTarget.Hash(bytes) + ".svg";
+            renamed.Add(asset.Name, name);
+            assets.Add(asset with { Name = name, Content = bytes });
+        }
+        if (renamed.Count == 0) return document;
+        var root = XElement.Parse("<root xmlns:ac=\"http://atlassian.com/content\" xmlns:ri=\"http://atlassian.com/resource/identifier\">" +
+            document.Storage + "</root>", LoadOptions.PreserveWhitespace);
+        foreach (var filename in root.Descendants(Ri + "attachment").Attributes(Ri + "filename"))
+            if (renamed.TryGetValue(filename.Value, out var name)) filename.Value = name;
+        return document with
+        {
+            Storage = string.Concat(root.Nodes().Select(node => node.ToString(SaveOptions.DisableFormatting))),
+            Assets = assets
+        };
     }
 
     private void Transform(XElement root, ConfluenceSource source, Dictionary<string, ConfluenceAsset> assets, List<string> diagnostics)
@@ -163,7 +214,7 @@ public sealed class ConfluenceStorageRenderer
             }
             if (tag == "div" && (element.Attribute("class")?.Value ?? "").Contains("markdown-alert", StringComparison.Ordinal))
             {
-                element.ReplaceWith(new XElement(Ac + "structured-macro", new XAttribute(Ac + "name", "panel"),
+                element.ReplaceWith(new XElement(Ac + "structured-macro", new XAttribute(Ac + "name", "panel"), new XAttribute(Ac + "schema-version", "1"),
                     new XElement(Ac + "rich-text-body", element.Nodes())));
                 continue;
             }
@@ -262,7 +313,9 @@ public sealed class ConfluenceStorageRenderer
         var root = Path.GetFullPath(source.SourceRoot);
         var file = Path.GetFullPath(path, Path.GetDirectoryName(source.FilePath)!);
         var relative = Path.GetRelativePath(root, file);
-        if (Path.IsPathRooted(relative) || relative == ".." || relative.StartsWith("../", StringComparison.Ordinal))
+        if (Path.IsPathRooted(relative) || relative == ".." ||
+            relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) ||
+            relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal))
             throw new InvalidOperationException("Attachment path escapes its source root.");
         for (FileSystemInfo? item = new FileInfo(file); item is not null; item = item switch
              {
@@ -290,6 +343,7 @@ public sealed class ConfluenceStorageRenderer
         if (image.DescendantsAndSelf().Any(element => element.Name.LocalName is "script" or "foreignObject" or "iframe" or "object" ||
             element.Attributes().Any(attribute => attribute.Name.LocalName.StartsWith("on", StringComparison.OrdinalIgnoreCase))))
             throw new InvalidOperationException("Active SVG content cannot be exported.");
+        var needsPageIds = false;
         foreach (var href in image.DescendantsAndSelf().Attributes().Where(attribute => attribute.Name.LocalName == "href"))
         {
             if (href.Value.StartsWith('#') && href.Parent?.Name.LocalName != "a" || External(href.Value, image: false)) continue;
@@ -300,7 +354,9 @@ public sealed class ConfluenceStorageRenderer
             var title = _target.PageTitle(destination);
             var fragment = parts.Length == 2 ? "#" + Uri.EscapeDataString(
                 string.Concat((title + "-" + Uri.UnescapeDataString(parts[1])).Where(character => !char.IsWhiteSpace(character)))) : "";
-            href.Value = new Uri(_target.BaseUri, $"display/{Uri.EscapeDataString(_target.SpaceKey)}/{Uri.EscapeDataString(title)}").AbsoluteUri + fragment;
+            // Page IDs are available after creation; resolve these references before attachment upload.
+            href.Value = PageLinkPrefix + Uri.EscapeDataString(destination.Path) + fragment;
+            needsPageIds = true;
         }
         XNamespace ns = "http://www.w3.org/2000/svg";
         foreach (var element in image.DescendantsAndSelf().Where(element => element.Name.Namespace == XNamespace.None))
@@ -312,6 +368,7 @@ public sealed class ConfluenceStorageRenderer
             (diagram ? DiagramStyles.Value : "")));
         var bytes = Encoding.UTF8.GetBytes(image.ToString(SaveOptions.DisableFormatting));
         var name = "mdu-" + ConfluenceTarget.Hash(bytes) + ".svg";
+        if (needsPageIds) _diagramAssets.Add(name);
         assets.TryAdd(name, new ConfluenceAsset(name, bytes, true));
         return new XElement(Ac + "image", Attachment(name));
     }
@@ -324,9 +381,9 @@ public sealed class ConfluenceStorageRenderer
         if (!_linkSources.TryAdd(path, source) && _linkSources[path].Path != source.Path)
             throw new InvalidOperationException($"Conflicting Confluence page link target: {path}");
     }
-    private static XElement Anchor(string id) => new(Ac + "structured-macro", new XAttribute(Ac + "name", "anchor"),
+    private static XElement Anchor(string id) => new(Ac + "structured-macro", new XAttribute(Ac + "name", "anchor"), new XAttribute(Ac + "schema-version", "1"),
         new XElement(Ac + "parameter", new XAttribute(Ac + "name", ""), id));
-    private static XElement CodeMacro(string text, string language) => new(Ac + "structured-macro", new XAttribute(Ac + "name", "code"),
+    private static XElement CodeMacro(string text, string language) => new(Ac + "structured-macro", new XAttribute(Ac + "name", "code"), new XAttribute(Ac + "schema-version", "1"),
         new XElement(Ac + "parameter", new XAttribute(Ac + "name", "language"), language.Length == 0 ? "none" : language),
         new XElement(Ac + "plain-text-body", new XCData(text)));
 }

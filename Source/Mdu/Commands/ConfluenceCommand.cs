@@ -66,7 +66,7 @@ public sealed class ConfluenceCommand(GraphBuilder graphBuilder)
             var markdown = page.ReadMarkdown();
             if (page.FrontMatter.Length > 0 && markdown.StartsWith(page.FrontMatter, StringComparison.Ordinal))
                 markdown = markdown[page.FrontMatter.Length..].TrimStart('\r', '\n');
-            if (page.FrontMatter.Contains("dashboard", StringComparison.Ordinal))
+            if (Dashboard.ReadFrontMatter(page.FrontMatter) is not null)
                 Console.WriteLine($"Warning: {path}: dashboard layout is not exported; its Markdown content is preserved.");
             result.Add(new ConfluenceSource(path, parentPath,
                 NavigationPage.RemoveIconShortcodes(string.IsNullOrWhiteSpace(page.Title) ? page.FileInfo.Name : page.Title),

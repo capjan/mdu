@@ -34,6 +34,69 @@ public class ConfluenceStorageRendererTest
     }
 
     [Fact]
+    public void OmitsSourceCommentsButPreservesCommentSyntaxInCodeAndOtherHtml()
+    {
+        var page = Source("""
+            # Home
+
+            <!-- markdownlint-disable -->
+
+            Visible <!-- private inline note --> text.
+
+            <!--
+            private multiline note
+            -->
+
+            <b>HTML remains text</b>
+
+            `<!-- literal inline code -->`
+
+            ```html
+            <!-- literal fenced code -->
+            ```
+            """);
+        var result = new ConfluenceStorageRenderer(Target, [page]).Render(page);
+        var text = Parse(result.Storage).Value;
+        Assert.DoesNotContain("markdownlint-disable", text);
+        Assert.DoesNotContain("private inline note", text);
+        Assert.DoesNotContain("private multiline note", text);
+        Assert.Contains("Visible  text.", text);
+        Assert.Contains("<!-- literal inline code -->", text);
+        Assert.Contains("<!-- literal fenced code -->", text);
+        Assert.Contains("<b>HTML remains text</b>", text);
+    }
+
+    [Theory]
+    [InlineData("../outside.txt")]
+    [InlineData("../docs-other/outside.txt")]
+    public void RejectsRealAttachmentsOutsideSourceRootOnEveryPlatform(string link)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "mdu-confluence-" + Guid.NewGuid().ToString("N"));
+        var docs = Path.Combine(directory, "docs");
+        Directory.CreateDirectory(docs);
+        Directory.CreateDirectory(Path.Combine(directory, "docs-other"));
+        try
+        {
+            File.WriteAllText(Path.Combine(directory, "outside.txt"), "must not be read");
+            File.WriteAllText(Path.Combine(directory, "docs-other", "outside.txt"), "must not be read");
+            var page = Source($"![Outside]({link})") with { FilePath = Path.Combine(docs, "README.md"), SourceRoot = docs };
+            var error = Assert.Throws<InvalidOperationException>(() => new ConfluenceStorageRenderer(Target, [page]).Render(page));
+            Assert.Equal("Attachment path escapes its source root.", error.Message);
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [Fact]
+    public void DeclaresSchemaVersionForEveryGeneratedMacro()
+    {
+        var page = Source("# Home\n\n```text\ncode\n```\n\n> [!NOTE]\n> Note");
+        XNamespace ac = "http://atlassian.com/content";
+        var macros = Parse(new ConfluenceStorageRenderer(Target, [page]).Render(page).Storage).Descendants(ac + "structured-macro").ToArray();
+        Assert.Equal(3, macros.Length);
+        Assert.All(macros, macro => Assert.Equal("1", macro.Attribute(ac + "schema-version")?.Value));
+    }
+
+    [Fact]
     public void PreservesUnsupportedInteractiveBlockAsSourceWithDiagnostic()
     {
         var page = Source("```hero\nscene: beach\n```");
@@ -163,10 +226,11 @@ public class ConfluenceStorageRendererTest
     {
         var home = Source("# Home") with { Path = rootPath };
         var page = Source($"```mermaid\nflowchart LR\nA --> B\nclick A href \"{link}#home\"\n```") with { Path = sourcePath };
-        var result = new ConfluenceStorageRenderer(Target, [home, page]).Render(page);
+        var renderer = new ConfluenceStorageRenderer(Target, [home, page]);
+        var result = renderer.ResolvePageLinks(renderer.Render(page), new Dictionary<string, string> { [home.Path] = "123", [page.Path] = "456" });
         var svg = XElement.Parse(System.Text.Encoding.UTF8.GetString(Assert.Single(result.Assets).Content));
         var href = svg.Descendants().Attributes("href").Single().Value;
-        Assert.Contains(Uri.EscapeDataString(Target.PageTitle(home)), href);
+        Assert.StartsWith("https://wiki.example.test/confluence/pages/viewpage.action?pageId=123#", href);
         Assert.EndsWith("-home", href);
     }
 
@@ -210,12 +274,49 @@ public class ConfluenceStorageRendererTest
     public void DiagramLinksUseConfluencePageTitlesAndNamedAnchors()
     {
         var page = Source("```mermaid\nflowchart LR\nA --> B\nclick A href \"#home\"\n```");
-        var result = new ConfluenceStorageRenderer(Target, [page]).Render(page);
+        var renderer = new ConfluenceStorageRenderer(Target, [page]);
+        var result = renderer.ResolvePageLinks(renderer.Render(page), new Dictionary<string, string> { [page.Path] = "123" });
         var svg = XElement.Parse(System.Text.Encoding.UTF8.GetString(Assert.Single(result.Assets).Content));
         var href = svg.Descendants().Attributes("href").Single().Value;
-        Assert.StartsWith("https://wiki.example.test/confluence/display/DOC/", href);
+        Assert.StartsWith("https://wiki.example.test/confluence/pages/viewpage.action?pageId=123#", href);
         Assert.EndsWith("-home", href);
         Assert.Contains(Uri.EscapeDataString(Target.PageTitle(page).Replace(" ", "")), href);
+    }
+
+    [Fact]
+    public void DiagramPageIdBindingRequiresKnownValidIdsAndRehashesAttachmentReferences()
+    {
+        var page = Source("```mermaid\nflowchart LR\nA --> B\nclick A href \"#home\"\n```");
+        var renderer = new ConfluenceStorageRenderer(Target, [page]);
+        var prepared = renderer.Render(page);
+        Assert.Throws<InvalidOperationException>(() => renderer.ResolvePageLinks(prepared, new Dictionary<string, string>()));
+        Assert.Throws<InvalidOperationException>(() => renderer.ResolvePageLinks(prepared, new Dictionary<string, string> { [page.Path] = "../OTHER" }));
+        var resolved = renderer.ResolvePageLinks(prepared, new Dictionary<string, string> { [page.Path] = "123" });
+        var asset = Assert.Single(resolved.Assets);
+        Assert.NotEqual(Assert.Single(prepared.Assets).Name, asset.Name);
+        Assert.Equal("mdu-" + Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(asset.Content)) + ".svg", asset.Name);
+        XNamespace ri = "http://atlassian.com/resource/identifier";
+        Assert.Equal(asset.Name, Parse(resolved.Storage).Descendants(ri + "attachment").Single().Attribute(ri + "filename")?.Value);
+        Assert.Equal(resolved, renderer.ResolvePageLinks(resolved, new Dictionary<string, string> { [page.Path] = "123" }));
+    }
+
+    [Fact]
+    public void PageIdBindingDoesNotParseOrRewriteSourceAttachments()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "mdu-confluence-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            const string content = "An attachment, not generated SVG XML: mdu-confluence-page:README.md";
+            File.WriteAllText(Path.Combine(directory, "download.svg"), content);
+            var page = Source("[Download](download.svg)") with { FilePath = Path.Combine(directory, "README.md"), SourceRoot = directory };
+            var renderer = new ConfluenceStorageRenderer(Target, [page]);
+            var prepared = renderer.Render(page);
+            var resolved = renderer.ResolvePageLinks(prepared, new Dictionary<string, string> { [page.Path] = "123" });
+            Assert.Equal(prepared, resolved);
+            Assert.Equal(content, System.Text.Encoding.UTF8.GetString(Assert.Single(resolved.Assets).Content));
+        }
+        finally { Directory.Delete(directory, recursive: true); }
     }
 
     private static ConfluenceSource Source(string markdown) => new("README.md", null, "Home", markdown, "/docs/README.md", "/docs");
