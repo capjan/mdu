@@ -253,16 +253,18 @@
     const brandLogo = document.querySelector(".site-brand-logo");
     const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
     const isDark = () => root.dataset.theme === "dark" || root.dataset.theme === "auto" && systemDark.matches;
-    // On a page with a full-width hero both logo variants are in the header, so the logo can fade between them.
-    const darkLogo = brandLogo && document.querySelector(".hero-full") ? brandLogo.cloneNode() : null;
+    // A playground can promote a content-width hero; keep both logo variants ready on any hero page.
+    const darkLogo = brandLogo && document.querySelector(".hero") ? brandLogo.cloneNode() : null;
     if (darkLogo) {
         brandLogo.src = brandLogo.dataset.lightSrc;
         darkLogo.src = brandLogo.dataset.darkSrc;
         brandLogo.after(darkLogo);
     }
-    // Over a full-width hero the header is transparent, so the logo uses its light-on-dark variant there too.
+    // Beach banners keep white header text; abstract banners follow the site's light/dark palette.
     const updateLogo = () => {
-        const useDark = isDark() || root.classList.contains("is-over-hero");
+        const useDark = isDark() || root.classList.contains("is-over-hero") &&
+            document.querySelector('.hero-full[data-hero-scene="beach"]') !== null &&
+            document.querySelector(".site-layout.sidebar-open") === null;
         if (darkLogo) {
             brandLogo.classList.toggle("is-hidden-variant", useDark);
             darkLogo.classList.toggle("is-hidden-variant", !useDark);
@@ -271,6 +273,12 @@
         }
     };
     if (darkLogo) new MutationObserver(updateLogo).observe(root, { attributes: true, attributeFilter: ["class"] });
+    const heroLogoObserver = new MutationObserver(updateLogo);
+    document.querySelectorAll(".hero").forEach(hero =>
+        heroLogoObserver.observe(hero, { attributes: true, attributeFilter: ["data-hero-scene"] }));
+    document.addEventListener("mdu:hero-layout", updateLogo);
+    new MutationObserver(() => { updateThemeLabel(); updateLogo(); })
+        .observe(root, { attributes: true, attributeFilter: ["data-theme"] });
 
     updateThemeLabel();
     updateLogo();
@@ -287,6 +295,7 @@
     systemDark.addEventListener("change", updateLogo);
 
     const layout = document.getElementById("site-layout");
+    if (darkLogo) new MutationObserver(updateLogo).observe(layout, { attributes: true, attributeFilter: ["class"] });
     const header = document.getElementById("site-header");
     const toggle = document.getElementById("navigation-toggle");
     const backdrop = document.getElementById("sidebar-backdrop");
@@ -509,14 +518,12 @@
     const topNavigation = document.querySelector(".top-navigation");
     const breadcrumbs = document.querySelector(".breadcrumbs");
     const pageHeading = document.querySelector(".markdown-content h1");
-    const hero = document.querySelector(".hero-full");
+    let hero = null, heroContent = null, heroFadeHeight = 0;
     // Browsers with scroll-driven animations move the cut-off edge of the hero content in CSS.
-    const heroContent = CSS.supports("animation-timeline: view()") ? null : hero?.querySelector(".hero-content");
-    // The bars stay transparent only above the hero's scene, not above its fade into the page.
-    const heroFadeHeight = hero ? parseFloat(getComputedStyle(hero, "::after").height) || 0 : 0;
+    const hasHeroTimeline = CSS.supports("animation-timeline: view()");
     const initialHeaderBottom = header?.getBoundingClientRect().bottom ?? 0;
     const initialNavigationBottom = topNavigation?.getBoundingClientRect().bottom ?? initialHeaderBottom;
-    const breadcrumbFadeDistance = breadcrumbs
+    let breadcrumbFadeDistance = breadcrumbs
         ? Math.max(1, breadcrumbs.getBoundingClientRect().top - Math.max(initialHeaderBottom, initialNavigationBottom))
         : 24;
     const links = toc ? Array.from(toc.querySelectorAll(".toc-link")) : [];
@@ -589,11 +596,18 @@
     // The header bars turn transparent while a full-width hero lies under them, and the hero content is cut off
     // at their lower edge.
     const updateHeroUnderHeader = () => {
-        if (!hero) return;
+        const fullHero = document.querySelector(".hero-full");
+        if (fullHero !== hero) {
+            heroContent?.style.removeProperty("--hero-cut");
+            hero = fullHero;
+            heroContent = hasHeroTimeline ? null : hero?.querySelector(".hero-content");
+            // The bars stay transparent only above the scene, not above its fade into the page.
+            heroFadeHeight = hero ? parseFloat(getComputedStyle(hero, "::after").height) || 0 : 0;
+        }
         // The bars' full height, also while the navigation slides away: hiding it moves the hero, and a test against
         // its current position would switch the state back and forth.
         const topBarBottom = header.offsetHeight + (topNavigation?.offsetHeight ?? 0);
-        const overHero = hero.getBoundingClientRect().bottom - heroFadeHeight > topBarBottom;
+        const overHero = hero !== null && hero.getBoundingClientRect().bottom - heroFadeHeight > topBarBottom;
         if (overHero !== document.documentElement.classList.contains("is-over-hero")) {
             document.documentElement.classList.add("is-hero-switching");
             window.clearTimeout(heroSwitchTimer);
@@ -661,6 +675,11 @@
     window.addEventListener("scroll", scheduleScrollUpdate, { passive: true });
     window.addEventListener("resize", scheduleScrollUpdate);
     window.addEventListener("load", scheduleScrollUpdate);
+    document.addEventListener("mdu:hero-layout", () => {
+        if (breadcrumbs) breadcrumbFadeDistance = Math.max(1,
+            breadcrumbs.getBoundingClientRect().top + window.scrollY - header.offsetHeight - (topNavigation?.offsetHeight ?? 0));
+        scheduleScrollUpdate();
+    });
     // The first state is set without transitions, so the bars do not fade from solid to transparent on load.
     document.documentElement.classList.add("is-hero-settling");
     updateHeroUnderHeader();

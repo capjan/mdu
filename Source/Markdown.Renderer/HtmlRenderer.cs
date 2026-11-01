@@ -179,9 +179,9 @@ public class HtmlRenderer
         var hasIconSearch = document.Descendants<FencedCodeBlock>()
             .Any(block => block.Info == IconSearch.CodeBlockLanguage);
         if (hasIconSearch) EnsureIconSearchAssets();
-        var hasHero = document.Descendants<FencedCodeBlock>()
-            .Any(block => block.Info == Hero.CodeBlockLanguage);
         var renderedMarkdown = dashboard is null ? document.ToHtml(_pipeline) : Dashboard.Render(document, _pipeline, dashboard);
+        var hasHero = renderedMarkdown.Contains(" data-hero-scene=\"", StringComparison.Ordinal);
+        var heroScripts = hasHero ? Hero.ScriptsFor(renderedMarkdown) : string.Empty;
         // Only rendered phase controls need the playback script, not diagrams without phases or invalid ones.
         var hasIsometricDiagram = renderedMarkdown.Contains(DiagramRenderer.IsometricPhaseControlsMarker, StringComparison.Ordinal);
         renderedMarkdown = MediaLinkEmbedder.ReplaceStandaloneLinks(renderedMarkdown, out var mediaProviders);
@@ -284,7 +284,7 @@ public class HtmlRenderer
                     : string.Empty)
                 + (providersForSettings.Count > 0 ? $"<script>{MediaLinkEmbedder.Script}</script>{Environment.NewLine}" : string.Empty)
                 + (hasOpenApiInteractiveContent ? $"<script>{OpenApiResponseScript}</script>{Environment.NewLine}" : string.Empty)
-                + (hasHero ? $"<script>{Hero.Script}</script>{Environment.NewLine}" : string.Empty)
+                + (hasHero ? $"<script>{heroScripts}</script>{Environment.NewLine}" : string.Empty)
                 + (dashboard is null ? string.Empty : $"<script>{Dashboard.Script}</script>{Environment.NewLine}")
                 + (hasIsometricDiagram ? $"<script>{Resources.IsometricDiagramScriptContent()}</script>{Environment.NewLine}" : string.Empty)
         };

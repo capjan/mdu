@@ -24,6 +24,9 @@
       <EmbeddedResource Include="Res\Js\icon-search.js" />
       <None Remove="Res\Js\hero-beach.js" />
       <EmbeddedResource Include="Res\Js\hero-beach.js" />
+      <EmbeddedResource Include="Res\Js\hero.js" />
+      <EmbeddedResource Include="Res\Js\hero-effects.js" />
+      <EmbeddedResource Include="Res\Js\hero-playground.js" />
       <None Remove="Res\Js\dashboard.js" />
       <EmbeddedResource Include="Res\Js\dashboard.js" />
       <None Remove="Res\Js\isometric-diagram.js" />

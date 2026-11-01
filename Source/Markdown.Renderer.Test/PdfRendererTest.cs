@@ -7,6 +7,35 @@ namespace Markdown.Renderer.Test;
 public class PdfRendererTest
 {
     [Fact]
+    public void KeepsHeroContentButOmitsShaderAndPlaygroundControlsInPdf()
+    {
+        using var output = new MemoryStream();
+        new PdfRenderer(new HtmlRenderer()).WritePdf(output, "Hero",
+            [new PdfSourceSection("Hero", "index.html", """
+                # Hero
+
+                ```hero
+                title: BannerTitleQ7
+                text: BannerTextQ7
+                effect: shader
+                playground: true
+                shader: |
+                  // ShaderSentinelQ7 < & >
+                  void mainImage(out vec4 c, in vec2 p) { c = vec4(1.0); }
+                actions:
+                  - text: BannerActionQ7
+                    link: https://example.com
+                ```
+                """)], includeFrontMatter: false);
+
+        var pdf = Encoding.Latin1.GetString(output.ToArray());
+        foreach (var text in new[] { "BannerTitleQ7", "BannerTextQ7", "BannerActionQ7" })
+            Assert.Contains(Convert.ToHexString(Encoding.ASCII.GetBytes(text)), pdf);
+        foreach (var text in new[] { "ShaderSentinelQ7", "fragment shader", "Try a hero effect", "Apply shader", "Copy YAML" })
+            Assert.DoesNotContain(Convert.ToHexString(Encoding.ASCII.GetBytes(text)), pdf);
+    }
+
+    [Fact]
     public void CompositeStatePdfLinkCoversItsWholeFrameAndKeepsTheChildDestination()
     {
         var document = new System.Xml.XmlDocument();
