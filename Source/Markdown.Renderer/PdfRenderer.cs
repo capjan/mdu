@@ -252,6 +252,9 @@ internal sealed class PdfLayout
                     headingRuns.Insert(0, new PdfRun(string.Empty, headingStyle, Anchor: element.GetAttribute("id")));
                 WriteParagraph(headingRuns, headingSize, indent, 11, 5, keepTogether: true);
                 return;
+            case "p" when HasClass(element, "hero-error"):
+            case "template":
+                return;
             case "p":
                 WriteParagraph(ReadInlineRuns(element.ChildNodes.Cast<XmlNode>(), PdfTextStyle.Body, _sectionPath),
                     10.5, indent, 4, 8, keepTogether: HasClass(element, "markdown-alert-title"));

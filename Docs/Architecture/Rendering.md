@@ -72,7 +72,9 @@ Every page links the shared `css/main.css`. Everything else is added only to the
 | --- | --- |
 | `js/search.js` and `search-index.json` | Always; the search runs directly in the browser |
 | Icon search script and index in `js/` | A page contains an `icon-search` block |
-| Hero styles and WebGL scene, inline | A page contains a `hero` block |
+| Hero styles and shared WebGL runtime, inline | A page contains a `hero` block |
+| Beach or abstract Hero effects, inline | A banner uses that effect group; playgrounds include both |
+| Hero playground controls, inline | A banner has `playground: true` |
 | Media consent script, inline | A page contains a standalone YouTube or Vimeo link |
 | Logo and favicon assets from `mdu.yml` | A logo or favicon is configured |
 
@@ -104,6 +106,10 @@ The generated pages are self-contained static HTML. Small inline scripts add:
 - the consent dialog for embedded videos.
 
 Theme colors from `mdu.yml` become CSS custom properties. Secondary colors, lines, and hover backgrounds are mixed from them in CSS, so a custom palette stays consistent.
+
+The header contains both configured logo variants when they differ. CSS selects the current theme's variant before the first paint, without cloning or swapping images in JavaScript. A full-width beach overrides that selection only while it lies under the transparent header and the mobile navigation drawer is closed; abstract and content-width heroes keep the normal theme selection.
+
+Hero effects share one WebGL lifecycle for lazy initialization, resizing, animation, visibility, reduced motion, and context recovery. The beach supplies its existing shader and lighting uniforms; abstract effects use the site's background and text palette. Custom fragment shaders are HTML-encoded inside inert `<template>` elements, never interpolated into executable JavaScript. Only the optional playground exposes editing controls; it uses the same runtime as ordinary banners. Live appearance changes update uniforms without rebuilding the program. A full-width playground leaves an inert position template in the article. Its width switch moves the existing banner, canvas, and controls between that position and the header, preserving the WebGL controller and enforcing one full-width banner per page. A layout event updates header and scroll geometry; CSS reacts to the resulting state to select the logo. Secondary settings and YAML are collapsed initially; preview/return controls navigate to the actual banner without a second rendering context. Shader edits compile after a 300 ms typing pause; a replacement program is committed only after successful compilation and linking. Failed edits show an error and preserve the last valid preview. The [Hero feature page](../Features/Hero.md) is also its playground. PDF rendering skips these templates.
 
 ## PDF output
 

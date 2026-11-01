@@ -18,13 +18,26 @@ public static class Hero
     private static readonly Regex HexColorRegex = new("^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$", RegexOptions.Compiled);
     private static readonly string[] Times = ["auto", "day", "sunset", "night"];
     private static readonly string[] Qualities = ["auto", "low", "high"];
-    private static readonly string[] ColorNames = ["water", "shallow", "sand"];
+    private static readonly string[] Effects = ["beach", "connections", "flow", "voronoi", "shader"];
+    private static readonly string[] ColorNames = ["water", "shallow", "sand", "accent"];
     private static readonly string[] LinkSchemes = ["http", "https", "mailto"];
     private static readonly char[] ControlCharactersAndSpace = Enumerable.Range(0, 33).Select(c => (char)c).ToArray();
     private static readonly Regex SchemeRegex = new("^(?<scheme>[a-zA-Z][a-zA-Z0-9+.-]*):", RegexOptions.Compiled);
 
     public static string Styles => Resources.HeroCssContent();
-    public static string Script => Resources.HeroScriptContent();
+    public static string Script => Resources.HeroBeachScriptContent() + Resources.HeroEffectsScriptContent() + Resources.HeroScriptContent();
+
+    public static string ScriptsFor(string renderedHeroes)
+    {
+        var playground = renderedHeroes.Contains("class=\"hero-playground-template\"", StringComparison.Ordinal);
+        return (playground || renderedHeroes.Contains("data-hero-scene=\"beach\"", StringComparison.Ordinal)
+                ? Resources.HeroBeachScriptContent() : string.Empty)
+            + (playground || new[] { "connections", "flow", "voronoi" }.Any(effect =>
+                renderedHeroes.Contains($"data-hero-scene=\"{effect}\"", StringComparison.Ordinal))
+                ? Resources.HeroEffectsScriptContent() : string.Empty)
+            + Resources.HeroScriptContent()
+            + (playground ? Resources.HeroPlaygroundScriptContent() : string.Empty);
+    }
 
     public static string Render(string configuration)
     {
@@ -32,9 +45,17 @@ public static class Hero
         var width = Choose(ReadScalar(root, "width"), ["full", "content"]) == "full" ? "full" : "inline";
         var align = Choose(ReadScalar(root, "align"), ["left", "center"]);
         var height = (int)Math.Round(ReadNumber(root, "height", 520, 240, 1200));
+        var effect = ReadScalar(root, "effect")?.Trim().ToLowerInvariant() ?? "beach";
+        var shader = ReadScalar(root, "shader") ?? string.Empty;
+        var playground = bool.TryParse(ReadScalar(root, "playground"), out var interactive) && interactive;
+        var error = !Effects.Contains(effect) ? $"Unknown hero effect: {effect}. Choose beach, connections, flow, voronoi, or shader."
+            : effect == "shader" && string.IsNullOrWhiteSpace(shader) ? "The shader effect needs GLSL code in the shader option."
+            : effect == "shader" && shader.Length > 32768 ? "The hero shader must not exceed 32768 characters."
+            : string.Empty;
+        if (!Effects.Contains(effect)) effect = "invalid";
         var html = new StringBuilder();
         html.Append($"<section class=\"hero hero-{width} hero-align-{align}\" style=\"--hero-height: {height}px\"");
-        html.Append(" data-hero-scene=\"beach\"");
+        html.Append($" data-hero-scene=\"{effect}\"");
         html.Append($" data-hero-time=\"{Choose(ReadScalar(root, "time"), Times)}\"");
         html.Append($" data-hero-quality=\"{Choose(ReadScalar(root, "quality"), Qualities)}\"");
         html.Append($" data-hero-speed=\"{ReadNumber(root, "speed", 1, 0, 4).ToString(CultureInfo.InvariantCulture)}\"");
@@ -49,6 +70,8 @@ public static class Hero
         }
         html.AppendLine(">");
         html.AppendLine("<canvas class=\"hero-canvas\" aria-hidden=\"true\"></canvas>");
+        if (shader.Length > 0 && shader.Length <= 32768)
+            html.AppendLine($"<template class=\"hero-shader\">{HtmlEncoder.Default.Encode(shader)}</template>");
         html.AppendLine("<div class=\"hero-content\">");
 
         var title = ReadScalar(root, "title");
@@ -66,6 +89,7 @@ public static class Hero
             {
                 var external = Uri.TryCreate(action.Link, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https";
                 html.Append($"<a class=\"hero-button{(action.Primary ? " hero-button-primary" : string.Empty)}\" href=\"{HtmlEncoder.Default.Encode(RewriteMarkdownLink(action.Link))}\"");
+                if (playground) html.Append($" data-hero-link=\"{HtmlEncoder.Default.Encode(action.Link)}\"");
                 if (external) html.Append(" target=\"_blank\" rel=\"noopener noreferrer\"");
                 html.Append($">{HtmlEncoder.Default.Encode(action.Text)}</a>");
             }
@@ -73,6 +97,11 @@ public static class Hero
         }
 
         html.AppendLine("</div>");
+        html.Append($"<p class=\"hero-error\" role=\"status\"{(error.Length == 0 ? " hidden=\"hidden\"" : string.Empty)}>");
+        html.Append(HtmlEncoder.Default.Encode(error));
+        html.AppendLine("</p>");
+        if (playground)
+            html.AppendLine(PlaygroundTemplate);
         html.Append("</section>");
         return html.ToString();
     }
@@ -90,8 +119,11 @@ public static class Hero
         if (endIndex < 0) return string.Empty;
         endIndex += end.Length;
         var hero = renderedMarkdown[start..endIndex];
+        var position = hero.Contains("class=\"hero-playground-template\"", StringComparison.Ordinal)
+            ? "<template class=\"hero-content-position\"></template>" : string.Empty;
         // Only one hero can span the window; any further ones stay in the page text.
         renderedMarkdown = renderedMarkdown.Remove(start, endIndex - start)
+            .Insert(start, position)
             .Replace(FullWidthMarker, "<section class=\"hero hero-inline", StringComparison.Ordinal);
         return hero;
     }
@@ -179,6 +211,86 @@ public static class Hero
         mapping?.Children.TryGetValue(new YamlScalarNode(key), out var value) == true && value is YamlScalarNode scalar
             ? scalar.Value
             : null;
+
+    private const string PlaygroundTemplate = """
+        <template class="hero-playground-template">
+        <form class="hero-playground" aria-label="Hero playground">
+            <div class="hero-playground-toolbar">
+                <strong>Hero playground</strong>
+                <div class="hero-control-actions">
+                    <button type="button" name="preview">View preview</button>
+                    <button type="button" name="pause" aria-pressed="false">Pause</button>
+                    <button type="button" name="reset">Reset</button>
+                    <button type="button" name="copy" class="hero-copy">Copy YAML</button>
+                </div>
+            </div>
+            <fieldset>
+                <legend>Effect &amp; preview</legend>
+                <div class="hero-controls">
+                    <label>Effect<select name="effect">
+                        <option value="beach">Beach</option>
+                        <option value="connections">Connections</option>
+                        <option value="flow">Flow</option>
+                        <option value="voronoi">Voronoi</option>
+                        <option value="shader">Own shader (advanced)</option>
+                    </select></label>
+                    <label>Width<select name="width">
+                        <option value="full">Full width</option>
+                        <option value="content">Content width</option>
+                    </select></label>
+                    <label>Site theme<select name="theme">
+                        <option value="auto">Auto</option>
+                        <option value="light">Light</option>
+                        <option value="dark">Dark</option>
+                    </select></label>
+                    <label>Speed<input name="speed" type="range" min="0" max="4" step="0.1" /><output class="hero-speed"></output></label>
+                </div>
+            </fieldset>
+            <details class="hero-layout-options">
+                <summary>Text &amp; layout</summary>
+                <div class="hero-controls hero-content-controls">
+                    <label>Title<input name="title" type="text" /></label>
+                    <label>Description<input name="text" type="text" /></label>
+                </div>
+                <div class="hero-controls">
+                    <label>Height<input name="height" type="range" min="240" max="1200" step="10" /><output class="hero-height"></output></label>
+                    <label>Alignment<select name="align"><option value="left">Left</option><option value="center">Center</option></select></label>
+                    <label>Quality<select name="quality"><option value="auto">Auto</option><option value="low">Low</option><option value="high">High</option></select></label>
+                </div>
+            </details>
+            <details class="hero-appearance-options">
+                <summary>Scene &amp; colors</summary>
+                <fieldset class="hero-beach-controls" hidden="hidden">
+                    <legend>Beach scene</legend>
+                    <div class="hero-controls">
+                        <label>Lighting<select name="time">
+                            <option value="auto">Auto</option><option value="day">Day</option><option value="sunset">Sunset</option><option value="night">Night</option>
+                        </select></label>
+                        <label>Waves<input name="waves" type="range" min="0" max="2.5" step="0.1" /><output class="hero-waves"></output></label>
+                        <label>Water<input name="water" type="color" /></label>
+                        <label>Shallows<input name="shallow" type="color" /></label>
+                        <label>Sand<input name="sand" type="color" /></label>
+                    </div>
+                </fieldset>
+                <div class="hero-controls hero-color-controls">
+                    <label class="hero-accent-control">Accent<input name="accent" type="color" /></label>
+                    <button type="button" name="colorsReset">Use default colors</button>
+                </div>
+            </details>
+            <details class="hero-shader-editor" hidden="hidden">
+                <summary>Own shader (advanced)</summary>
+                <p>The example draws an animated hexagonal tunnel with depth and glowing edges. Edit it to make your own effect.</p>
+                <label>GLSL<textarea name="shader" rows="12" maxlength="32768" spellcheck="false"></textarea></label>
+                <p>Changes preview automatically after a short typing pause. Only run shaders you trust; expensive shaders can stall the GPU.</p>
+            </details>
+            <details class="hero-yaml-options">
+                <summary>Hero YAML</summary>
+                <label>Generated Markdown<textarea name="yaml" rows="8" readonly="readonly" spellcheck="false"></textarea></label>
+            </details>
+            <p class="hero-playground-status" role="status"></p>
+        </form>
+        </template>
+        """;
 
     private sealed record HeroAction(string Text, string Link, bool Primary);
 }

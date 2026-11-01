@@ -250,6 +250,9 @@
         themeToggle.setAttribute("aria-label", `Theme: ${themeNames[currentTheme]}. Click to switch to ${themeNames[nextTheme]}.`);
     };
 
+    new MutationObserver(updateThemeLabel)
+        .observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+
     updateThemeLabel();
     themeToggle.addEventListener("click", () => {
         const currentTheme = root.dataset.theme;
@@ -484,14 +487,12 @@
     const topNavigation = document.querySelector(".top-navigation");
     const breadcrumbs = document.querySelector(".breadcrumbs");
     const pageHeading = document.querySelector(".markdown-content h1");
-    const hero = document.querySelector(".hero-full");
+    let hero = null, heroContent = null, heroFadeHeight = 0;
     // Browsers with scroll-driven animations move the cut-off edge of the hero content in CSS.
-    const heroContent = CSS.supports("animation-timeline: view()") ? null : hero?.querySelector(".hero-content");
-    // The bars stay transparent only above the hero's scene, not above its fade into the page.
-    const heroFadeHeight = hero ? parseFloat(getComputedStyle(hero, "::after").height) || 0 : 0;
+    const hasHeroTimeline = CSS.supports("animation-timeline: view()");
     const initialHeaderBottom = header?.getBoundingClientRect().bottom ?? 0;
     const initialNavigationBottom = topNavigation?.getBoundingClientRect().bottom ?? initialHeaderBottom;
-    const breadcrumbFadeDistance = breadcrumbs
+    let breadcrumbFadeDistance = breadcrumbs
         ? Math.max(1, breadcrumbs.getBoundingClientRect().top - Math.max(initialHeaderBottom, initialNavigationBottom))
         : 24;
     const links = toc ? Array.from(toc.querySelectorAll(".toc-link")) : [];
@@ -564,11 +565,18 @@
     // The header bars turn transparent while a full-width hero lies under them, and the hero content is cut off
     // at their lower edge.
     const updateHeroUnderHeader = () => {
-        if (!hero) return;
+        const fullHero = document.querySelector(".hero-full");
+        if (fullHero !== hero) {
+            heroContent?.style.removeProperty("--hero-cut");
+            hero = fullHero;
+            heroContent = hasHeroTimeline ? null : hero?.querySelector(".hero-content");
+            // The bars stay transparent only above the scene, not above its fade into the page.
+            heroFadeHeight = hero ? parseFloat(getComputedStyle(hero, "::after").height) || 0 : 0;
+        }
         // The bars' full height, also while the navigation slides away: hiding it moves the hero, and a test against
         // its current position would switch the state back and forth.
         const topBarBottom = header.offsetHeight + (topNavigation?.offsetHeight ?? 0);
-        const overHero = hero.getBoundingClientRect().bottom - heroFadeHeight > topBarBottom;
+        const overHero = hero !== null && hero.getBoundingClientRect().bottom - heroFadeHeight > topBarBottom;
         if (overHero !== document.documentElement.classList.contains("is-over-hero")) {
             document.documentElement.classList.add("is-hero-switching");
             window.clearTimeout(heroSwitchTimer);
@@ -636,6 +644,11 @@
     window.addEventListener("scroll", scheduleScrollUpdate, { passive: true });
     window.addEventListener("resize", scheduleScrollUpdate);
     window.addEventListener("load", scheduleScrollUpdate);
+    document.addEventListener("mdu:hero-layout", () => {
+        if (breadcrumbs) breadcrumbFadeDistance = Math.max(1,
+            breadcrumbs.getBoundingClientRect().top + window.scrollY - header.offsetHeight - (topNavigation?.offsetHeight ?? 0));
+        scheduleScrollUpdate();
+    });
     // The first state is set without transitions, so the bars do not fade from solid to transparent on load.
     document.documentElement.classList.add("is-hero-settling");
     updateHeroUnderHeader();

@@ -17,7 +17,6 @@
     // How much a custom water or sand color is dimmed in each mood.
     const moodLight = { day: 1, sunset: 0.75, night: 0.22 };
 
-    const vertexSource = "attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}";
     const fragmentSource = `
 precision highp float;
 uniform vec2 uRes;
@@ -334,15 +333,12 @@ void main() {
         return v.map((c) => c / length);
     };
 
-    const resolveMood = (hero) => {
+    const resolveMood = (hero, { dark }) => {
         const time = hero.dataset.heroTime;
-        if (time === "day" || time === "sunset" || time === "night") return time;
-        const theme = document.documentElement.dataset.theme;
-        const dark = theme === "dark" || theme !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches;
-        return dark ? "night" : "day";
+        return time === "day" || time === "sunset" || time === "night" ? time : dark ? "night" : "day";
     };
-
-    const moodUniforms = (hero, mood) => {
+    const moodUniforms = (hero, colors) => {
+        const mood = resolveMood(hero, colors);
         const preset = presets[mood];
         const color = (name, fallback) => {
             const custom = hero.dataset[`hero${name[0].toUpperCase()}${name.slice(1)}`];
@@ -364,194 +360,13 @@ void main() {
         };
     };
 
-    const mix = (a, b, t) => {
-        const result = {};
-        for (const key of Object.keys(b)) {
-            result[key] = key === "uSunSize"
-                ? (t < 0.5 ? a[key] : b[key])
-                : b[key].map((value, i) => a[key][i] + (value - a[key][i]) * t);
+    const hero = window.mduHero ??= { effects: Object.create(null), controllers: new WeakMap() };
+    hero.effects.beach = {
+        fragment: fragmentSource, uniforms: moodUniforms,
+        colors(banner, colors) {
+            const preset = presets[resolveMood(banner, colors)];
+            return Object.fromEntries(["water", "shallow", "sand"].map(name =>
+                [name, banner.dataset[`hero${name[0].toUpperCase()}${name.slice(1)}`] || preset[name]]));
         }
-        result.uSun = normalize(result.uSun);
-        return result;
     };
-
-    const initHero = (hero) => {
-        const canvas = hero.querySelector(".hero-canvas");
-        const gl = canvas?.getContext("webgl", { antialias: false, alpha: false, depth: false, powerPreference: "high-performance" });
-        if (!gl) {
-            hero.classList.add("hero-static");
-            return;
-        }
-
-        const compile = (type, source) => {
-            const shader = gl.createShader(type);
-            gl.shaderSource(shader, source);
-            gl.compileShader(shader);
-            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(shader));
-            return shader;
-        };
-        const program = gl.createProgram();
-        try {
-            gl.attachShader(program, compile(gl.VERTEX_SHADER, vertexSource));
-            gl.attachShader(program, compile(gl.FRAGMENT_SHADER, fragmentSource));
-            gl.linkProgram(program);
-            if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
-        } catch (error) {
-            console.warn("mdu hero:", error);
-            hero.classList.add("hero-static");
-            return;
-        }
-        gl.useProgram(program);
-        gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-        const position = gl.getAttribLocation(program, "p");
-        gl.enableVertexAttribArray(position);
-        gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
-
-        const locations = {};
-        const uniform = (name) => locations[name] ??= gl.getUniformLocation(program, name);
-        const set = (name, value) => {
-            const location = uniform(name);
-            if (value.length === 1) gl.uniform1f(location, value[0]);
-            else if (value.length === 2) gl.uniform2f(location, value[0], value[1]);
-            else gl.uniform3f(location, value[0], value[1], value[2]);
-        };
-
-        const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
-        const speed = parseFloat(hero.dataset.heroSpeed) || 0;
-        // speed: 0 and reduced motion both show a single still frame, redrawn only when something changes.
-        const isStill = () => speed === 0 || reducedMotion.matches;
-        const quality = hero.dataset.heroQuality;
-        let scale = quality === "high" ? 1 : quality === "low" ? 0.5 : 0.75;
-        let mood = resolveMood(hero);
-        let current = moodUniforms(hero, mood);
-        let from = current;
-        let target = current;
-        let blendStart = 0;
-        let sceneTime = 14;
-        let introStart = null;
-        let look = [0, 0];
-        let lookTarget = [0, 0];
-        let lastFrame = null;
-        let frame = 0;
-        let visible = true;
-        let slowFrames = 0;
-        let sampledFrames = 0;
-
-        set("uWave", [parseFloat(hero.dataset.heroWaves) || 0]);
-
-        const resize = () => {
-            const ratio = Math.min(window.devicePixelRatio || 1, 2) * scale;
-            const width = Math.max(1, Math.round(canvas.clientWidth * ratio));
-            const height = Math.max(1, Math.round(canvas.clientHeight * ratio));
-            if (canvas.width !== width || canvas.height !== height) {
-                canvas.width = width;
-                canvas.height = height;
-                gl.viewport(0, 0, width, height);
-                return true;
-            }
-            return false;
-        };
-
-        const draw = (now) => {
-            const blend = blendStart ? Math.min(1, (now - blendStart) / 1400) : 1;
-            current = blend < 1 ? mix(from, target, blend * blend * (3 - 2 * blend)) : target;
-            for (const [name, value] of Object.entries(current)) set(name, value);
-            const intro = isStill() || introStart === null ? 1 : Math.min(1, (now - introStart) / 3200);
-            look = look.map((value, i) => value + (lookTarget[i] - value) * 0.04);
-            set("uIntro", [intro]);
-            set("uLook", look);
-            set("uTime", [sceneTime]);
-            set("uRes", [canvas.width, canvas.height]);
-            gl.drawArrays(gl.TRIANGLES, 0, 3);
-            return blend < 1 || intro < 1;
-        };
-
-        const loop = (now) => {
-            frame = 0;
-            if (lastFrame !== null) {
-                const delta = Math.min(0.1, (now - lastFrame) / 1000);
-                sceneTime += delta * speed;
-                // Lower the resolution once if the device cannot keep up.
-                if (quality === "auto" && sampledFrames < 90) {
-                    sampledFrames++;
-                    if (delta > 1 / 40) slowFrames++;
-                    if (sampledFrames === 90 && slowFrames > 45 && scale > 0.5) {
-                        scale = 0.5;
-                        resize();
-                    }
-                }
-            }
-            lastFrame = now;
-            draw(now);
-            schedule();
-        };
-
-        const schedule = () => {
-            if (frame || !visible || document.hidden) return;
-            if (isStill()) {
-                lastFrame = null;
-                frame = requestAnimationFrame((now) => {
-                    frame = 0;
-                    if (draw(now)) schedule();
-                });
-                return;
-            }
-            frame = requestAnimationFrame(loop);
-        };
-
-        const stop = () => {
-            if (frame) cancelAnimationFrame(frame);
-            frame = 0;
-            lastFrame = null;
-        };
-
-        const updateMood = () => {
-            const next = resolveMood(hero);
-            if (next === mood) return;
-            mood = next;
-            from = current;
-            target = moodUniforms(hero, mood);
-            blendStart = performance.now();
-            schedule();
-        };
-
-        // Changing the canvas size clears its drawing buffer, and resize observers run after this
-        // frame's animation callbacks: redraw right away so the browser never paints an empty canvas.
-        new ResizeObserver(() => {
-            if (resize() && draw(performance.now())) schedule();
-        }).observe(canvas);
-        new IntersectionObserver((entries) => {
-            visible = entries.some((entry) => entry.isIntersecting);
-            if (visible) schedule(); else stop();
-        }).observe(hero);
-        new MutationObserver(updateMood).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-        window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", updateMood);
-        document.addEventListener("visibilitychange", () => {
-            if (document.hidden) stop(); else schedule();
-        });
-        reducedMotion.addEventListener("change", () => {
-            stop();
-            schedule();
-        });
-        hero.addEventListener("pointermove", (event) => {
-            if (event.pointerType !== "mouse" || isStill()) return;
-            const bounds = hero.getBoundingClientRect();
-            lookTarget = [
-                ((event.clientX - bounds.left) / bounds.width) * 2 - 1,
-                -(((event.clientY - bounds.top) / bounds.height) * 2 - 1)
-            ];
-        });
-        hero.addEventListener("pointerleave", () => {
-            lookTarget = [0, 0];
-        });
-
-        resize();
-        introStart = performance.now();
-        draw(introStart);
-        hero.classList.add("hero-ready");
-        schedule();
-    };
-
-    document.querySelectorAll(".hero[data-hero-scene]").forEach(initHero);
 })();

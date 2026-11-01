@@ -71,13 +71,17 @@
 
 :root.is-over-hero:not(:has(.site-layout.sidebar-open)) .site-header,
 :root.is-over-hero:not(:has(.site-layout.sidebar-open)) .top-navigation {
+    background: transparent;
+    box-shadow: none;
+}
+
+:root.is-over-hero:has(.hero-full[data-hero-scene="beach"]):not(:has(.site-layout.sidebar-open)) .site-header,
+:root.is-over-hero:has(.hero-full[data-hero-scene="beach"]):not(:has(.site-layout.sidebar-open)) .top-navigation {
     --text-primary: #fff;
     --text-secondary: rgb(255 255 255 / 80%);
     --link: #fff;
     --border: rgb(255 255 255 / 30%);
     --surface-current: rgb(255 255 255 / 12%);
-    background: transparent;
-    box-shadow: none;
 }
 
 /* A soft shade behind both bars keeps their text readable on a light scene. It fades out without an edge, so it
@@ -101,7 +105,7 @@ body:has(.top-navigation.is-empty)::after {
     height: calc(var(--site-header-height) + 4rem);
 }
 
-:root.is-over-hero:not(:has(.site-layout.sidebar-open)) body::after {
+:root.is-over-hero:has(.hero-full[data-hero-scene="beach"]):not(:has(.site-layout.sidebar-open)) body::after {
     opacity: 1;
 }
 
@@ -142,7 +146,7 @@ body:has(.top-navigation.is-empty)::after {
     }
 }
 
-:root.is-over-hero .site-header .back-to-top {
+:root.is-over-hero:has(.hero-full[data-hero-scene="beach"]) .site-header .back-to-top {
     background: rgb(3 14 28 / 30%);
 }
 
@@ -154,12 +158,12 @@ body:has(.top-navigation.is-empty)::after {
     transition: transform 220ms cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 160ms ease, background-color 300ms ease;
 }
 
-/* Over a full-width hero the header is transparent, so the logo uses its light-on-dark variant there too. */
-:root.is-over-hero .site-brand-logo-light {
+/* Only a beach under the transparent header needs the light-on-dark logo outside the normal theme. */
+:root.is-over-hero:has(.hero-full[data-hero-scene="beach"]):not(:has(.site-layout.sidebar-open)) .site-brand-logo-light {
     filter: opacity(0);
 }
 
-:root.is-over-hero .site-brand-logo-dark {
+:root.is-over-hero:has(.hero-full[data-hero-scene="beach"]):not(:has(.site-layout.sidebar-open)) .site-brand-logo-dark {
     filter: none;
 }
 
@@ -268,7 +272,7 @@ body:has(.top-navigation.is-empty)::after {
 }
 
 .hero .hero-button:focus-visible {
-    outline: 2px solid #fff;
+    outline: 2px solid var(--link);
     outline-offset: 3px;
 }
 
@@ -313,8 +317,311 @@ body:has(.top-navigation.is-empty)::after {
     }
 }
 
-@media print {
-    .hero {
+    .hero:not([data-hero-scene="beach"]) {
+        background: var(--page-background);
+        color: var(--text-primary);
+    }
+
+    .hero:not([data-hero-scene="beach"])::before {
+        background: linear-gradient(90deg, var(--page-background), color-mix(in srgb, var(--page-background) 85%, transparent) 35%, transparent);
+    }
+
+    .hero.hero-align-center:not([data-hero-scene="beach"])::before {
+        background: radial-gradient(ellipse at center, var(--page-background), transparent 85%);
+    }
+
+    .hero:not([data-hero-scene="beach"]) .hero-content {
+        text-shadow: none;
+    }
+
+    .hero:not([data-hero-scene="beach"]) .hero-button {
+        border-color: var(--border);
+        background: var(--page-background);
+        color: var(--text-primary);
+    }
+
+    .hero:not([data-hero-scene="beach"]) .hero-button:hover {
+        border-color: var(--link);
+        background: var(--surface-current);
+    }
+
+    .hero:not([data-hero-scene="beach"]) .hero-button-primary {
+        border-color: var(--text-primary);
+        background: var(--text-primary);
+        color: var(--page-background);
+    }
+
+    .hero:not([data-hero-scene="beach"]) .hero-button-primary:hover {
+        border-color: var(--text-primary);
+        background: color-mix(in srgb, var(--text-primary) 90%, var(--page-background));
+        color: var(--page-background);
+    }
+
+    .hero[data-hero-scene="beach"] {
+        --link: #fff;
+    }
+
+    .hero-error {
+        max-height: 7rem;
+        overflow: auto;
+        margin: 0 0 1rem;
+        padding: 0.6rem 0.8rem;
+        border-radius: 6px;
+        background: var(--page-background);
+        color: var(--text-primary);
+        font: 0.8rem/1.4 ui-monospace, monospace;
+        white-space: pre-wrap;
+    }
+
+    .hero-full + .hero-error {
+        width: min(60rem, calc(100% - 2rem));
+        margin: 1rem auto;
+    }
+
+    .hero-error[hidden],
+    .hero-playground [hidden],
+    .hero-playground-return[hidden] {
         display: none;
     }
-}
+
+    .hero-playground {
+        display: grid;
+        gap: 1rem;
+        min-width: 0;
+        margin: 0 0 2rem;
+        padding: 1.25rem;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: var(--surface-current);
+        color: var(--text-primary);
+    }
+
+    .hero-playground-preview {
+        scroll-margin-top: calc(var(--site-header-height) + var(--top-navigation-height) + 1rem);
+    }
+
+    .hero-playground-toolbar {
+        position: sticky;
+        top: calc(var(--site-header-height) + var(--top-navigation-height) + 0.5rem);
+        z-index: 5;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        align-items: center;
+        justify-content: space-between;
+        padding-block: 0.5rem;
+        background: var(--surface-current);
+    }
+
+    .hero-full + .hero-playground {
+        width: min(60rem, calc(100% - 2rem));
+        margin: 1.5rem auto;
+    }
+
+    .hero-playground fieldset {
+        min-width: 0;
+        margin: 0;
+        padding: 0;
+        border: 0;
+    }
+
+    .hero-playground legend {
+        margin-bottom: 0.75rem;
+        font-weight: 600;
+    }
+
+    .hero-controls {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+        gap: 1rem;
+        align-items: start;
+    }
+
+    .hero-content-controls {
+        margin-bottom: 1rem;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+    }
+
+    .hero-color-controls {
+        align-items: end;
+        grid-template-columns: auto auto;
+        justify-content: start;
+    }
+
+    .hero-playground label {
+        display: grid;
+        gap: 0.35rem;
+        min-width: 0;
+        font-size: 0.9rem;
+    }
+
+    .hero-playground :is(button, select, textarea, input),
+    .hero-playground-return {
+        box-sizing: border-box;
+        min-width: 0;
+        max-width: 100%;
+        min-height: 2.5rem;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--page-background);
+        color: var(--text-primary);
+        font: inherit;
+    }
+
+    .hero-playground :is(button, select),
+    .hero-playground-return {
+        padding: 0.45rem 0.75rem;
+        cursor: pointer;
+    }
+
+    .hero-playground button:hover,
+    .hero-playground-return:hover {
+        border-color: var(--link);
+    }
+
+    .hero-playground button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+    }
+
+    .hero-playground :is(button, select, textarea, input, summary):focus-visible,
+    .hero-playground-return:focus-visible {
+        outline: 2px solid var(--link);
+        outline-offset: 3px;
+    }
+
+    .hero-playground textarea {
+        width: 100%;
+        padding: 0.75rem;
+        font: 0.8rem/1.5 ui-monospace, monospace;
+        resize: vertical;
+        tab-size: 2;
+    }
+
+    .hero-playground input[type="range"] {
+        width: 100%;
+        accent-color: var(--link);
+    }
+
+    .hero-playground input[type="text"] {
+        width: 100%;
+        padding: 0.45rem 0.75rem;
+    }
+
+    .hero-playground select {
+        width: 100%;
+    }
+
+    .hero-playground button.hero-copy {
+        border-color: var(--text-primary);
+        background: var(--text-primary);
+        color: var(--page-background);
+    }
+
+    .hero-playground-return {
+        position: absolute;
+        right: 1rem;
+        bottom: 1rem;
+        z-index: 2;
+    }
+
+    .hero-control-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: center;
+    }
+
+    .hero-playground-status:empty {
+        display: none;
+    }
+
+    .hero-playground p {
+        margin: 0;
+        font-size: 0.85rem;
+    }
+
+    .hero-playground details {
+        margin: 0;
+        border: 0;
+        border-radius: 0;
+        background: none;
+    }
+
+    .hero-playground details > summary {
+        display: list-item;
+        min-height: 2rem;
+        padding: 0.2rem 0;
+        border-radius: 6px;
+        list-style: disclosure-closed inside;
+        cursor: pointer;
+        font-weight: 600;
+    }
+
+    .hero-playground details[open] > summary {
+        border-bottom: 0;
+        border-radius: 6px;
+        list-style-type: disclosure-open;
+    }
+
+    .hero-playground details > summary::-webkit-details-marker {
+        display: initial;
+    }
+
+    .hero-playground details > summary::after {
+        content: none;
+    }
+
+    .hero-playground details > summary:focus-visible {
+        outline: 2px solid var(--link);
+        outline-offset: 3px;
+    }
+
+    .hero-playground details > :not(summary) {
+        margin-inline: 0;
+    }
+
+    .hero-playground details > :last-child:not(summary) {
+        margin-bottom: 0;
+    }
+
+    .hero-playground details[open] > :not(summary) {
+        margin-top: 0.75rem;
+    }
+
+    .hero-playground :is(input, select, textarea, summary) {
+        scroll-margin-top: calc(var(--site-header-height) + var(--top-navigation-height) + 8rem);
+    }
+
+    @media (max-width: 480px) {
+        .hero-playground {
+            padding: 0.75rem;
+        }
+
+        .hero-playground .hero-control-actions {
+            gap: 0.35rem;
+        }
+
+        .hero-playground-toolbar button {
+            padding-inline: 0.5rem;
+            font-size: 0.85rem;
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .hero-canvas,
+        .hero .hero-button {
+            transition: none;
+        }
+
+        .hero .hero-button:hover {
+            transform: none;
+        }
+    }
+
+    @media print {
+        .hero,
+        .hero-playground {
+            display: none;
+        }
+    }

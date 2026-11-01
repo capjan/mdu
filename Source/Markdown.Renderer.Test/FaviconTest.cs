@@ -34,6 +34,43 @@ public class FaviconTest
         Assert.DoesNotContain("site-brand-logo-dark", html);
     }
 
+    [Theory]
+    [InlineData("beach", "full")]
+    [InlineData("beach", "content")]
+    [InlineData("connections", "full")]
+    [InlineData("connections", "content")]
+    public async Task KeepsPreRenderedLogoVariantsOnPlaygroundPages(string effect, string width)
+    {
+        var html = await RenderAsync(new SiteConfiguration
+        {
+            LogoLight = "assets/light.svg",
+            LogoDark = "assets/dark.svg"
+        }, $"# Test\n\n```hero\neffect: {effect}\nwidth: {width}\nplayground: true\n```");
+
+        Assert.Contains("<img class=\"site-brand-logo site-brand-logo-light\" src=\"assets/light.svg\" alt=\"\"><img class=\"site-brand-logo site-brand-logo-dark\" src=\"assets/dark.svg\" alt=\"\">", html);
+        Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(html, "<img class=\"site-brand-logo ").Count);
+        Assert.DoesNotContain("data-light-src", html);
+        Assert.DoesNotContain("data-dark-src", html);
+        Assert.DoesNotContain("darkLogo", html);
+        Assert.DoesNotContain("updateLogo", html);
+    }
+
+    [Theory]
+    [InlineData("full")]
+    [InlineData("content")]
+    public async Task KeepsOneLogoOnPlaygroundPagesWhenLogoFilesAreTheSame(string width)
+    {
+        var html = await RenderAsync(new SiteConfiguration
+        {
+            LogoLight = "assets/logo.svg",
+            LogoDark = "assets/logo.svg"
+        }, $"# Test\n\n```hero\nwidth: {width}\nplayground: true\n```");
+
+        Assert.Contains("<span class=\"site-brand-logo-slot\"><img class=\"site-brand-logo\" src=\"assets/logo.svg\" alt=\"\"></span>", html);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(html, "<img class=\"site-brand-logo\""));
+        Assert.DoesNotContain("darkLogo", html);
+    }
+
     [Fact]
     public async Task RendersLightAndDarkLinksForDifferentFaviconFiles()
     {
@@ -78,7 +115,7 @@ public class FaviconTest
         Assert.Contains("<link rel=\"icon\" href=\"assets/dark.svg\" media=\"(prefers-color-scheme: dark)\">", html);
     }
 
-    private static async Task<string> RenderAsync(SiteConfiguration configuration)
+    private static async Task<string> RenderAsync(SiteConfiguration configuration, string markdown = "# Test")
     {
         var outputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
         var renderer = new HtmlRenderer();
@@ -88,7 +125,7 @@ public class FaviconTest
         try
         {
             renderer.PrepareBasePath(outputPath, configuration);
-            await renderer.WriteHtml(writer, "test", "", 0, "# Test", "");
+            await renderer.WriteHtml(writer, "test", "", 0, markdown, "");
             return sb.ToString();
         }
         finally
