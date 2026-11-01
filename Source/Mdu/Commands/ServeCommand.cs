@@ -40,6 +40,7 @@ public sealed class ServeCommand
     private Dictionary<string, HashSet<string>> _pagesByAsset => _dependencyIndex.PagesByAsset;
     private Dictionary<string, IReadOnlyList<string>> _openApiSpecsByPage => _dependencyIndex.OpenApiSpecsByPage;
     private Dictionary<string, IReadOnlyList<string>> _openApiSpecPagesByPage => _dependencyIndex.OpenApiSpecPagesByPage;
+    private Dictionary<string, string> _pdfTitlesByPage => _dependencyIndex.PdfTitlesByPage;
 
     public ServeCommand(
         GraphBuilder graphBuilder,
@@ -257,9 +258,8 @@ public sealed class ServeCommand
         }
     }
 
-    private void UpdatePageAssets(string pagePath, MarkdownFile page)
+    private void UpdatePageAssets(string pagePath, PageDependencies dependencies)
     {
-        var dependencies = ReadPageDependencies(page);
         RemovePageAssets(pagePath);
         AddPageDependencies(_dependencyIndex, pagePath, dependencies);
     }
@@ -286,7 +286,8 @@ public sealed class ServeCommand
                 page.SourceRootPath))
             .ToArray();
 
-        return new PageDependencies(pageAssets, referencedSpecs);
+        var pdfTitle = PdfSelection.GetPdfTitle(_rootPath, page, body, _renderer.ExcludesTitleHeadingFromPdf);
+        return new PageDependencies(pageAssets, referencedSpecs, pdfTitle);
     }
 
     private static void AddPageDependencies(
@@ -307,6 +308,7 @@ public sealed class ServeCommand
         }
 
         index.OpenApiSpecsByPage[pagePath] = dependencies.OpenApiSpecs;
+        index.PdfTitlesByPage[pagePath] = dependencies.PdfTitle;
     }
 
     private void RemovePageAssets(string pagePath)
@@ -437,6 +439,7 @@ public sealed class ServeCommand
             var previousNavigationPlacement = page.NavigationPlacement;
             var previousInvalidNavigationPlacement = page.InvalidNavigationPlacement;
             _dataPreparationVisitor.Process(page, depth);
+            var dependencies = ReadPageDependencies(page);
             // Pages that already import a repository are handled above, so a set source means a newly added import.
             if (page.ImportSource is not null ||
                 !previousTitle.Equals(page.Title, StringComparison.Ordinal) ||
@@ -445,7 +448,9 @@ public sealed class ServeCommand
                 previousNavigationVisible != page.NavigationVisible ||
                 previousNavigationExpanded != page.NavigationExpanded ||
                 previousNavigationPlacement != page.NavigationPlacement ||
-                previousInvalidNavigationPlacement != page.InvalidNavigationPlacement)
+                previousInvalidNavigationPlacement != page.InvalidNavigationPlacement ||
+                !_pdfTitlesByPage.TryGetValue(pagePath, out var previousPdfTitle) ||
+                !previousPdfTitle.Equals(dependencies.PdfTitle, StringComparison.Ordinal))
             {
                 RebuildSite();
                 server.Publish(reloadAll: true);
@@ -453,7 +458,7 @@ public sealed class ServeCommand
             }
 
             var previousSpecPages = _openApiSpecPagesByPage.GetValueOrDefault(pagePath) ?? Array.Empty<string>();
-            UpdatePageAssets(pagePath, page);
+            UpdatePageAssets(pagePath, dependencies);
             _watchers?.UpdateExternalFiles(_openApiSpecsByPage.Values.SelectMany(paths => paths), _glossaryPath);
             new LocalAssetsCopy(_rootPath, _outputPath).Process(page, depth);
             var rendererVisitor = new MarkdigVisitor(
@@ -754,21 +759,24 @@ public sealed class ServeCommand
 
     private sealed record PageDependencies(
         HashSet<string> Assets,
-        IReadOnlyList<string> OpenApiSpecs);
+        IReadOnlyList<string> OpenApiSpecs,
+        string PdfTitle);
 
     private sealed record DependencyIndex(
         Dictionary<string, MarkdownFile> Pages,
         Dictionary<string, HashSet<string>> AssetsByPage,
         Dictionary<string, HashSet<string>> PagesByAsset,
         Dictionary<string, IReadOnlyList<string>> OpenApiSpecsByPage,
-        Dictionary<string, IReadOnlyList<string>> OpenApiSpecPagesByPage)
+        Dictionary<string, IReadOnlyList<string>> OpenApiSpecPagesByPage,
+        Dictionary<string, string> PdfTitlesByPage)
     {
         public static DependencyIndex CreateEmpty() => new(
             new Dictionary<string, MarkdownFile>(PathComparer),
             new Dictionary<string, HashSet<string>>(PathComparer),
             new Dictionary<string, HashSet<string>>(PathComparer),
             new Dictionary<string, IReadOnlyList<string>>(PathComparer),
-            new Dictionary<string, IReadOnlyList<string>>(PathComparer));
+            new Dictionary<string, IReadOnlyList<string>>(PathComparer),
+            new Dictionary<string, string>(PathComparer));
     }
 
     private sealed record FileChange(string Path, string? OldPath, FileChangeKind Kind);

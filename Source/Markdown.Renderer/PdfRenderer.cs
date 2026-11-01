@@ -14,6 +14,8 @@ public sealed class PdfRenderer(HtmlRenderer htmlRenderer)
 {
     public bool ContainsPdfLink(string markdown) => htmlRenderer.ContainsPdfLink(markdown);
     public IReadOnlyList<string> FindPdfLinks(string markdown) => htmlRenderer.FindPdfLinks(markdown);
+    public IReadOnlyList<string> FindVisiblePdfLinks(string markdown) => htmlRenderer.FindVisiblePdfLinks(markdown);
+    public IReadOnlySet<int> FindHiddenOpenApiBlocks(string markdown) => htmlRenderer.FindHiddenOpenApiBlocks(markdown);
     public bool ExcludesTitleHeading(string markdown) => htmlRenderer.ExcludesTitleHeadingFromPdf(markdown);
 
     public void WritePdf(Stream output, string title, IReadOnlyList<PdfSourceSection> sections, bool includeFrontMatter = true)

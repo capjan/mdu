@@ -161,6 +161,31 @@ public class HtmlRenderer
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 
+    internal IReadOnlyList<string> FindVisiblePdfLinks(string markdown)
+    {
+        var document = Markdig.Markdown.Parse(markdown, _pipeline);
+        PdfHiddenContent.Remove(document);
+        return document.Descendants<LinkInline>()
+            .Where(link => !link.IsImage && LinkReplacer.IsPdfLink(link.Url))
+            .Select(link => link.Url!)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    internal IReadOnlySet<int> FindHiddenOpenApiBlocks(string markdown)
+    {
+        if (!markdown.Contains("openapi", StringComparison.OrdinalIgnoreCase) ||
+            !markdown.Contains("pdf", StringComparison.OrdinalIgnoreCase)) return new HashSet<int>();
+
+        var document = Markdig.Markdown.Parse(markdown, _pipeline);
+        var blocks = document.Descendants<FencedCodeBlock>()
+            .Where(block => string.Equals(block.Info?.Trim(), "openapi", StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (blocks.Length == 0) return new HashSet<int>();
+        PdfHiddenContent.Remove(document);
+        var visible = document.Descendants<FencedCodeBlock>().ToHashSet();
+        return blocks.Where(block => !visible.Contains(block)).Select(block => block.Span.Start).ToHashSet();
+    }
+
     public bool ContainsPdfLink(string markdown) => FindPdfLinks(markdown).Count > 0;
 
     public IReadOnlyCollection<string> FindMediaProviders(string markdown)

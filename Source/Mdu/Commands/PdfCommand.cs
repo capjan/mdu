@@ -152,21 +152,42 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         bool reuseUnchanged = false,
         bool trackSitePdf = false)
     {
-        var sections = files.Where(item => IsPdfVisible(item.File.FrontMatter))
-            .Select(item =>
-            {
-                var markdown = OpenApiMarkdownRenderer.ExpandCodeBlocks(
-                    RemoveFrontMatter(item.File.ReadMarkdown(), item.File.FrontMatter),
-                    item.File.FileInfo.FullName,
-                    item.File.SourceRootPath,
-                    includeSpecificationPageLink: false);
-                return new PdfSourceSection(
-                    PdfSelection.GetPdfTitle(rootPath, item.File, markdown, pdfRenderer.ExcludesTitleHeading),
-                    GetRelativeHtmlPath(rootPath, item.File),
-                    markdown,
-                    item.Depth);
-            })
-            .ToArray();
+        PdfSourceSection[] sections;
+        try
+        {
+            sections = files.Where(item => IsPdfVisible(item.File.FrontMatter))
+                .Select(item =>
+                {
+                    var source = RemoveFrontMatter(item.File.ReadMarkdown(), item.File.FrontMatter);
+                    IReadOnlySet<int> excludedBlocks;
+                    try
+                    {
+                        excludedBlocks = pdfRenderer.FindHiddenOpenApiBlocks(source);
+                    }
+                    catch (PdfHiddenContentException exception)
+                    {
+                        throw new PdfHiddenContentException($"{PageLabel(PdfSelection.GetTitle(rootPath, item.File), GetRelativeHtmlPath(rootPath, item.File))}: {exception.Message}");
+                    }
+                    var markdown = OpenApiMarkdownRenderer.ExpandCodeBlocks(
+                        source,
+                        item.File.FileInfo.FullName,
+                        item.File.SourceRootPath,
+                        includeSpecificationPageLink: false,
+                        excludedBlockStarts: excludedBlocks);
+                    return new PdfSourceSection(
+                        PdfSelection.GetPdfTitle(rootPath, item.File, markdown, pdfRenderer.ExcludesTitleHeading),
+                        GetRelativeHtmlPath(rootPath, item.File),
+                        markdown,
+                        item.Depth);
+                })
+                .ToArray();
+        }
+        catch (PdfHiddenContentException exception)
+        {
+            Console.Error.WriteLine($"Could not write PDF: {exception.Message}");
+            if (trackSitePdf) DiscardSitePdf(outputPath);
+            return 1;
+        }
 
         if (sections.Length == 0)
         {
@@ -176,7 +197,17 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         }
 
         // Site PDFs resolve their links in WriteSitePdfIfLinked. Without that step, a malformed link would become a dead link.
-        if (!trackSitePdf && FindMalformedPdfLink(sections) is { } malformedLink)
+        string? malformedLink;
+        try
+        {
+            malformedLink = trackSitePdf ? null : FindMalformedPdfLink(sections);
+        }
+        catch (PdfHiddenContentException exception)
+        {
+            Console.Error.WriteLine($"Could not write PDF: {exception.Message}");
+            return 1;
+        }
+        if (malformedLink is not null)
         {
             Console.Error.WriteLine($"Could not write PDF: {malformedLink}");
             return 1;
@@ -212,7 +243,7 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
     private string? FindMalformedPdfLink(IEnumerable<PdfSourceSection> sections)
     {
         foreach (var section in sections)
-        foreach (var url in pdfRenderer.FindPdfLinks(section.Markdown))
+        foreach (var url in FindVisiblePdfLinks(section))
         {
             try
             {
@@ -225,6 +256,18 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         }
 
         return null;
+    }
+
+    private IReadOnlyList<string> FindVisiblePdfLinks(PdfSourceSection section)
+    {
+        try
+        {
+            return pdfRenderer.FindVisiblePdfLinks(section.Markdown);
+        }
+        catch (PdfHiddenContentException exception)
+        {
+            throw new PdfHiddenContentException($"{PageLabel(section.Title, section.RelativeHtmlPath)}: {exception.Message}");
+        }
     }
 
     // Matches the page label of the errors that PdfRenderer reports.

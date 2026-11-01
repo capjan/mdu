@@ -129,8 +129,9 @@ public static class OpenApiMarkdownRenderer
         string? allowedRootPath = null,
         string? pageOutputFileName = null,
         IEnumerable<OpenApiSiblingPage>? siblingPages = null,
-        bool includeSpecificationPageLink = true) =>
-        ExpandCodeBlocks(markdown, markdownPath, out _, allowedRootPath, pageOutputFileName, siblingPages, includeSpecificationPageLink);
+        bool includeSpecificationPageLink = true,
+        IReadOnlySet<int>? excludedBlockStarts = null) =>
+        ExpandCodeBlocks(markdown, markdownPath, out _, allowedRootPath, pageOutputFileName, siblingPages, includeSpecificationPageLink, excludedBlockStarts);
 
     public static string ExpandCodeBlocks(
         string markdown,
@@ -139,7 +140,8 @@ public static class OpenApiMarkdownRenderer
         string? allowedRootPath = null,
         string? pageOutputFileName = null,
         IEnumerable<OpenApiSiblingPage>? siblingPages = null,
-        bool includeSpecificationPageLink = true)
+        bool includeSpecificationPageLink = true,
+        IReadOnlySet<int>? excludedBlockStarts = null)
     {
         if (!markdown.Contains(CodeBlockLanguage, StringComparison.OrdinalIgnoreCase))
         {
@@ -167,11 +169,12 @@ public static class OpenApiMarkdownRenderer
         var pageStem = Path.GetFileNameWithoutExtension(parentHtmlFileName);
         var usedFileNames = CollectReservedHtmlFileNames(markdownPath, parentHtmlFileName, allowedRootPath, siblingPages);
         var generatedPages = new List<OpenApiSpecificationPage>(blocks.Length);
-        var replacements = new (int Start, int Length, string Content)[blocks.Length];
+        var replacements = new List<(int Start, int Length, string Content)>();
 
         for (var index = 0; index < blocks.Length; index++)
         {
             var block = blocks[index];
+            if (excludedBlockStarts?.Contains(block.Span.Start) == true) continue;
             var bodyText = TryExtractBlockBody(block, out var extracted, out _)
                 ? extracted
                 : string.Empty;
@@ -226,11 +229,11 @@ public static class OpenApiMarkdownRenderer
                 loaded.Format,
                 specPageMarkdown));
 
-            replacements[index] = (block.Span.Start, block.Span.Length, renderedMarkdown);
+            replacements.Add((block.Span.Start, block.Span.Length, renderedMarkdown));
         }
 
         var result = markdown;
-        for (var index = replacements.Length - 1; index >= 0; index--)
+        for (var index = replacements.Count - 1; index >= 0; index--)
         {
             var replacement = replacements[index];
             result = result.Remove(replacement.Start, replacement.Length)

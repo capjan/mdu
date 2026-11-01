@@ -8,6 +8,35 @@ namespace Mdu.Test;
 public class ServeCommandIntegrationTest
 {
     [Fact]
+    public async Task UpdatesPdfDownloadNamesWhenTheTargetTitleIsHiddenOrShown()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-serve-pdf-title-{Guid.NewGuid():N}");
+        var docs = Path.Combine(root, "Docs");
+        var site = Path.Combine(root, "site");
+        Directory.CreateDirectory(docs);
+        File.WriteAllText(Path.Combine(docs, "README.md"), "# Home\n\n[Guide PDF](mdu:pdf?root=Guide.md)");
+        var guide = Path.Combine(docs, "Guide.md");
+        File.WriteAllText(guide, "# Secret Title\n\nBody");
+        var (process, port) = await StartServerOnFreePortAsync(docs, site);
+        using var _ = process;
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+        var baseUrl = $"http://127.0.0.1:{port}/";
+        try
+        {
+            await WaitUntilAsync(async () => await PageContainsAsync(client, baseUrl, "download=\"Secret Title.pdf\""), process);
+            File.WriteAllText(guide, "# Secret Title {.pdf-hidden}\n\nBody\n\n# Public\n\nVisible");
+            await WaitUntilAsync(async () => await PageContainsAsync(client, baseUrl, "download=\"Guide.pdf\""), process);
+            File.WriteAllText(guide, "# Secret Title\n\nBody");
+            await WaitUntilAsync(async () => await PageContainsAsync(client, baseUrl, "download=\"Secret Title.pdf\""), process);
+        }
+        finally
+        {
+            StopServer(process);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task UpdatesScopedPdfsAndRemovesDownloadsWhenLinksDisappear()
     {
         var root = Path.Combine(Path.GetTempPath(), $"mdu-serve-pdf-{Guid.NewGuid():N}");

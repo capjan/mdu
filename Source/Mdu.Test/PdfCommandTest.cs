@@ -204,6 +204,84 @@ public class PdfCommandTest
 [Collection("Process state")]
 public class PdfCommandHiddenContentTest
 {
+    [Theory]
+    [InlineData("<!-- pdf:hidden -->\n[Hidden](mdu:pdf?root=)\n<!-- /pdf:hidden -->")]
+    [InlineData("## Hidden {.pdf-hidden}\n\n[Hidden](mdu:pdf?root=)\n\n## Public")]
+    public void IgnoresMalformedPdfLinksInExcludedContent(string hidden)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-pdf-hidden-link-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var page = Path.Combine(root, "Guide.md");
+        var output = Path.Combine(root, "guide.pdf");
+        try
+        {
+            File.WriteAllText(page, $"# Guide\n\nVisible\n\n{hidden}\n");
+            Assert.Equal(0, CreateCommand().Execute(new RenderCommandSettings { RootPath = page, OutputPath = output }));
+            Assert.Contains(Hex("Visible"), File.ReadAllText(output, Encoding.Latin1));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("<!-- pdf:hidden -->\n```openapi\nmissing.json\n```\n<!-- /pdf:hidden -->")]
+    [InlineData("## Hidden {.pdf-hidden}\n\n```openapi\nmissing.json\n```\n\n## Public")]
+    public void DoesNotLoadExcludedOpenApiDocuments(string hidden)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-pdf-hidden-openapi-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var page = Path.Combine(root, "Guide.md");
+        var output = Path.Combine(root, "guide.pdf");
+        try
+        {
+            File.WriteAllText(page, $"# Guide\n\nVisible\n\n{hidden}\n");
+            Assert.Equal(0, CreateCommand().Execute(new RenderCommandSettings { RootPath = page, OutputPath = output }));
+            Assert.Contains(Hex("Visible"), File.ReadAllText(output, Encoding.Latin1));
+
+            File.WriteAllText(page, "# Guide\n\n```openapi\nmissing.json\n```\n");
+            Assert.Equal(1, CreateCommand().Execute(new RenderCommandSettings { RootPath = page, OutputPath = output }));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void RendersVisibleOpenApiAlongsideAnExcludedDocument()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-pdf-mixed-openapi-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var page = Path.Combine(root, "Guide.md");
+        var output = Path.Combine(root, "guide.pdf");
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "visible.json"),
+                """{"openapi":"3.1.0","info":{"title":"VisibleApi","version":"1"},"paths":{}}""");
+            File.WriteAllText(page, """
+                # Guide
+
+                <!-- pdf:hidden -->
+                ```openapi
+                missing.json
+                ```
+                <!-- /pdf:hidden -->
+
+                ```openapi
+                visible.json
+                ```
+                """);
+            Assert.Equal(0, CreateCommand().Execute(new RenderCommandSettings { RootPath = page, OutputPath = output }));
+            Assert.Contains(Hex("VisibleApi"), File.ReadAllText(output, Encoding.Latin1));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public void ExcludesHiddenSectionsAndFailsOnUnbalancedMarkers()
     {
