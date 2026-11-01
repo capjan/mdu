@@ -49,6 +49,9 @@ public sealed class ConfluenceTarget
     }
 }
 
-public sealed record ConfluenceSource(string Path, string? ParentPath, string Title, string Markdown, string FilePath, string SourceRoot);
+public sealed record ConfluenceSource(string Path, string? ParentPath, string Title, string Markdown, string FilePath, string SourceRoot)
+{
+    public string? AliasPath { get; init; }
+}
 public sealed record ConfluenceAsset(string Name, byte[] Content, bool IsImage);
 public sealed record ConfluenceDocument(string Storage, IReadOnlyList<ConfluenceAsset> Assets, IReadOnlyList<string> Diagnostics);

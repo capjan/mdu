@@ -49,6 +49,59 @@ public class ConfluenceCommandTest
     }
 
     [Fact]
+    public void PreservesImportMarkerLinksAndDiagramAliases()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "mdu-confluence-" + Guid.NewGuid().ToString("N"));
+        var docs = Path.Combine(root, "docs");
+        var repository = Path.Combine(root, "repository");
+        var importedDocs = Path.Combine(repository, "Docs");
+        Directory.CreateDirectory(docs);
+        Directory.CreateDirectory(importedDocs);
+        try
+        {
+            const string url = "https://github.com/example/repository/tree/main/Docs";
+            File.WriteAllText(Path.Combine(docs, "README.md"), """
+                # Home
+
+                [Nested Markdown](Nested.md#nested)
+
+                [Nested HTML](Nested.html#nested)
+
+                ```mermaid
+                flowchart LR
+                A --> B
+                click A href "Nested.html#nested"
+                ```
+                """);
+            File.WriteAllText(Path.Combine(docs, "Nested.md"), $"---\nmdu:\n  import:\n    source: {url}\n---\n");
+            File.WriteAllText(Path.Combine(importedDocs, "README.md"), "# Nested");
+            var resolved = new ResolvedGitTreeSource("https://github.com/example/repository.git",
+                "https://github.com/example/repository", "main", true, "Docs", repository, importedDocs,
+                "https://github.com/example/repository/edit/main");
+            var graph = new GraphBuilder(new DataPreparationVisitor(new MarkdownDocumentReader()), new LocalSourceResolver(resolved))
+                .CreateGraph(new VisitorSettings { RootPath = docs, IncludeHidden = true, SearchPattern = "*.md" });
+            var sources = ConfluenceCommand.PrepareSources(graph, docs);
+            var target = new ConfluenceTarget("https://wiki.example.test", "DOC");
+            var nested = sources.Single(source => source.Path == "Nested/README.md");
+            var result = new ConfluenceStorageRenderer(target, sources).Render(sources.Single(source => source.Path == "README.md"));
+            var xml = System.Xml.Linq.XElement.Parse("<root xmlns:ac=\"http://atlassian.com/content\" xmlns:ri=\"http://atlassian.com/resource/identifier\">" +
+                result.Storage + "</root>");
+            System.Xml.Linq.XNamespace ri = "http://atlassian.com/resource/identifier";
+            Assert.Equal(2, xml.Descendants(ri + "page").Count());
+            Assert.All(xml.Descendants(ri + "page"), page => Assert.Equal(target.PageTitle(nested), page.Attribute(ri + "content-title")?.Value));
+            Assert.Contains(Uri.EscapeDataString(target.PageTitle(nested)),
+                System.Text.Encoding.UTF8.GetString(Assert.Single(result.Assets).Content));
+            Assert.Contains("mdu:", File.ReadAllText(Path.Combine(docs, "Nested.md")));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    private sealed class LocalSourceResolver(ResolvedGitTreeSource source) : IGitTreeSourceResolver
+    {
+        public ResolvedGitTreeSource Resolve(string sourceUrl) => source;
+    }
+
+    [Fact]
     public void ConvertsRepositoryDocumentationBeforeAnyNetworkCalls()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

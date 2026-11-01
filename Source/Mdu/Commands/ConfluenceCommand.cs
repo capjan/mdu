@@ -70,7 +70,10 @@ public sealed class ConfluenceCommand(GraphBuilder graphBuilder)
                 Console.WriteLine($"Warning: {path}: dashboard layout is not exported; its Markdown content is preserved.");
             result.Add(new ConfluenceSource(path, parentPath,
                 NavigationPage.RemoveIconShortcodes(string.IsNullOrWhiteSpace(page.Title) ? page.FileInfo.Name : page.Title),
-                markdown, page.FileInfo.FullName, page.SourceRootPath ?? root));
+                markdown, page.FileInfo.FullName, page.SourceRootPath ?? root)
+            {
+                AliasPath = page.AliasRelativePath?.Replace('\\', '/')
+            });
             foreach (var child in page.Children) Add(child, path);
         }
     }

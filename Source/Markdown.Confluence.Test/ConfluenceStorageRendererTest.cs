@@ -112,6 +112,65 @@ public class ConfluenceStorageRendererTest
     }
 
     [Fact]
+    public void PreservesNamedEntitiesInTextAndQuotedAttributes()
+    {
+        var page = Source("""
+            ![Say &quot;hello&quot; &apos;world&apos; &amp; &nbsp;](https://example.test/image.png)
+
+            [Link](https://example.test "Say &quot;hello&quot; &apos;world&apos; &amp; &nbsp;")
+
+            Text &quot;hello&quot; &apos;world&apos; &amp; &nbsp; &copy;
+            """);
+        var result = new ConfluenceStorageRenderer(Target, [page]).Render(page);
+        var root = Parse(result.Storage);
+        XNamespace ac = "http://atlassian.com/content";
+        Assert.Equal("Say \"hello\" 'world' & \u00a0", root.Descendants(ac + "image").Single().Attribute(ac + "alt")?.Value);
+        Assert.Equal("Say \"hello\" 'world' & \u00a0", root.Descendants("a").Single().Attribute("title")?.Value);
+        Assert.Contains("Text \"hello\" 'world' & \u00a0 \u00a9", root.Value);
+    }
+
+    [Theory]
+    [InlineData("Guide.md", "./", "README.md")]
+    [InlineData("Nested/Guide.md", "../", "README.md")]
+    [InlineData("Guide.md", "./", "index.md")]
+    [InlineData("Nested/Guide.md", "../", "index.md")]
+    public void DirectoryLinksResolveToDocumentationRoot(string sourcePath, string link, string rootPath)
+    {
+        var home = Source("# Home") with { Path = rootPath };
+        var page = Source($"[Home]({link}#home)") with { Path = sourcePath };
+        var result = new ConfluenceStorageRenderer(Target, [home, page]).Render(page);
+        XNamespace ri = "http://atlassian.com/resource/identifier";
+        XNamespace ac = "http://atlassian.com/content";
+        var root = Parse(result.Storage);
+        Assert.Equal(Target.PageTitle(home), root.Descendants(ri + "page").Single().Attribute(ri + "content-title")?.Value);
+        Assert.Equal("home", root.Descendants(ac + "link").Single().Attribute(ac + "anchor")?.Value);
+        Assert.Empty(result.Assets);
+    }
+
+    [Fact]
+    public void RejectsAliasesThatConflictWithAnotherExportedPage()
+    {
+        var home = Source("# Home") with { AliasPath = "Next.html" };
+        var next = Source("# Next") with { Path = "Next.md" };
+        var error = Assert.Throws<InvalidOperationException>(() => new ConfluenceStorageRenderer(Target, [home, next]));
+        Assert.Contains("Conflicting Confluence page link target", error.Message);
+    }
+
+    [Theory]
+    [InlineData("Guide.md", "./", "README.md")]
+    [InlineData("Nested/Guide.md", "../", "index.md")]
+    public void DiagramDirectoryLinksResolveToDocumentationRoot(string sourcePath, string link, string rootPath)
+    {
+        var home = Source("# Home") with { Path = rootPath };
+        var page = Source($"```mermaid\nflowchart LR\nA --> B\nclick A href \"{link}#home\"\n```") with { Path = sourcePath };
+        var result = new ConfluenceStorageRenderer(Target, [home, page]).Render(page);
+        var svg = XElement.Parse(System.Text.Encoding.UTF8.GetString(Assert.Single(result.Assets).Content));
+        var href = svg.Descendants().Attributes("href").Single().Value;
+        Assert.Contains(Uri.EscapeDataString(Target.PageTitle(home)), href);
+        Assert.EndsWith("-home", href);
+    }
+
+    [Fact]
     public void ConvertsStaticOpenApiReferenceAndEscapesUserHtml()
     {
         var page = Source("""

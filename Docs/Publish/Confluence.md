@@ -98,7 +98,8 @@ New pages remain readable only by the publisher until their content and edit pro
 
 - The page tree comes from the same Markdown graph as HTML rendering, including repository imports.
 - Content properties store the export identity, logical source path, and format version; the managed root holds a per-page registry.
-- Identical bodies and titles are not rewritten. Identical attachments are recognized by their content-addressed names and checksum comments.
+- Identical bodies and titles are not rewritten. Storage comparisons ignore server-generated macro IDs and XML namespace declaration placement, but preserve content, macro parameters, and whitespace. Identical attachments are recognized by their content-addressed names and checksum comments.
+- Managed pages are discovered by traversing paginated direct page children. The root registry additionally checks registered pages, including those moved outside the managed tree.
 - A title conflict with an unrelated page, unexpected parent, missing registered page, weakened edit restriction, or HTTP version conflict stops publication.
 - MDU never guesses renames. A moved or renamed source path becomes a new managed page; the old page is retained and reported as stale.
 - Removed pages and old attachment versions are not deleted automatically.
@@ -117,7 +118,7 @@ The mirror uses Confluence's storage format, not a copy of the complete HTML web
 | Headings, paragraphs, lists, tables, emphasis | Static page content |
 | Code | Native code macro |
 | Callouts | Panel macro |
-| Markdown links and heading links | Page links and explicit anchors |
+| Markdown links and heading links | Page links and explicit anchors, including root-directory links and repository-import aliases |
 | Local images and downloads | Content-addressed page attachments |
 | External images and links | External URLs; MDU does not fetch them with the PAT |
 | Supported Mermaid, PlantUML, and context diagrams | Self-contained SVG attachments |

@@ -69,17 +69,27 @@ public sealed class ConfluenceClient : IDisposable
     public async Task<IReadOnlyList<JsonObject>> ReadManagedPages(CancellationToken cancellationToken)
     {
         var root = RootId;
-        var descendants = await List($"content/{root}/descendant/page?expand={Expansion}", cancellationToken);
         var managed = new Dictionary<string, JsonObject>(StringComparer.Ordinal);
-        foreach (var page in descendants)
+        var parents = new Queue<string>();
+        var visited = new HashSet<string>(StringComparer.Ordinal) { root };
+        parents.Enqueue(root);
+        while (parents.TryDequeue(out var parentId))
         {
-            CheckPage(page, RequiredText(page, "id"));
-            if (Owner(page)?["identity"]?.GetValue<string>() == Target.Identity)
+            foreach (var page in await List($"content/{parentId}/child/page?expand={Expansion}", cancellationToken))
             {
-                var path = RequiredText(Owner(page)!, "path");
-                CheckOwner(page, path);
-                if (!managed.TryAdd(path, page))
-                    throw new InvalidOperationException($"Duplicate managed Confluence path: {path}");
+                var id = RequiredText(page, "id");
+                CheckPage(page, id);
+                CheckParent(page, parentId);
+                if (!visited.Add(id))
+                    throw new InvalidOperationException("Confluence page tree contains a duplicate or cyclic page.");
+                parents.Enqueue(id);
+                if (Owner(page)?["identity"]?.GetValue<string>() == Target.Identity)
+                {
+                    var path = RequiredText(Owner(page)!, "path");
+                    CheckOwner(page, path);
+                    if (!managed.TryAdd(path, page))
+                        throw new InvalidOperationException($"Duplicate managed Confluence path: {path}");
+                }
             }
         }
 
@@ -162,7 +172,7 @@ public sealed class ConfluenceClient : IDisposable
         }, cancellationToken);
         page = await AssertManaged(id, path, cancellationToken);
         CheckParent(page, parentId);
-        if (Text(page, "title") != title || page["body"]?["storage"]?["value"]?.GetValue<string>() != storage)
+        if (Text(page, "title") != title || !ConfluenceStorage.AreEquivalent(Storage(page), storage))
             throw new InvalidOperationException($"Confluence did not preserve the published content of page {id}.");
         return page;
     }

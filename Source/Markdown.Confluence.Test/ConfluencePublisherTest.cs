@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Xml.Linq;
 using Xunit;
 
 namespace Markdown.Confluence.Test;
@@ -184,6 +185,85 @@ public class ConfluencePublisherTest
     }
 
     [Fact]
+    public async Task ReadsManagedTreeUsingPaginatedDirectChildren()
+    {
+        var server = new FakeConfluence { PageSize = 1 };
+        using var client = new ConfluenceClient(Target(), "test-pat", server);
+        var publisher = new ConfluencePublisher(client, TextWriter.Null);
+        var sources = Sources().Append(new ConfluenceSource("Other.md", "README.md", "Other",
+            "# Other", "/docs/Other.md", "/docs")).ToArray();
+        await publisher.Publish(sources, false);
+        server.Writes.Clear();
+        await publisher.Publish(sources, true);
+        await publisher.Publish(sources, false);
+        Assert.Empty(server.Writes);
+    }
+
+    [Fact]
+    public async Task FindsUnregisteredManagedDescendantsThroughPaginatedChildTraversal()
+    {
+        var server = new FakeConfluence { PageSize = 1 };
+        using var client = new ConfluenceClient(Target(), "test-pat", server);
+        var sources = Sources().Append(new ConfluenceSource("Other.md", "README.md", "Other",
+            "# Other", "/docs/Other.md", "/docs")).ToArray();
+        await new ConfluencePublisher(client, TextWriter.Null).Publish(sources, false);
+        var root = server.Pages.Values.Single(page => page.Owner?["path"]?.GetValue<string>() == "$root");
+        foreach (var key in root.Properties.Keys.Where(key => key.StartsWith("mdu-page-", StringComparison.Ordinal)).ToArray())
+            root.Properties.Remove(key);
+        server.Writes.Clear();
+        var output = new StringWriter();
+        await new ConfluencePublisher(client, output).Publish(sources, true);
+        Assert.Empty(server.Writes);
+        Assert.All(sources, source => Assert.Contains($"Check: {source.Path}", output.ToString()));
+    }
+
+    [Fact]
+    public async Task ServerGeneratedMacroIdsDoNotCauseFailuresOrRepeatedUpdates()
+    {
+        var server = new FakeConfluence { NormalizeStorage = AddMacroIds };
+        using var client = new ConfluenceClient(Target(), "test-pat", server);
+        var output = new StringWriter();
+        var publisher = new ConfluencePublisher(client, output);
+        var source = Sources()[0] with { Markdown = "# Home\n\n```csharp\nvar x = 1;\n```\n\n> [!NOTE]\n> A note" };
+        await publisher.Publish([source], false);
+        var page = server.Pages.Values.Single(page => page.Owner?["path"]?.GetValue<string>() == source.Path);
+        Assert.Contains("macro-id", page.Storage);
+        Assert.False(page.Private);
+        var version = page.Version;
+        server.Writes.Clear();
+        output.GetStringBuilder().Clear();
+        await publisher.Publish([source], true);
+        Assert.Contains("Check: README.md", output.ToString());
+        await publisher.Publish([source], false);
+        Assert.Empty(server.Writes);
+        Assert.Equal(version, page.Version);
+        await publisher.Publish([source with { Markdown = source.Markdown.Replace("x = 1", "x = 2") }], false);
+        Assert.Equal(version + 1, page.Version);
+        Assert.Contains("x = 2", page.Storage);
+    }
+
+    [Fact]
+    public async Task ServerChangingContentStillFailsVerificationAndKeepsNewPagePrivate()
+    {
+        var server = new FakeConfluence { NormalizeStorage = storage => AddMacroIds(storage) + "<p>Unexpected content</p>" };
+        using var client = new ConfluenceClient(Target(), "test-pat", server);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new ConfluencePublisher(client, TextWriter.Null).Publish(Sources(), false));
+        Assert.Contains("did not preserve", error.Message);
+        Assert.All(server.Pages.Values.Where(page => page.Id != "10"), page => Assert.True(page.Private));
+    }
+
+    private static string AddMacroIds(string storage)
+    {
+        XNamespace ac = "http://atlassian.com/content";
+        var root = XElement.Parse("<root xmlns:ac=\"http://atlassian.com/content\" xmlns:ri=\"http://atlassian.com/resource/identifier\">" +
+            storage + "</root>", LoadOptions.PreserveWhitespace);
+        foreach (var macro in root.Descendants(ac + "structured-macro"))
+            macro.SetAttributeValue(ac + "macro-id", Guid.NewGuid().ToString());
+        return string.Concat(root.Nodes().Select(node => node.ToString(SaveOptions.DisableFormatting)));
+    }
+
+    [Fact]
     public async Task RedirectsFailWithoutFollowingOrLeakingResponseBody()
     {
         var handler = new RedirectHandler();
@@ -242,6 +322,7 @@ internal sealed class FakeConfluence : HttpMessageHandler
     public bool IgnoreCreationRestrictions;
     public bool IgnoreRestrictionUpdates;
     public bool FailNextUpdate;
+    public Func<string, string> NormalizeStorage = storage => storage;
     public int PageSize = 100;
     private int _id = 100;
 
@@ -298,12 +379,14 @@ internal sealed class FakeConfluence : HttpMessageHandler
             Assert.NotNull(current.Owner);
             Assert.Equal(current.Version + 1, body!["version"]!["number"]!.GetValue<int>());
             current.Title = body["title"]!.GetValue<string>();
-            current.Storage = body["body"]!["storage"]!["value"]!.GetValue<string>();
+            current.Storage = NormalizeStorage(body["body"]!["storage"]!["value"]!.GetValue<string>());
             current.Version++;
             return Ok(Json(current));
         }
         if (route[2] == "descendant")
-            return Collection(Pages.Values.Where(page => Ancestors(page).Contains(current.Id)).Select(Json), query);
+            return new HttpResponseMessage(HttpStatusCode.BadRequest);
+        if (route[2] == "child" && route[3] == "page")
+            return Collection(Pages.Values.Where(page => page.ParentId == current.Id).Select(Json), query);
         if (route[2] == "child" && route[3] == "attachment")
         {
             if (read)

@@ -26,7 +26,7 @@ public sealed class ConfluenceStorageRenderer
     });
     private readonly ConfluenceTarget _target;
     private readonly IReadOnlyDictionary<string, ConfluenceSource> _sources;
-    private readonly IReadOnlyDictionary<string, ConfluenceSource> _htmlSources;
+    private readonly Dictionary<string, ConfluenceSource> _linkSources = new(StringComparer.Ordinal);
     private readonly MarkdownPipeline _pipeline;
     private readonly ConfluenceAsset? _pdf;
 
@@ -34,7 +34,16 @@ public sealed class ConfluenceStorageRenderer
     {
         _target = target;
         _sources = sources.ToDictionary(source => source.Path, StringComparer.Ordinal);
-        _htmlSources = sources.ToDictionary(source => LinkReplacer.ReplaceUrl(source.Path)!, StringComparer.Ordinal);
+        foreach (var source in sources)
+        {
+            AddLinkSource(source.Path, source);
+            AddLinkSource(LinkReplacer.ReplaceUrl(source.Path)!, source);
+            if (source.AliasPath is { } alias)
+            {
+                AddLinkSource(alias, source);
+                AddLinkSource(Path.ChangeExtension(alias, ".md"), source);
+            }
+        }
         _pdf = pdf;
         var builder = new MarkdownPipelineBuilder().UseAdvancedExtensions().UseHeadingIds()
             .UseRenderedMath().UseGitHubAlerts().UseIconsAndEmojis().UseKeyboardKeys();
@@ -60,7 +69,8 @@ public sealed class ConfluenceStorageRenderer
         var html = Regex.Replace(HtmlFragment.NormalizeVoidElements(writer.ToString()), @"&[A-Za-z][A-Za-z0-9]+;", match =>
         {
             var decoded = WebUtility.HtmlDecode(match.Value);
-            return decoded == match.Value ? match.Value : new XText(decoded).ToString();
+            return decoded == match.Value ? match.Value :
+                string.Concat(decoded.EnumerateRunes().Select(rune => $"&#x{rune.Value:X};"));
         });
         var root = XElement.Parse("<root>" + html + "</root>", LoadOptions.PreserveWhitespace);
         Transform(root, source, assets, diagnostics);
@@ -195,12 +205,7 @@ public sealed class ConfluenceStorageRenderer
         if (path.Length > 0)
         {
             var decoded = Uri.UnescapeDataString(path);
-            var logical = NormalizePath(source.Path, decoded);
-            if (decoded.EndsWith('/') || Path.GetExtension(decoded).Length == 0)
-            {
-                var prefix = logical.TrimEnd('/') + "/";
-                logical = _sources.ContainsKey(prefix + "README.md") ? prefix + "README.md" : prefix + "index.md";
-            }
+            var logical = ResolvePagePath(source.Path, decoded);
             if (TryFindSource(logical, out var destination))
                 resource = new XElement(Ri + "page", new XAttribute(Ri + "content-title", _target.PageTitle(destination)),
                     new XAttribute(Ri + "space-key", _target.SpaceKey));
@@ -210,6 +215,14 @@ public sealed class ConfluenceStorageRenderer
         }
         return new XElement(Ac + "link", anchor is null ? null : new XAttribute(Ac + "anchor", anchor),
             resource, new XElement(Ac + "link-body", link.Nodes()));
+    }
+
+    private string ResolvePagePath(string source, string path)
+    {
+        var logical = NormalizePath(source, path);
+        if (!path.EndsWith('/') && Path.GetExtension(path).Length > 0) return logical;
+        var prefix = logical.Length == 0 ? "" : logical.TrimEnd('/') + "/";
+        return _sources.ContainsKey(prefix + "README.md") ? prefix + "README.md" : prefix + "index.md";
     }
 
     private static string NormalizePath(string source, string path)
@@ -281,7 +294,7 @@ public sealed class ConfluenceStorageRenderer
         {
             if (href.Value.StartsWith('#') && href.Parent?.Name.LocalName != "a" || External(href.Value, image: false)) continue;
             var parts = href.Value.Split('#', 2);
-            var path = parts[0].Length == 0 ? source.Path : NormalizePath(source.Path, Uri.UnescapeDataString(parts[0]));
+            var path = parts[0].Length == 0 ? source.Path : ResolvePagePath(source.Path, Uri.UnescapeDataString(parts[0]));
             if (!TryFindSource(path, out var destination))
                 throw new InvalidOperationException($"Diagram link has no exported target: {href.Value}");
             var title = _target.PageTitle(destination);
@@ -305,7 +318,12 @@ public sealed class ConfluenceStorageRenderer
 
     private static XElement Attachment(string name) => new(Ri + "attachment", new XAttribute(Ri + "filename", name));
     private bool TryFindSource(string path, out ConfluenceSource source) =>
-        _sources.TryGetValue(path, out source!) || _htmlSources.TryGetValue(path, out source!);
+        _linkSources.TryGetValue(path, out source!);
+    private void AddLinkSource(string path, ConfluenceSource source)
+    {
+        if (!_linkSources.TryAdd(path, source) && _linkSources[path].Path != source.Path)
+            throw new InvalidOperationException($"Conflicting Confluence page link target: {path}");
+    }
     private static XElement Anchor(string id) => new(Ac + "structured-macro", new XAttribute(Ac + "name", "anchor"),
         new XElement(Ac + "parameter", new XAttribute(Ac + "name", ""), id));
     private static XElement CodeMacro(string text, string language) => new(Ac + "structured-macro", new XAttribute(Ac + "name", "code"),
