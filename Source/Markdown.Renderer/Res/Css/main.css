@@ -72,6 +72,8 @@
     --diagram-container-background: rgb(0 0 0 / 2.5%);
     --diagram-subgraph-border: #a3a3aa;
     --diagram-subgraph-title: #6e6e73;
+    /* The color behind a diagram, so label backgrounds and hollow markers blend into it; tinted containers set it next to their background. */
+    --diagram-surface: var(--page-background);
     --iso-surface: #fff;
     --iso-platform-surface: #fff;
     --iso-top-mix: 20%;
@@ -1773,6 +1775,7 @@ blockquote {
     border: 1px solid var(--alert-accent);
     border-radius: 15px;
     background: var(--alert-background);
+    --diagram-surface: var(--alert-background);
     color: var(--text-primary);
 }
 
@@ -1817,6 +1820,7 @@ blockquote {
     border: 1px solid var(--border);
     border-radius: 15px;
     background: var(--surface-code-block-body);
+    --diagram-surface: var(--surface-code-block-body);
 }
 
 .markdown-content details > summary {
@@ -2284,9 +2288,7 @@ pre code {
     margin: 1.5rem 0;
 }
 
-/* --diagram-surface is the color behind a diagram, so label backgrounds and hollow markers blend into it. */
 .diagram {
-    --diagram-surface: var(--page-background);
     text-align: center;
 }
 
@@ -2296,9 +2298,6 @@ pre code {
     border: 1px solid var(--border);
     border-radius: 8px;
     background: var(--surface-code-block);
-}
-
-.code-block-titled + .diagram {
     --diagram-surface: var(--surface-code-block);
 }
 
@@ -2681,7 +2680,7 @@ pre code {
 }
 
 .diagram-edge-label-background {
-    fill: var(--diagram-surface, var(--page-background));
+    fill: var(--diagram-surface);
 }
 
 .diagram-edge-label-text {
@@ -2810,7 +2809,7 @@ pre code {
 }
 
 .diagram-marker-hollow {
-    fill: var(--diagram-surface, var(--page-background));
+    fill: var(--diagram-surface);
     stroke: var(--diagram-edge);
     stroke-width: 1.5;
     stroke-linejoin: round;
@@ -3188,6 +3187,7 @@ th, td {
     border: 0;
     border-radius: 0;
     background: var(--page-background);
+    --diagram-surface: var(--page-background);
 }
 
 .markdown-content .openapi-tag-rows {
@@ -3468,6 +3468,7 @@ th, td {
     border: 1px solid var(--border-subtle);
     border-radius: 0.65rem;
     background: var(--page-background);
+    --diagram-surface: var(--page-background);
     box-shadow: inset 3px 0 0 var(--openapi-method-color);
     transition: border-color 120ms ease;
 }
