@@ -72,6 +72,8 @@
     --diagram-container-background: rgb(0 0 0 / 2.5%);
     --diagram-subgraph-border: #a3a3aa;
     --diagram-subgraph-title: #6e6e73;
+    /* The color behind a diagram, so label backgrounds and hollow markers blend into it; tinted containers set it next to their background. */
+    --diagram-surface: var(--page-background);
     --iso-surface: #fff;
     --iso-platform-surface: #fff;
     --iso-top-mix: 20%;
@@ -1773,6 +1775,7 @@ blockquote {
     border: 1px solid var(--alert-accent);
     border-radius: 15px;
     background: var(--alert-background);
+    --diagram-surface: var(--alert-background);
     color: var(--text-primary);
 }
 
@@ -1817,6 +1820,7 @@ blockquote {
     border: 1px solid var(--border);
     border-radius: 15px;
     background: var(--surface-code-block-body);
+    --diagram-surface: var(--surface-code-block-body);
 }
 
 .markdown-content details > summary {
@@ -2294,6 +2298,7 @@ pre code {
     border: 1px solid var(--border);
     border-radius: 8px;
     background: var(--surface-code-block);
+    --diagram-surface: var(--surface-code-block);
 }
 
 .code-block-titled + .diagram::before,
@@ -2602,43 +2607,29 @@ pre code {
     cursor: pointer;
 }
 
+/* Linked labels look like links in the prose: link color, underlined only on hover or keyboard focus. */
 .diagram-link text {
-    text-decoration: underline;
+    fill: var(--link);
     text-decoration-thickness: 1px;
     text-underline-offset: 2px;
 }
 
-.diagram-link:is(:hover, :focus-visible) .diagram-node-shape,
-.diagram-link:is(:hover, :focus-visible) .diagram-node-detail,
-.diagram-link:is(:hover, :focus-visible) .diagram-note-shape,
-.diagram-link:is(:hover, :focus-visible) .diagram-container-shape,
-.diagram-link:is(:hover, :focus-visible) .diagram-container-tab,
-.diagram-link:is(:hover, :focus-visible) .diagram-actor-head,
-.diagram-link:is(:hover, :focus-visible) .diagram-actor-body {
-    stroke: var(--link);
-}
-
-.diagram-link:is(:hover, :focus-visible) .diagram-state-symbol {
-    fill: var(--link);
-}
-
 .diagram-link:is(:hover, :focus-visible) text {
+    text-decoration: underline;
+}
+
+/* Start, end, fork, and choice symbols have no label, so the symbol itself carries the link color. */
+.diagram-link .diagram-state-symbol {
     fill: var(--link);
+}
+
+.diagram-link .diagram-state-choice .diagram-node-shape {
+    stroke: var(--link);
 }
 
 .diagram-link:focus-visible {
     outline: 2px solid var(--link);
     outline-offset: 3px;
-}
-
-.diagram-link:focus-visible .diagram-node-shape,
-.diagram-link:focus-visible .diagram-node-detail,
-.diagram-link:focus-visible .diagram-note-shape,
-.diagram-link:focus-visible .diagram-container-shape,
-.diagram-link:focus-visible .diagram-container-tab,
-.diagram-link:focus-visible .diagram-actor-head,
-.diagram-link:focus-visible .diagram-actor-body {
-    stroke-width: 2.5;
 }
 
 .diagram-node-diamond .diagram-node-shape {
@@ -2689,7 +2680,7 @@ pre code {
 }
 
 .diagram-edge-label-background {
-    fill: var(--page-background);
+    fill: var(--diagram-surface);
 }
 
 .diagram-edge-label-text {
@@ -2818,7 +2809,7 @@ pre code {
 }
 
 .diagram-marker-hollow {
-    fill: var(--page-background);
+    fill: var(--diagram-surface);
     stroke: var(--diagram-edge);
     stroke-width: 1.5;
     stroke-linejoin: round;
@@ -3196,6 +3187,7 @@ th, td {
     border: 0;
     border-radius: 0;
     background: var(--page-background);
+    --diagram-surface: var(--page-background);
 }
 
 .markdown-content .openapi-tag-rows {
@@ -3476,6 +3468,7 @@ th, td {
     border: 1px solid var(--border-subtle);
     border-radius: 0.65rem;
     background: var(--page-background);
+    --diagram-surface: var(--page-background);
     box-shadow: inset 3px 0 0 var(--openapi-method-color);
     transition: border-color 120ms ease;
 }
