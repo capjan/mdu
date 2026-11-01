@@ -80,7 +80,7 @@ Excluded content stays on the website and is removed only from the PDF. Choose t
 These rules apply to `mdu pdf` and to every [PDF Link](../Features/Pdf-Link.md) download. In addition:
 
 - Excluded content must be complete HTML: every HTML element opened in it is also closed in it, in the right order. Prose such as `List<String>` counts as an HTML tag; write it as code, for example `` `List<String>` ``. The text of `<script>`, `<style>`, and `<template>` is ignored.
-- Footnotes referenced only by excluded content are excluded too. A footnote definition written in excluded content is excluded with it; if visible text refers to it, the export stops with an error. A hidden section at the end of a page includes the footnote definitions below it, so put definitions that visible text uses above that section. The same applies to link reference definitions such as `[label]: https://example.org`.
+- Footnotes referenced only by excluded content are excluded too. A footnote definition written in excluded content is excluded with it; if visible text refers to it, the export stops with an error. Definitions written after the last paragraph, list, or other block of a hidden section, such as the ones collected at the end of a page, are not part of the section: visible text can still use them. The same applies to link reference definitions such as `[label]: https://example.org`.
 - Links to excluded content are not clickable in the PDF.
 
 > [!WARNING]
@@ -125,7 +125,7 @@ Back in the PDF.
 - An HTML element that starts in the section must also end in it, before the next heading of the same or a higher level. To exclude HTML that encloses headings, use a [range](#exclude-a-range).
 - An [OpenAPI reference](../Features/OpenAPI.md) inside the section is excluded with it, even though it contains headings of its own.
 - Renderers without attribute support, such as GitHub, show `{.pdf-hidden}` as part of the heading. Use a [range](#exclude-a-range) if the page must look clean there.
-- If you exclude the page's level-one heading, the PDF uses the `title` from the front matter as the page title. Without one, it uses the file name, or the folder name for a `README.md` or `index.md` page.
+- If you exclude the page's level-one heading, the PDF uses the `title` from the front matter as the page title. Without one, it uses the file name, or the folder name for a `README.md` or `index.md` page. PDF Link downloads of that page are named the same way.
 
 ### Exclude a range
 

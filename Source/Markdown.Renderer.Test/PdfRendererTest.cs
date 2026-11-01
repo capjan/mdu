@@ -738,6 +738,7 @@ public class PdfRendererTest
     [InlineData("Inline <textarea><!-- pdf:hidden -->SecretInlineTextarea<!-- /pdf:hidden --></textarea> after.", "not inside a paragraph")]
     [InlineData("<textarea>\n<!-- pdf:hidden -->\nSecretInTextarea\n<!-- /pdf:hidden -->\n</textarea>", "must stand alone")]
     [InlineData("<title><!-- pdf:hidden --></title>", "must stand alone")]
+    [InlineData("Text <script src=\"a.js\"/> and <!-- pdf:hidden --> SecretAfterScript <!-- /pdf:hidden --> end.", "not inside a paragraph")]
     public void RejectsMarkersInDisplayedRawText(string markdown, string reason)
     {
         var exception = Assert.Throws<PdfHiddenContentException>(() => new HtmlRenderer().RenderPdfMarkdownFragment(markdown));
@@ -879,13 +880,25 @@ public class PdfRendererTest
     }
 
     [Theory]
-    [InlineData("Visible[^v].\n\n## Hidden {.pdf-hidden}\n\nHidden text.\n\n[^v]: SecretDefinition\n")]
+    [InlineData("Visible[^v].\n\n## Hidden {.pdf-hidden}\n\n[^v]: SecretDefinition\n\nHidden text.\n")]
     [InlineData("Visible[^v].\n\n<!-- pdf:hidden -->\n\n[^v]: SecretDefinition\n\n<!-- /pdf:hidden -->\n\nAfter\n")]
     public void RejectsFootnoteDefinitionsInExcludedContentThatVisibleTextUses(string markdown)
     {
         var exception = Assert.Throws<PdfHiddenContentException>(() => new HtmlRenderer().RenderPdfMarkdownFragment(markdown));
 
         Assert.Contains("Footnote [^v] is defined in excluded content", exception.Message);
+    }
+
+    [Theory]
+    [InlineData("Visible[^v] [Link][r].\n\n## Hidden {.pdf-hidden}\n\nHidden text.\n\n[^v]: KeptDefinition\n\n[r]: https://kept.example\n")]
+    [InlineData("Visible[^v] [Link][r].\n\n## Hidden {.pdf-hidden}\n\nHidden text.\n\n[^v]: KeptDefinition\n\n[r]: https://kept.example\n\n## Next\n\nAfter\n")]
+    public void KeepsDefinitionsWrittenBelowTheLastBlockOfAHiddenSection(string markdown)
+    {
+        var html = new HtmlRenderer().RenderPdfMarkdownFragment(markdown);
+
+        Assert.DoesNotContain("Hidden text", html);
+        Assert.Contains("KeptDefinition", html);
+        Assert.Contains("href=\"https://kept.example\"", html);
     }
 
     [Theory]
@@ -901,7 +914,7 @@ public class PdfRendererTest
 
     [Theory]
     [InlineData("[Visible][secret]\n\n<!-- pdf:hidden -->\n[secret]: https://secret.example/confidential\n<!-- /pdf:hidden -->\n")]
-    [InlineData("![Logo][secret]\n\n## Hidden {.pdf-hidden}\n\nHidden text.\n\n[secret]: https://secret.example/logo.png\n")]
+    [InlineData("![Logo][secret]\n\n## Hidden {.pdf-hidden}\n\n[secret]: https://secret.example/logo.png\n\nHidden text.\n")]
     public void RejectsVisibleLinksToExcludedLinkDefinitions(string markdown)
     {
         var exception = Assert.Throws<PdfHiddenContentException>(() => new HtmlRenderer().RenderPdfMarkdownFragment(markdown));

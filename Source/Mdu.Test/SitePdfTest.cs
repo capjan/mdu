@@ -47,6 +47,31 @@ public class SitePdfTest
         }
     }
 
+    [Theory]
+    [InlineData("# SecretTitle {.pdf-hidden}\n\nHidden\n\n# Chapter\n\nBody\n", "Guide.pdf")]
+    [InlineData("<!-- pdf:hidden -->\n# SecretTitle\n<!-- /pdf:hidden -->\n\nBody\n", "Guide.pdf")]
+    [InlineData("# Visible Guide {#start}\n\nBody\n", "Visible Guide.pdf")]
+    public void NamesDownloadsAfterTheTitleThatThePdfShows(string markdown, string expectedName)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-pdf-hidden-name-{Guid.NewGuid():N}");
+        var docs = Path.Combine(root, "docs");
+        var site = Path.Combine(root, "site");
+        Directory.CreateDirectory(docs);
+        File.WriteAllText(Path.Combine(docs, "README.md"), "# Home\n\n[Guide](mdu:pdf?root=Guide.md)");
+        File.WriteAllText(Path.Combine(docs, "Guide.md"), markdown);
+        try
+        {
+            Assert.Equal(0, Render(docs, site));
+            var html = File.ReadAllText(Path.Combine(site, "index.html"));
+            // The website still shows the heading; only the PDF and its download name leave it out.
+            Assert.Equal($"download=\"{expectedName}\"", Regex.Match(html, "download=\"[^\"]*\"").Value);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public void RegeneratesEveryValidDownloadAndRemovesFailedOnesWhenAnExportFails()
     {

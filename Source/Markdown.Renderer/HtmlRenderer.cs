@@ -182,8 +182,10 @@ public class HtmlRenderer
     }
 
     /// <summary>Returns whether the first level-one heading, which usually provides the page title, is hidden in PDF output.</summary>
-    internal bool ExcludesTitleHeadingFromPdf(string markdown)
+    public bool ExcludesTitleHeadingFromPdf(string markdown)
     {
+        // Every pdf-hidden class and pdf:hidden marker contains "pdf", so most pages need no second parse.
+        if (!markdown.Contains("pdf", StringComparison.OrdinalIgnoreCase)) return false;
         var document = ParseMarkdown(markdown);
         var title = document.Descendants<HeadingBlock>().FirstOrDefault(heading => heading.Level == 1);
         if (title is null) return false;

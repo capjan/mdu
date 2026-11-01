@@ -265,6 +265,40 @@ public class PdfCommandHiddenContentTest
         }
     }
 
+    [Fact]
+    public void NamesThePageOfMalformedAndUnresolvedPdfLinks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-pdf-link-error-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var page = Path.Combine(root, "README.md");
+        var output = Path.Combine(root, "manual.pdf");
+        var originalError = Console.Error;
+        try
+        {
+            File.WriteAllText(page, "# Home\n\n[PDF](mdu:pdf?unknown=x)\n");
+            using var error = new StringWriter();
+            Console.SetError(error);
+
+            Assert.Equal(1, CreateCommand().Execute(new RenderCommandSettings { RootPath = root, OutputPath = output }));
+
+            Assert.False(File.Exists(output));
+            Assert.Contains("Page \"Home\" (index.html): Invalid PDF link 'mdu:pdf?unknown=x'", error.ToString());
+
+            File.WriteAllText(page, "# Home\n\n[PDF](mdu:pdf?root=Missing.md)\n");
+            var graphBuilder = new GraphBuilder(new DataPreparationVisitor(new MarkdownDocumentReader()));
+            var graph = graphBuilder.CreateGraph(new RenderCommandSettings { RootPath = root });
+
+            Assert.Equal(1, CreateCommand().WriteSitePdfIfLinked(root, Path.Combine(root, "site", "documentation.pdf"), graph));
+
+            Assert.Contains("Page \"Home\" (index.html): PDF root page not found or ambiguous: 'Missing.md'", error.ToString());
+        }
+        finally
+        {
+            Console.SetError(originalError);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static string Hex(string text) => Convert.ToHexString(Encoding.Latin1.GetBytes(text));
 
     private static PdfCommand CreateCommand()

@@ -114,7 +114,8 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
                 catch (InvalidOperationException exception)
                 {
                     // Keep collecting, so that the other downloads are still regenerated and none stays outdated.
-                    Console.Error.WriteLine($"Could not write PDF: {exception.Message}");
+                    Console.Error.WriteLine(
+                        $"Could not write PDF: {PageLabel(PdfSelection.GetTitle(rootPath, page), GetRelativeHtmlPath(rootPath, page))}: {exception.Message}");
                     failed = true;
                     continue;
                 }
@@ -159,11 +160,8 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
                     item.File.FileInfo.FullName,
                     item.File.SourceRootPath,
                     includeSpecificationPageLink: false);
-                var title = item.File.FrontMatterTitle is null && pdfRenderer.ExcludesTitleHeading(markdown)
-                    ? PdfSelection.GetFallbackTitle(rootPath, item.File)
-                    : PdfSelection.GetTitle(rootPath, item.File);
                 return new PdfSourceSection(
-                    title,
+                    PdfSelection.GetPdfTitle(rootPath, item.File, markdown, pdfRenderer.ExcludesTitleHeading),
                     GetRelativeHtmlPath(rootPath, item.File),
                     markdown,
                     item.Depth);
@@ -174,6 +172,13 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         {
             Console.Error.WriteLine("No Markdown pages selected for PDF output.");
             if (trackSitePdf) DiscardSitePdf(outputPath);
+            return 1;
+        }
+
+        // Site PDFs resolve their links in WriteSitePdfIfLinked. Without that step, a malformed link would become a dead link.
+        if (!trackSitePdf && FindMalformedPdfLink(sections) is { } malformedLink)
+        {
+            Console.Error.WriteLine($"Could not write PDF: {malformedLink}");
             return 1;
         }
 
@@ -203,6 +208,27 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         Console.WriteLine($"Wrote {sections.Length} Markdown files to {outputPath}");
         return 0;
     }
+
+    private string? FindMalformedPdfLink(IEnumerable<PdfSourceSection> sections)
+    {
+        foreach (var section in sections)
+        foreach (var url in pdfRenderer.FindPdfLinks(section.Markdown))
+        {
+            try
+            {
+                LinkReplacer.GetPdfRoot(url);
+            }
+            catch (InvalidOperationException exception)
+            {
+                return $"{PageLabel(section.Title, section.RelativeHtmlPath)}: {exception.Message}";
+            }
+        }
+
+        return null;
+    }
+
+    // Matches the page label of the errors that PdfRenderer reports.
+    private static string PageLabel(string title, string relativeHtmlPath) => $"Page \"{title}\" ({relativeHtmlPath})";
 
     // A failed site PDF must not stay downloadable, because it may still contain content the author meant to exclude.
     private void DiscardSitePdf(string outputPath)

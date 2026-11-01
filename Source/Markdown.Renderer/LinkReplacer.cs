@@ -32,7 +32,7 @@ public class LinkReplacer
         return Uri.UnescapeDataString(root);
     }
 
-    // Invalid links stay unresolved here; the PDF step reports them and fails mdu render.
+    // Invalid links stay unresolved here; PdfCommand reports them and fails mdu render and mdu pdf.
     private static bool IsFullDocumentPdfLink(string url) =>
         string.Equals(url, PdfLinkUrl, StringComparison.OrdinalIgnoreCase);
 

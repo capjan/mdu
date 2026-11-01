@@ -188,7 +188,9 @@ public class MarkdigVisitor : BaseVisitor
             urls[url] = GetRelativeUrl(
                 GetSiteRelativeSegments(outputDirectory),
                 PdfSelection.GetOutputPath(_rootPath, selected).Split('/'));
-            var title = Regex.Replace(NavigationPage.RemoveIconShortcodes(selected.Title),
+            var pdfTitle = PdfSelection.GetPdfTitle(_rootPath, selected,
+                RemoveFrontMatter(selected.ReadMarkdown(), selected.FrontMatter), _htmlFoundation.ExcludesTitleHeadingFromPdf);
+            var title = Regex.Replace(NavigationPage.RemoveIconShortcodes(pdfTitle),
                 @":[\w+-]+:", match => ShortcodeExtension.Emojis.ContainsKey(match.Value) ? string.Empty : match.Value)
                 .Trim();
             title = Regex.Replace(title, @"\s+", " ");

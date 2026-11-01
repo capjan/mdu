@@ -107,7 +107,8 @@ internal static class PdfHiddenContent
         var name = match.Groups["name"].Value;
         if (inertElement is not null)
             return match.Groups["closing"].Success && name.Equals(inertElement, StringComparison.OrdinalIgnoreCase) ? null : inertElement;
-        return !match.Groups["closing"].Success && InertElements.Contains(name) ? name : null;
+        // A self-closing tag such as <script src="a.js"/> has no content, so the tags after it are markup again.
+        return !match.Groups["closing"].Success && InertElements.Contains(name) && !IsSelfClosing(match) ? name : null;
     }
 
     private static void RemoveMarkedRegions(ContainerBlock container, List<SourceRange> excluded)
@@ -166,10 +167,7 @@ internal static class PdfHiddenContent
             if (block is HeadingBlock heading && IsHidden(heading))
             {
                 var end = FindSectionEnd(container, index + 1, heading);
-                var sectionEnd = end < container.Count && container[end] is not FootnoteGroup
-                    ? container[end].Span.Start - 1
-                    : container is MarkdownDocument ? int.MaxValue : container.Span.End;
-                excluded.Add(new SourceRange(heading.Span.Start, sectionEnd));
+                excluded.Add(new SourceRange(heading.Span.Start, LastContentEnd(container, index, end)));
                 for (var remove = end - 1; remove >= index; remove--)
                     container.RemoveAt(remove);
                 index--;
@@ -180,6 +178,17 @@ internal static class PdfHiddenContent
             }
         }
     }
+
+    /// <summary>
+    /// Returns where the last block of a hidden section ends. Markdig moves footnote and link reference definitions out
+    /// of their container, so definitions written after that block, such as the ones collected at the end of a page,
+    /// stay with the page: visible text can still use them, and definitions that only excluded text uses are dropped.
+    /// </summary>
+    private static int LastContentEnd(ContainerBlock container, int start, int end) =>
+        Enumerable.Range(start, end - start)
+            .Select(index => container[index])
+            .Where(block => block is not LinkReferenceDefinitionGroup)
+            .Max(block => block.Span.End);
 
     /// <summary>
     /// A hidden section ends before the next heading of the same or a higher level in the same container, before an
@@ -267,7 +276,7 @@ internal static class PdfHiddenContent
             foreach (Match tag in HtmlTagRegex.Matches(MaskNonMarkup(html)))
             {
                 var name = tag.Groups["name"].Value;
-                if (VoidElements.Contains(name) || tag.Groups["attributes"].Value.TrimEnd().EndsWith('/')) continue;
+                if (VoidElements.Contains(name) || IsSelfClosing(tag)) continue;
                 if (!tag.Groups["closing"].Success)
                 {
                     _open.Add(name);
@@ -282,6 +291,8 @@ internal static class PdfHiddenContent
             return null;
         }
     }
+
+    private static bool IsSelfClosing(Match tag) => tag.Groups["attributes"].Value.TrimEnd().EndsWith('/');
 
     private static string HeadingText(HeadingBlock heading) =>
         string.Concat(heading.Inline?.Descendants<LiteralInline>().Select(literal => literal.Content.ToString()) ?? []).Trim();
