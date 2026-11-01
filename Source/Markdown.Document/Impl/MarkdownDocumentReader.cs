@@ -4,6 +4,7 @@ using Core.Extensions.ParserRelated;
 using Core.Parser;
 using Markdig;
 using Markdig.Extensions.Footnotes;
+using Markdig.Renderers.Html;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
 using Markdown.Document.Model;
@@ -15,6 +16,8 @@ public class MarkdownDocumentReader : IMarkdownDocumentReader
 {
     private static readonly MarkdownPipeline LinkParsingPipeline =
         new MarkdownPipelineBuilder().UseFootnotes().UsePreciseSourceLocation().Build();
+    private static readonly MarkdownPipeline HeadingAttributesPipeline =
+        new MarkdownPipelineBuilder().UseGenericAttributes().UsePreciseSourceLocation().Build();
     private static readonly Regex MermaidLinkedDiagramHeaderRegex = new(
         @"^(?:(?:flowchart|graph)(?:[ \t]+(?:TB|TD|BT|LR|RL))?[ \t]*(?:;.*)?|stateDiagram(?:-v2)?[ \t]*;?)[ \t]*(?:%%.*)?$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -38,10 +41,26 @@ public class MarkdownDocumentReader : IMarkdownDocumentReader
         var title = string.Empty;
 
         if (!m.Success) return new MarkdownHeader(title, frontMatter);
-        title = m.Groups["titleName"].Value;
+        title = RemoveHeadingAttributes(m.Groups["titleName"].Value);
         frontMatter = m.Groups["frontMatter"].Value;
 
         return new MarkdownHeader(title, frontMatter);
+    }
+
+    /// <summary>
+    /// Removes a trailing attribute block such as <c>{#id}</c> or <c>{.pdf-hidden}</c>, which the rendered heading does
+    /// not show either. Markdig decides what counts as attributes, and the rest of the title keeps its Markdown.
+    /// </summary>
+    private static string RemoveHeadingAttributes(string title)
+    {
+        if (!title.Contains('{')) return title;
+        var markdown = "# " + title;
+        if (Markdig.Markdown.Parse(markdown, HeadingAttributesPipeline).FirstOrDefault() is not HeadingBlock heading ||
+            heading.TryGetAttributes() is null)
+            return title;
+
+        var end = heading.Inline?.Descendants<Inline>().Select(inline => inline.Span.End).DefaultIfEmpty(-1).Max() ?? -1;
+        return end < 2 ? string.Empty : markdown[2..(end + 1)].TrimEnd();
     }
 
     public IEnumerable<IMarkdownLink> ReadLinks(IParserInput input) => ReadAnalysis(input).Links;

@@ -15,6 +15,10 @@ public class UnitTestMarkdownDocument
     [InlineData("# h1 /|\\.,.<>1234567890$#()\r\n", "h1 /|\\.,.<>1234567890$#()")]
     [InlineData("# Home\n\nHome\n\nOther Text", "Home")]
     [InlineData("---\ntitle: pageTitle\n---\n# Headline 1\n\n[Home](../README.md)", "Headline 1")]
+    [InlineData("# Internal handbook {.pdf-hidden}\n", "Internal handbook")]
+    [InlineData("# **Setup** :material-cog: {#setup .wide}\r\n", "**Setup** :material-cog:")]
+    [InlineData("# Braces {1abc}\n", "Braces {1abc}")]
+    [InlineData("# {.pdf-hidden}\n", "")]
     public void TestGetHeader(string input, string expectedTitle)
     {
         var header = MarkdownDocument.ReadHeader(input);
