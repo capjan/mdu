@@ -102,7 +102,7 @@ public sealed class ServeCommand
         _watchers = watcher;
         try
         {
-            RebuildSite();
+            RebuildSite(failOnPdfError: true);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or YamlDotNet.Core.YamlException)
         {
@@ -167,7 +167,7 @@ public sealed class ServeCommand
         return 0;
     }
 
-    private void RebuildSite()
+    private void RebuildSite(bool failOnPdfError = false)
     {
         var previousFiles = new HashSet<string>(_generatedFiles, PathComparer);
         var siteConfiguration = SiteConfigurationReader.Read(_rootPath);
@@ -196,8 +196,11 @@ public sealed class ServeCommand
         RebuildDependencyIndex(graph);
         graph.Visit(new LocalAssetsCopy(_rootPath, _outputPath));
         var pdfOutputPath = Path.Combine(_outputPath, "documentation.pdf");
-        if (_pdfCommand.WriteSitePdfIfLinked(_rootPath, pdfOutputPath, graph) != 0)
-            throw new InvalidOperationException("Could not render the documentation PDF.");
+        if (!TryWriteSitePdf(() => _pdfCommand.WriteSitePdfIfLinked(_rootPath, pdfOutputPath, graph)))
+        {
+            if (failOnPdfError) throw new InvalidOperationException("Could not render the documentation PDF.");
+            ReportPdfFailure();
+        }
         var rendererVisitor = new MarkdigVisitor(
             _rootPath,
             _outputPath,
@@ -508,8 +511,8 @@ public sealed class ServeCommand
         {
             _searchIndexBuilder.WriteIndex(_outputPath);
             var pdfOutputPath = Path.Combine(_outputPath, "documentation.pdf");
-            if (_pdfCommand.WriteSitePdfIfLinked(_rootPath, pdfOutputPath, _navigationRoots, reuseUnchanged: true) != 0)
-                throw new InvalidOperationException("Could not render the documentation PDF.");
+            if (!TryWriteSitePdf(() => _pdfCommand.WriteSitePdfIfLinked(_rootPath, pdfOutputPath, _navigationRoots, reuseUnchanged: true)))
+                ReportPdfFailure();
         }
 
         var assetChanges = relevantChanges
@@ -539,6 +542,24 @@ public sealed class ServeCommand
             server.Publish(affectedPageUrls);
         }
     }
+
+    // An invalid PDF root throws instead of returning an error code.
+    private static bool TryWriteSitePdf(Func<int> write)
+    {
+        try
+        {
+            return write() == 0;
+        }
+        catch (InvalidOperationException exception)
+        {
+            Console.Error.WriteLine($"Could not write PDF: {exception.Message}");
+            return false;
+        }
+    }
+
+    // While serving, a PDF error must not block page updates, because a page is often briefly invalid while it is edited.
+    private static void ReportPdfFailure() =>
+        Console.Error.WriteLine("Could not render the documentation PDF. Pages are still updated; the PDF is available again once the error is fixed.");
 
     private bool ChangesPageSet(string path) =>
         _pages.ContainsKey(path) ? !File.Exists(path) : File.Exists(path) && IsMarkdownCandidate(path);

@@ -167,14 +167,24 @@ public class MarkdigVisitor : BaseVisitor
         var names = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var url in _htmlFoundation.FindPdfLinks(markdown))
         {
-            var path = LinkReplacer.GetPdfRoot(url);
-            if (path is null)
+            string? path;
+            MarkdownFile selected;
+            try
             {
-                urls[url] = pdfUrl;
-                names[url] = "documentation";
+                path = LinkReplacer.GetPdfRoot(url);
+                if (path is null)
+                {
+                    urls[url] = pdfUrl;
+                    names[url] = "documentation";
+                    continue;
+                }
+                selected = PdfSelection.FindPage(_rootPath, _navigationRoots, path, entity);
+            }
+            catch (InvalidOperationException)
+            {
+                // The PDF step reports invalid roots and fails mdu render; mdu serve keeps the page with the link unresolved.
                 continue;
             }
-            var selected = PdfSelection.FindPage(_rootPath, _navigationRoots, path, entity);
             urls[url] = GetRelativeUrl(
                 GetSiteRelativeSegments(outputDirectory),
                 PdfSelection.GetOutputPath(_rootPath, selected).Split('/'));

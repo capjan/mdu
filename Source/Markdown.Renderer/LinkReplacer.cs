@@ -32,6 +32,10 @@ public class LinkReplacer
         return Uri.UnescapeDataString(root);
     }
 
+    // Invalid links stay unresolved here; the PDF step reports them and fails mdu render.
+    private static bool IsFullDocumentPdfLink(string url) =>
+        string.Equals(url, PdfLinkUrl, StringComparison.OrdinalIgnoreCase);
+
     public void ReplaceAll(MarkdownDocument document, string? pdfDownloadUrl = null,
         IReadOnlyDictionary<string, string>? pdfDownloadUrls = null,
         IReadOnlyDictionary<string, string>? pdfDownloadNames = null)
@@ -44,7 +48,7 @@ public class LinkReplacer
                 var originalUrl = link.Url!;
                 if (pdfDownloadUrls?.TryGetValue(link.Url!, out var downloadUrl) == true)
                     link.Url = downloadUrl;
-                else if (GetPdfRoot(link.Url!) is null && !string.IsNullOrWhiteSpace(pdfDownloadUrl))
+                else if (IsFullDocumentPdfLink(link.Url!) && !string.IsNullOrWhiteSpace(pdfDownloadUrl))
                     link.Url = pdfDownloadUrl;
                 if (!IsPdfLink(link.Url))
                 {

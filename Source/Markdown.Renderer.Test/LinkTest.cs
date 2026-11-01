@@ -49,6 +49,17 @@ public class LinkTest
     public void RejectsMalformedPdfLinks(string url) =>
         Assert.Throws<InvalidOperationException>(() => LinkReplacer.GetPdfRoot(url));
 
+    [Theory]
+    [InlineData("mdu:pdf?root=")]
+    [InlineData("mdu:pdf?root=a%zz")]
+    [InlineData("mdu:pdf?unknown=x")]
+    public void LeavesMalformedPdfLinksUnresolvedInHtml(string url)
+    {
+        var html = new HtmlRenderer().RenderMarkdownFragment($"[PDF]({url})");
+
+        Assert.Contains($"href=\"{url}\"", html);
+    }
+
     [Fact]
     public void FindsOnlyRealPdfLinks()
     {
