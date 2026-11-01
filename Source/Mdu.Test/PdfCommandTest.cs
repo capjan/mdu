@@ -200,3 +200,77 @@ public class PdfCommandTest
         return new PdfCommand(graphBuilder, new PdfRenderer(new HtmlRenderer()));
     }
 }
+
+[Collection("Process state")]
+public class PdfCommandHiddenContentTest
+{
+    [Fact]
+    public void ExcludesHiddenSectionsAndFailsOnUnbalancedMarkers()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-pdf-hidden-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var page = Path.Combine(root, "README.md");
+        var output = Path.Combine(root, "manual.pdf");
+        var originalError = Console.Error;
+        try
+        {
+            File.WriteAllText(page,
+                "---\nnavigation.order: 1\n---\n# Home\n\nVisibleText\n\n## Internal {.pdf-hidden}\n\nSecretText\n\n<!-- pdf:hidden -->\nRegionText\n<!-- /pdf:hidden -->\n");
+            Assert.Equal(0, CreateCommand().Execute(new RenderCommandSettings { RootPath = root, OutputPath = output }));
+            var pdf = File.ReadAllText(output, Encoding.Latin1);
+            Assert.Contains(Hex("VisibleText"), pdf);
+            Assert.DoesNotContain(Hex("SecretText"), pdf);
+            Assert.DoesNotContain(Hex("RegionText"), pdf);
+
+            File.Delete(output);
+            File.WriteAllText(page, "# Home\n\n<!-- pdf:hidden -->\nOpen\n");
+            using var error = new StringWriter();
+            Console.SetError(error);
+
+            Assert.Equal(1, CreateCommand().Execute(new RenderCommandSettings { RootPath = root, OutputPath = output }));
+
+            Assert.False(File.Exists(output));
+            Assert.Empty(Directory.EnumerateFiles(root, "*.tmp"));
+            Assert.Contains("Could not write PDF", error.ToString());
+            Assert.Contains("<!-- pdf:hidden --> has no matching <!-- /pdf:hidden -->", error.ToString());
+        }
+        finally
+        {
+            Console.SetError(originalError);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("<!-- pdf:hidden -->\n# SecretPageTitle\n<!-- /pdf:hidden -->\n\nVisibleBody\n", "Secret-Page")]
+    [InlineData("# SecretPageTitle {.pdf-hidden}\n\nHiddenBody\n\n# Chapter\n\nVisibleBody\n", "Secret-Page")]
+    [InlineData("---\ntitle: FrontMatterTitle\n---\n<!-- pdf:hidden -->\n# SecretPageTitle\n<!-- /pdf:hidden -->\n\nVisibleBody\n", "FrontMatterTitle")]
+    public void UsesAFallbackTitleWhenThePageTitleHeadingIsExcluded(string markdown, string expectedTitle)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-pdf-hidden-title-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        File.WriteAllText(Path.Combine(root, "Secret-Page.md"), markdown);
+        var output = Path.Combine(root, "manual.pdf");
+        try
+        {
+            Assert.Equal(0, CreateCommand().Execute(new RenderCommandSettings { RootPath = root, OutputPath = output }));
+            var pdf = File.ReadAllText(output, Encoding.Latin1);
+            Assert.DoesNotContain(Hex("SecretPageTitle"), pdf);
+            Assert.Contains(Hex("VisibleBody"), pdf);
+            Assert.Contains(Hex(expectedTitle), pdf);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static string Hex(string text) => Convert.ToHexString(Encoding.Latin1.GetBytes(text));
+
+    private static PdfCommand CreateCommand()
+    {
+        var reader = new MarkdownDocumentReader();
+        var graphBuilder = new GraphBuilder(new DataPreparationVisitor(reader));
+        return new PdfCommand(graphBuilder, new PdfRenderer(new HtmlRenderer()));
+    }
+}

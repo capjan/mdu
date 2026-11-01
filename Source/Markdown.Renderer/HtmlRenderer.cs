@@ -171,9 +171,39 @@ public class HtmlRenderer
         return providers;
     }
 
-    public string RenderMarkdownFragment(string markdown)
+    public string RenderMarkdownFragment(string markdown) => RenderFragment(ParseMarkdown(markdown));
+
+    /// <summary>Renders a fragment without the headings and regions that are marked as hidden in PDF output.</summary>
+    internal string RenderPdfMarkdownFragment(string markdown)
     {
         var document = ParseMarkdown(markdown);
+        PdfHiddenContent.Remove(document);
+        return RenderFragment(document);
+    }
+
+    /// <summary>Returns whether the first level-one heading, which usually provides the page title, is hidden in PDF output.</summary>
+    internal bool ExcludesTitleHeadingFromPdf(string markdown)
+    {
+        var document = ParseMarkdown(markdown);
+        var title = document.Descendants<HeadingBlock>().FirstOrDefault(heading => heading.Level == 1);
+        if (title is null) return false;
+        try
+        {
+            PdfHiddenContent.Remove(document);
+        }
+        catch (PdfHiddenContentException)
+        {
+            // Rendering the page reports the error.
+            return false;
+        }
+
+        Block? block = title;
+        while (block.Parent is not null) block = block.Parent;
+        return !ReferenceEquals(block, document);
+    }
+
+    private string RenderFragment(MarkdownDocument document)
+    {
         var html = document.ToHtml(_pipeline)
             .Replace(OpenApiMarkdownRenderer.BlockStartMarker, string.Empty, StringComparison.Ordinal)
             .Replace(OpenApiMarkdownRenderer.BlockEndMarker, string.Empty, StringComparison.Ordinal);

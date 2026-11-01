@@ -27,6 +27,7 @@ public class DataPreparationVisitor: IVisitor<MarkdownFile>
         entity.HeadingTitle = header.Title;
         entity.FrontMatter = header.FrontMatter;
         var navigationSettings = ReadFrontMatterSettings(header.FrontMatter);
+        entity.FrontMatterTitle = navigationSettings.Title;
         entity.Title = navigationSettings.Title ?? header.Title;
         entity.Description = navigationSettings.Description ?? string.Empty;
         entity.Icon = navigationSettings.Icon ?? string.Empty;

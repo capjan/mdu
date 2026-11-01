@@ -48,6 +48,49 @@ public class SitePdfTest
     }
 
     [Fact]
+    public void RegeneratesEveryValidDownloadAndRemovesFailedOnesWhenAnExportFails()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-pdf-failure-{Guid.NewGuid():N}");
+        var docs = Path.Combine(root, "docs");
+        var output = Path.Combine(root, "site", "documentation.pdf");
+        Directory.CreateDirectory(Path.Combine(docs, "Topic"));
+        var home = Path.Combine(docs, "README.md");
+        var topicPage = Path.Combine(docs, "Topic", "README.md");
+        var broken = Path.Combine(docs, "Broken.md");
+        File.WriteAllText(home, "# Home\n\n[All](mdu:pdf) [Topic](mdu:pdf?root=Topic/README.md)");
+        File.WriteAllText(topicPage, "# Topic\n\nTopicSecret");
+        File.WriteAllText(broken, "# Broken\n\nFine");
+        var builder = new GraphBuilder(new DataPreparationVisitor(new MarkdownDocumentReader()));
+        var command = new PdfCommand(builder, new PdfRenderer(new HtmlRenderer()));
+        int Update() => command.WriteSitePdfIfLinked(docs, output,
+            builder.CreateGraph(new RenderCommandSettings { RootPath = docs }), reuseUnchanged: true);
+        try
+        {
+            Assert.Equal(0, Update());
+            var topic = Assert.Single(command.GeneratedSitePdfPaths.Where(path => path != output));
+
+            File.WriteAllText(broken, "# Broken\n\n<!-- pdf:hidden -->\nUnclosed");
+            File.WriteAllText(topicPage, "# Topic\n\n## Internal {.pdf-hidden}\n\nTopicSecret");
+            Assert.Equal(1, Update());
+            Assert.False(File.Exists(output));
+            Assert.DoesNotContain(Hex("TopicSecret"), File.ReadAllText(topic, Encoding.Latin1));
+
+            File.WriteAllText(broken, "# Broken\n\nFixed");
+            File.WriteAllText(home, "# Home\n\nHomeSecret\n\n[All](mdu:pdf)");
+            Assert.Equal(0, Update());
+            Assert.Contains(Hex("HomeSecret"), File.ReadAllText(output, Encoding.Latin1));
+
+            File.WriteAllText(home, "# Home\n\n## Internal {.pdf-hidden}\n\nHomeSecret\n\n[All](mdu:pdf) [Broken](mdu:pdf?root=Missing.md)");
+            Assert.Equal(1, Update());
+            Assert.DoesNotContain(Hex("HomeSecret"), File.ReadAllText(output, Encoding.Latin1));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void ReusesOnlyUnchangedExistingPdfsDuringIncrementalUpdates()
     {
         var root = Path.Combine(Path.GetTempPath(), $"mdu-incremental-pdf-{Guid.NewGuid():N}");

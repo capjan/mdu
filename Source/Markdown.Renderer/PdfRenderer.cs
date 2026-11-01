@@ -14,6 +14,7 @@ public sealed class PdfRenderer(HtmlRenderer htmlRenderer)
 {
     public bool ContainsPdfLink(string markdown) => htmlRenderer.ContainsPdfLink(markdown);
     public IReadOnlyList<string> FindPdfLinks(string markdown) => htmlRenderer.FindPdfLinks(markdown);
+    public bool ExcludesTitleHeading(string markdown) => htmlRenderer.ExcludesTitleHeadingFromPdf(markdown);
 
     public void WritePdf(Stream output, string title, IReadOnlyList<PdfSourceSection> sections, bool includeFrontMatter = true)
     {
@@ -37,9 +38,10 @@ public sealed class PdfRenderer(HtmlRenderer htmlRenderer)
 
     private string GetDescription(string markdown)
     {
-        var html = PdfLayout.NormalizeVoidElements(htmlRenderer.RenderMarkdownFragment(markdown));
+        var html = PdfLayout.NormalizeVoidElements(htmlRenderer.RenderPdfMarkdownFragment(markdown));
         var document = new XmlDocument { PreserveWhitespace = true };
         document.LoadXml($"<root>{html}</root>");
+        PdfLayout.RemoveNonRenderedElements(document);
         return PdfLayout.CollapseWhitespace(document.SelectSingleNode("//p")?.InnerText ?? string.Empty);
     }
 }
@@ -95,9 +97,25 @@ internal sealed class PdfLayout
     public void RenderSection(PdfSourceSection section)
     {
         _sectionPath = section.RelativeHtmlPath.Replace('\\', '/');
-        var html = NormalizeVoidElements(_htmlRenderer.RenderMarkdownFragment(section.Markdown));
+        string html;
+        try
+        {
+            html = NormalizeVoidElements(_htmlRenderer.RenderPdfMarkdownFragment(section.Markdown));
+        }
+        catch (PdfHiddenContentException exception)
+        {
+            throw new PdfHiddenContentException($"Page \"{section.Title}\" ({section.RelativeHtmlPath}): {exception.Message}");
+        }
         var document = new XmlDocument { PreserveWhitespace = true };
-        document.LoadXml($"<root>{html}</root>");
+        try
+        {
+            document.LoadXml($"<root>{html}</root>");
+        }
+        catch (XmlException exception)
+        {
+            throw new XmlException($"Page \"{section.Title}\" ({section.RelativeHtmlPath}): {exception.Message}", exception);
+        }
+        RemoveNonRenderedElements(document);
         var blocks = document.DocumentElement!.ChildNodes.Cast<XmlNode>().ToArray();
         if (_y > Top)
         {
@@ -964,6 +982,23 @@ internal sealed class PdfLayout
         element.GetAttribute("class").Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains(name, StringComparer.Ordinal);
     internal static string CollapseWhitespace(string text) => Regex.Replace(WebUtility.HtmlDecode(text), @"\s+", " ").Trim();
     private static string NormalizeInlineWhitespace(string text) => Regex.Replace(WebUtility.HtmlDecode(text), @"\s+", " ");
+    // Browsers do not display these elements, and removing them from the parsed document covers every layout path.
+    // Inside textarea and title, such tags are text that a browser shows.
+    internal static void RemoveNonRenderedElements(XmlDocument document)
+    {
+        foreach (var element in document.GetElementsByTagName("*").Cast<XmlElement>()
+                     .Where(element => element.LocalName.ToLowerInvariant() is "script" or "style" or "template" &&
+                                       !HasAncestor(element, "textarea", "title")).ToArray())
+            element.ParentNode?.RemoveChild(element);
+    }
+
+    private static bool HasAncestor(XmlNode node, params string[] names)
+    {
+        for (var parent = node.ParentNode; parent is XmlElement element; parent = element.ParentNode)
+            if (names.Contains(element.LocalName, StringComparer.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
     internal static string NormalizeVoidElements(string html)
     {
         var normalized = Regex.Replace(html, @"<(input|br|hr|img|source)(?<attributes>[^<>]*?)(?<!/)>", "<$1${attributes} />", RegexOptions.IgnoreCase);
