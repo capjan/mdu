@@ -11,4 +11,6 @@ public sealed class RenderCommandSettings : IVisitorSettings
     public string? RootPath { get; init; }
 
     public string? OutputPath { get; init; }
+
+    public string? PdfRootPage { get; init; }
 }

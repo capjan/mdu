@@ -11,6 +11,9 @@ namespace Mdu.Commands;
 
 public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRenderer)
 {
+    private readonly Dictionary<string, PdfSourceSection[]> _sitePdfSections = new(MarkdownLinks.PathComparer);
+    public IReadOnlyCollection<string> GeneratedSitePdfPaths { get; private set; } = Array.Empty<string>();
+
     public int Execute(RenderCommandSettings settings)
     {
         string rootPath;
@@ -19,6 +22,8 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         {
             if (settings.RootPath is { } configuredPath && File.Exists(Path.GetFullPath(configuredPath)))
             {
+                if (settings.PdfRootPage is not null)
+                    throw new InvalidOperationException("--page requires a documentation folder as PATH, not a single file.");
                 singleFilePath = Path.GetFullPath(configuredPath);
                 if (!Path.GetExtension(singleFilePath).Equals(".md", StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException($"PDF input must be a Markdown file: {singleFilePath}");
@@ -62,11 +67,14 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
             Console.Error.WriteLine($"Could not resolve Markdown sources: {exception.Message}");
             return 1;
         }
-        var files = Flatten(graph);
+        var files = Flatten(rootPath, graph);
         if (singleFilePath is not null)
             files = files.Where(item => Path.GetFullPath(item.File.FileInfo.FullName).Equals(singleFilePath, StringComparison.Ordinal));
         try
         {
+            if (settings.PdfRootPage is not null)
+                files = Flatten(rootPath, [PdfSelection.FindPage(rootPath, graph,
+                    OperatingSystem.IsWindows() ? settings.PdfRootPage.Replace('\\', '/') : settings.PdfRootPage)]);
             return WritePdf(rootPath, outputPath, files, includeFrontMatter: singleFilePath is null);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
@@ -77,27 +85,59 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
     }
 
     public int WriteSitePdf(string rootPath, string outputPath, IEnumerable<MarkdownFile> graph) =>
-        WritePdf(rootPath, outputPath, Flatten(graph), includeFrontMatter: true);
+        WritePdf(rootPath, outputPath, Flatten(rootPath, graph), includeFrontMatter: true);
 
-    public int WriteSitePdfIfLinked(string rootPath, string outputPath, IEnumerable<MarkdownFile> graph)
+    public int WriteSitePdfIfLinked(string rootPath, string outputPath, IEnumerable<MarkdownFile> graph,
+        bool reuseUnchanged = false)
     {
-        var files = Flatten(graph).ToArray();
-        var containsPdfLink = files.Any(item => pdfRenderer.ContainsPdfLink(
-            RemoveFrontMatter(item.File.ReadMarkdown(), item.File.FrontMatter)));
-        if (!containsPdfLink)
+        if (!reuseUnchanged) _sitePdfSections.Clear();
+        outputPath = Path.GetFullPath(outputPath);
+        var roots = graph.ToArray();
+        var files = Flatten(rootPath, roots).ToArray();
+        var requests = new Dictionary<string, MarkdownFile?>(MarkdownLinks.PathComparer);
+        foreach (var (page, _) in files)
         {
-            if (File.Exists(outputPath)) File.Delete(outputPath);
-            return 0;
+            var markdown = OpenApiMarkdownRenderer.ExpandCodeBlocks(
+                RemoveFrontMatter(page.ReadMarkdown(), page.FrontMatter), page.FileInfo.FullName,
+                out var specificationPages, page.SourceRootPath);
+            var links = pdfRenderer.FindPdfLinks(markdown).Concat(
+                specificationPages.SelectMany(specification => pdfRenderer.FindPdfLinks(specification.Markdown)));
+            foreach (var url in links.Distinct(StringComparer.Ordinal))
+            {
+                var path = LinkReplacer.GetPdfRoot(url);
+                var selected = path is null ? null : PdfSelection.FindPage(rootPath, roots, path, page);
+                var destination = selected is null ? outputPath :
+                    Path.GetFullPath(Path.Combine(Path.GetDirectoryName(outputPath)!,
+                        PdfSelection.GetOutputPath(rootPath, selected)));
+                requests[destination] = selected;
+            }
         }
 
-        return WritePdf(rootPath, outputPath, files, includeFrontMatter: true);
+        foreach (var (destination, selected) in requests)
+            if (WritePdf(rootPath, destination, selected is null ? files : Flatten(rootPath, [selected]),
+                    includeFrontMatter: true, reuseUnchanged: reuseUnchanged, trackSitePdf: true) != 0)
+                return 1;
+
+        if (!requests.ContainsKey(outputPath) && File.Exists(outputPath)) File.Delete(outputPath);
+        var scopedDirectory = Path.Combine(Path.GetDirectoryName(outputPath)!, PdfSelection.OutputDirectory);
+        if (Directory.Exists(scopedDirectory))
+            foreach (var oldPath in Directory.EnumerateFiles(scopedDirectory, "*.pdf"))
+                if (Path.GetFileNameWithoutExtension(oldPath) is { Length: 64 } name &&
+                    name.All(char.IsAsciiHexDigit) && !requests.ContainsKey(Path.GetFullPath(oldPath)))
+                    File.Delete(oldPath);
+        foreach (var oldPath in _sitePdfSections.Keys.Where(path => !requests.ContainsKey(path)).ToArray())
+            _sitePdfSections.Remove(oldPath);
+        GeneratedSitePdfPaths = requests.Keys.ToArray();
+        return 0;
     }
 
     private int WritePdf(
         string rootPath,
         string outputPath,
         IEnumerable<(MarkdownFile File, int Depth)> files,
-        bool includeFrontMatter)
+        bool includeFrontMatter,
+        bool reuseUnchanged = false,
+        bool trackSitePdf = false)
     {
         var sections = files.Where(item => IsPdfVisible(item.File.FrontMatter))
             .Select(item =>
@@ -108,7 +148,7 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
                     item.File.SourceRootPath,
                     includeSpecificationPageLink: false);
                 return new PdfSourceSection(
-                    GetTitle(item.File),
+                    PdfSelection.GetTitle(rootPath, item.File),
                     GetRelativeHtmlPath(rootPath, item.File),
                     markdown,
                     item.Depth);
@@ -121,6 +161,11 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
             return 1;
         }
 
+        if (reuseUnchanged && File.Exists(outputPath) &&
+            _sitePdfSections.TryGetValue(outputPath, out var previousSections) &&
+            previousSections.SequenceEqual(sections))
+            return 0;
+
         var outputDirectory = Path.GetDirectoryName(outputPath)!;
         Directory.CreateDirectory(outputDirectory);
         var temporaryPath = outputPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
@@ -129,6 +174,7 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
             using (var stream = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write))
                 pdfRenderer.WritePdf(stream, Path.GetFileNameWithoutExtension(outputPath), sections, includeFrontMatter);
             File.Move(temporaryPath, outputPath, true);
+            if (trackSitePdf) _sitePdfSections[outputPath] = sections;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or XmlException)
         {
@@ -141,23 +187,16 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         return 0;
     }
 
-    private static IEnumerable<(MarkdownFile File, int Depth)> Flatten(IEnumerable<MarkdownFile> files, int depth = 0)
+    private static IEnumerable<(MarkdownFile File, int Depth)> Flatten(string rootPath, IEnumerable<MarkdownFile> files, int depth = 0)
     {
         foreach (var file in files.OrderBy(file => file.NavigationOrder.HasValue ? 0 : 1)
                      .ThenBy(file => file.NavigationOrder)
-                     .ThenBy(GetTitle, StringComparer.OrdinalIgnoreCase))
+                     .ThenBy(file => PdfSelection.GetTitle(rootPath, file), StringComparer.OrdinalIgnoreCase))
         {
             yield return (file, depth);
-            foreach (var child in Flatten(file.Children, depth + 1)) yield return child;
+            foreach (var child in Flatten(rootPath, file.Children, depth + 1)) yield return child;
         }
     }
-
-    private static string GetTitle(MarkdownFile file) =>
-        !string.IsNullOrWhiteSpace(file.Title)
-            ? file.Title.Trim()
-            : file.FileInfo.Name.Equals("README.md", StringComparison.OrdinalIgnoreCase)
-                ? file.FileInfo.Directory?.Name ?? "Documentation"
-                : Path.GetFileNameWithoutExtension(file.FileInfo.Name);
 
     private static string GetRelativeHtmlPath(string rootPath, MarkdownFile file)
     {

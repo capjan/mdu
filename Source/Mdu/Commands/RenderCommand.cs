@@ -83,7 +83,7 @@ public class RenderCommand
         MarkdownFile[] graph;
         try
         {
-            graph = _graphBuilder.CreateGraph(resolvedSettings, glossaryPath);
+            graph = _graphBuilder.CreateGraph(resolvedSettings, glossaryPath, requireImportedGlossaries: true);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
         {

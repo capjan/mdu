@@ -47,6 +47,16 @@ public class RendererTest
     }
 
     [Fact]
+    public void PagesWithoutASidebarDoNotReserveTheSidebarColumn()
+    {
+        var css = Resources.CssContent();
+
+        Assert.Contains("grid-template-columns: minmax(0, 1fr);", BlockAfter(css, ".site-layout.no-wide-sidebar {"));
+        Assert.Contains("grid-column: 1;", BlockAfter(css, ".site-layout.no-wide-sidebar .site-main {"));
+        Assert.DoesNotContain(".site-layout.no-wide-sidebar:not(.sidebar-collapsed) .site-main", css);
+    }
+
+    [Fact]
     public void PreservesThePreferredSidebarWidthAcrossViewportChanges()
     {
         var html = Resources.HtmlTemplateContent();
@@ -79,7 +89,7 @@ public class RendererTest
     {
         var css = Resources.CssContent();
         var resizerStyles = BlockAfter(css, ".sidebar-resizer::before {");
-        var guideStyles = BlockAfter(css, ".site-nav-row:has(> .site-nav-toggle) + .site-nav-children::before {");
+        var guideStyles = BlockAfter(css, ".site-nav-row:has(> .site-nav-toggle) + .site-nav-children:has(> .site-nav-item > .site-nav-row.is-current)::before {");
 
         foreach (var styles in new[] { resizerStyles, guideStyles })
         {
@@ -207,6 +217,51 @@ public class RendererTest
     }
 
     [Fact]
+    public async Task WriteHtmlDoesNotRequireTheCallingSynchronizationContext()
+    {
+        using var writer = new PausedWriter();
+        var previousContext = SynchronizationContext.Current;
+        Task render;
+        try
+        {
+            SynchronizationContext.SetSynchronizationContext(new NonDispatchingSynchronizationContext());
+            render = new HtmlRenderer().WriteHtml(writer, "test", "", 0, "# Test", "");
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previousContext);
+        }
+
+        Assert.False(render.IsCompleted);
+        writer.Complete();
+        await render.WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.Contains("<title>test</title>", writer.Written);
+    }
+
+    private sealed class PausedWriter : StringWriter
+    {
+        private readonly TaskCompletionSource _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public string? Written { get; private set; }
+
+        public override Task WriteAsync(string? value)
+        {
+            Written = value;
+            return _completion.Task;
+        }
+
+        public void Complete() => _completion.SetResult();
+    }
+
+    private sealed class NonDispatchingSynchronizationContext : SynchronizationContext
+    {
+        public override void Post(SendOrPostCallback callback, object? state)
+        {
+            // A continuation posted here would never run, as with a blocked synchronous caller.
+        }
+    }
+
+    [Fact]
     public void RendersLocalAbbreviationsWithoutReplacingCode()
     {
         var renderer = new HtmlRenderer();
@@ -245,6 +300,67 @@ public class RendererTest
         Assert.Contains(
             "<abbr title=\"Central processing unit\">CPU</abbr>",
             renderer.RenderMarkdownFragment("CPU."));
+    }
+
+    [Fact]
+    public async Task GlossaryScopeOverridesAndInheritsSiteDefinitionsWithoutLeaking()
+    {
+        var renderer = new HtmlRenderer();
+        renderer.SetGlossary("*[API]: Application Programming Interface\n*[CI]: Continuous Integration\n");
+        var importedGlossary = Glossary.Parse("*[CI]: Configuration Item\n*[ADR]: Architecture Decision Record\n");
+        var otherGlossary = Glossary.Parse("*[SLA]: Service Level Agreement\n");
+        const string markdown = "API, CI, ADR and SLA.\n";
+
+        var imported = await RenderPage(renderer, markdown, renderer.GetGlossaryScope(importedGlossary));
+        var other = await RenderPage(renderer, markdown, renderer.GetGlossaryScope(otherGlossary));
+        var site = await RenderPage(renderer, markdown);
+        var pageLocal = await RenderPage(renderer, "*[CI]: Page definition\n\nCI.\n", renderer.GetGlossaryScope(importedGlossary));
+
+        Assert.Contains("<abbr title=\"Application Programming Interface\">API</abbr>", imported);
+        Assert.Contains("<abbr title=\"Configuration Item\">CI</abbr>", imported);
+        Assert.Contains("<abbr title=\"Architecture Decision Record\">ADR</abbr>", imported);
+        Assert.DoesNotContain("Service Level Agreement", imported);
+
+        Assert.Contains("<abbr title=\"Continuous Integration\">CI</abbr>", other);
+        Assert.Contains("<abbr title=\"Service Level Agreement\">SLA</abbr>", other);
+        Assert.DoesNotContain("Architecture Decision Record", other);
+
+        Assert.Contains("<abbr title=\"Continuous Integration\">CI</abbr>", site);
+        Assert.DoesNotContain("Architecture Decision Record", site);
+        Assert.DoesNotContain("Service Level Agreement", site);
+
+        Assert.Contains("<abbr title=\"Page definition\">CI</abbr>", pageLocal);
+    }
+
+    [Fact]
+    public async Task GlossaryScopesFollowTheCurrentSiteGlossary()
+    {
+        var renderer = new HtmlRenderer();
+        var importedGlossary = Glossary.Parse("*[ADR]: Architecture Decision Record\n");
+        renderer.SetGlossary("*[API]: Application Programming Interface\n");
+        Assert.Contains("Application Programming Interface",
+            await RenderPage(renderer, "API.\n", renderer.GetGlossaryScope(importedGlossary)));
+
+        renderer.SetGlossary("*[API]: Changed interface\n");
+        var html = await RenderPage(renderer, "API and ADR.\n", renderer.GetGlossaryScope(importedGlossary));
+        Assert.Contains("<abbr title=\"Changed interface\">API</abbr>", html);
+        Assert.Contains("<abbr title=\"Architecture Decision Record\">ADR</abbr>", html);
+
+        renderer.SetGlossary(null);
+        html = await RenderPage(renderer, "API and ADR.\n", renderer.GetGlossaryScope(importedGlossary));
+        Assert.DoesNotContain("<abbr title=\"Changed interface\">", html);
+        Assert.Contains("<abbr title=\"Architecture Decision Record\">ADR</abbr>", html);
+    }
+
+    [Fact]
+    public void GlossaryWithoutDefinitionsIsRejected() =>
+        Assert.Throws<InvalidOperationException>(() => Glossary.Parse("No abbreviation definitions here."));
+
+    private static async Task<string> RenderPage(HtmlRenderer renderer, string markdown, GlossaryScope? scope = null)
+    {
+        var writer = new StringWriter();
+        await renderer.WriteHtml(writer, "Page", string.Empty, 0, markdown, string.Empty, glossaryScope: scope);
+        return writer.ToString();
     }
 
     [Fact]

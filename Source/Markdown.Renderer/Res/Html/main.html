@@ -250,38 +250,10 @@
         themeToggle.setAttribute("aria-label", `Theme: ${themeNames[currentTheme]}. Click to switch to ${themeNames[nextTheme]}.`);
     };
 
-    const brandLogo = document.querySelector(".site-brand-logo");
-    const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
-    const isDark = () => root.dataset.theme === "dark" || root.dataset.theme === "auto" && systemDark.matches;
-    // A playground can promote a content-width hero; keep both logo variants ready on any hero page.
-    const darkLogo = brandLogo && document.querySelector(".hero") ? brandLogo.cloneNode() : null;
-    if (darkLogo) {
-        brandLogo.src = brandLogo.dataset.lightSrc;
-        darkLogo.src = brandLogo.dataset.darkSrc;
-        brandLogo.after(darkLogo);
-    }
-    // Beach banners keep white header text; abstract banners follow the site's light/dark palette.
-    const updateLogo = () => {
-        const useDark = isDark() || root.classList.contains("is-over-hero") &&
-            document.querySelector('.hero-full[data-hero-scene="beach"]') !== null &&
-            document.querySelector(".site-layout.sidebar-open") === null;
-        if (darkLogo) {
-            brandLogo.classList.toggle("is-hidden-variant", useDark);
-            darkLogo.classList.toggle("is-hidden-variant", !useDark);
-        } else if (brandLogo) {
-            brandLogo.src = useDark ? brandLogo.dataset.darkSrc : brandLogo.dataset.lightSrc;
-        }
-    };
-    if (darkLogo) new MutationObserver(updateLogo).observe(root, { attributes: true, attributeFilter: ["class"] });
-    const heroLogoObserver = new MutationObserver(updateLogo);
-    document.querySelectorAll(".hero").forEach(hero =>
-        heroLogoObserver.observe(hero, { attributes: true, attributeFilter: ["data-hero-scene"] }));
-    document.addEventListener("mdu:hero-layout", updateLogo);
-    new MutationObserver(() => { updateThemeLabel(); updateLogo(); })
+    new MutationObserver(updateThemeLabel)
         .observe(root, { attributes: true, attributeFilter: ["data-theme"] });
 
     updateThemeLabel();
-    updateLogo();
     themeToggle.addEventListener("click", () => {
         const currentTheme = root.dataset.theme;
         const nextTheme = themes[(themes.indexOf(currentTheme) + 1) % themes.length];
@@ -290,12 +262,9 @@
             localStorage.setItem("mdu-theme", nextTheme);
         } catch { }
         updateThemeLabel();
-        updateLogo();
     });
-    systemDark.addEventListener("change", updateLogo);
 
     const layout = document.getElementById("site-layout");
-    if (darkLogo) new MutationObserver(updateLogo).observe(layout, { attributes: true, attributeFilter: ["class"] });
     const header = document.getElementById("site-header");
     const toggle = document.getElementById("navigation-toggle");
     const backdrop = document.getElementById("sidebar-backdrop");

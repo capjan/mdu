@@ -16,6 +16,21 @@
     const tiles = [...dashboard.querySelectorAll(".dashboard-tile")];
     const groups = [...dashboard.querySelectorAll(".dashboard-group")];
     const rows = [...dashboard.querySelectorAll(".dashboard-row")];
+    // A third-level heading starts a section of its group that runs to the next one; its heading and description rows
+    // hide with the section's tiles.
+    const sections = groups.flatMap(group => {
+        const found = [];
+        for (const child of group.children) {
+            if (child.matches('[role="row"]') && child.querySelector(":scope > [role='gridcell'] > h3"))
+                found.push({ heads: [child], parts: [] });
+            else if (found.length > 0) (child.matches(".dashboard-tiles") ? found.at(-1).parts : found.at(-1).heads).push(child);
+        }
+        return found;
+    });
+    const subheadings = new Map(sections.flatMap(section => {
+        const text = section.heads[0].querySelector("h3").textContent;
+        return section.parts.flatMap(part => [...part.querySelectorAll(".dashboard-tile")].map(tile => [tile, text]));
+    }));
     const opensNewTab = (link) => link.target === "_blank";
     const isVisibleInResults = (element) => {
         for (let current = element; current && current !== resultsGrid; current = current.parentElement)
@@ -50,7 +65,7 @@
             tile,
             link,
             name: fold(tile.querySelector(".dashboard-name")?.textContent || ""),
-            text: fold(`${visibleText(tile)} ${link.href} ${group}`)
+            text: fold(`${visibleText(tile)} ${link.href} ${group} ${subheadings.get(tile) || ""}`)
         };
     });
 
@@ -310,6 +325,20 @@
             if (matches && terms.length > 0) {
                 const startsWith = terms.length > 0 && entry.name.startsWith(terms[0]);
                 if (!first || (startsWith && !first.startsWith)) first = { ...entry, startsWith };
+            }
+        }
+        for (const section of sections) {
+            const hidden = terms.length > 0 && !section.parts.some(part => part.querySelector(".dashboard-tile:not([hidden]), .dashboard-note"));
+            for (const head of section.heads) head.hidden = hidden;
+        }
+        // A subheading that ends up first below its group label keeps the tight spacing of one that starts the group.
+        for (const group of groups) {
+            const first = [...group.children].slice(1).find(child => child.matches(".dashboard-tiles")
+                ? child.querySelector(".dashboard-tile:not([hidden]), .dashboard-note")
+                : !child.hidden);
+            for (const section of sections) {
+                const head = section.heads[0];
+                if (head.parentElement === group) head.classList.toggle("is-first-subheading", head === first);
             }
         }
         for (const group of groups) group.hidden = !group.querySelector(".dashboard-tile:not([hidden]), .dashboard-note") && terms.length > 0;

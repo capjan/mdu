@@ -8,6 +8,73 @@ namespace Mdu.Test;
 public class ServeCommandIntegrationTest
 {
     [Fact]
+    public async Task UpdatesScopedPdfsAndRemovesDownloadsWhenLinksDisappear()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-serve-pdf-{Guid.NewGuid():N}");
+        var docs = Path.Combine(root, "Docs");
+        var site = Path.Combine(root, "site");
+        Directory.CreateDirectory(Path.Combine(docs, "Topic"));
+        var home = Path.Combine(docs, "README.md");
+        var detail = Path.Combine(docs, "Topic", "Details.md");
+        File.WriteAllText(home, "# Home\n\n[Topic](mdu:pdf?root=Topic/README.md)");
+        File.WriteAllText(Path.Combine(docs, "Topic", "README.md"), "# Topic");
+        File.WriteAllText(detail, "# Details\n\nBefore");
+        var (process, port) = await StartServerOnFreePortAsync(docs, site);
+        using var _ = process;
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+        var baseUrl = $"http://127.0.0.1:{port}/";
+        try
+        {
+            await WaitUntilAsync(async () => await PageContainsAsync(client, baseUrl, "_mdu-pdf/"), process);
+            var html = await client.GetStringAsync(baseUrl);
+            var pdfUrl = System.Text.RegularExpressions.Regex.Match(html,
+                "href=\"(?<url>_mdu-pdf/[a-f0-9]+\\.pdf)\"").Groups["url"].Value;
+            Assert.NotEmpty(pdfUrl);
+            using (var response = await client.GetAsync(baseUrl + pdfUrl))
+            {
+                Assert.True(response.IsSuccessStatusCode);
+                Assert.Equal("application/pdf", response.Content.Headers.ContentType?.MediaType);
+                var pdf = System.Text.Encoding.Latin1.GetString(await response.Content.ReadAsByteArrayAsync());
+                Assert.Contains("4265666F7265", pdf);
+                Assert.DoesNotContain("486F6D65", pdf);
+            }
+
+            File.WriteAllText(detail, "# Details\n\nAfter");
+            await WaitUntilAsync(async () =>
+            {
+                var pdf = System.Text.Encoding.Latin1.GetString(await client.GetByteArrayAsync(baseUrl + pdfUrl));
+                return pdf.Contains("4166746572", StringComparison.Ordinal) && !pdf.Contains("4265666F7265", StringComparison.Ordinal);
+            }, process);
+
+            File.WriteAllText(Path.Combine(docs, "Topic", "New.md"), "# NewlyAdded");
+            await WaitUntilAsync(async () =>
+            {
+                var pdf = System.Text.Encoding.Latin1.GetString(await client.GetByteArrayAsync(baseUrl + pdfUrl));
+                return pdf.Contains("4E65776C794164646564", StringComparison.Ordinal);
+            }, process);
+            File.Delete(Path.Combine(docs, "Topic", "New.md"));
+            await WaitUntilAsync(async () =>
+            {
+                var pdf = System.Text.Encoding.Latin1.GetString(await client.GetByteArrayAsync(baseUrl + pdfUrl));
+                return !pdf.Contains("4E65776C794164646564", StringComparison.Ordinal);
+            }, process);
+
+            File.WriteAllText(home, "# Home\n\nDownload removed");
+            await WaitUntilAsync(async () =>
+            {
+                using var response = await client.GetAsync(baseUrl + pdfUrl);
+                return response.StatusCode == HttpStatusCode.NotFound;
+            }, process);
+            Assert.False(File.Exists(Path.Combine(site, "documentation.pdf")));
+        }
+        finally
+        {
+            StopServer(process);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task KeepsAliasPageWhenItsFolderContainsOnlyAssets()
     {
         var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));

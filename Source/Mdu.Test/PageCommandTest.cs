@@ -1,7 +1,118 @@
+using System.Text;
 using Mdu.Commands;
 using Mdu.Service;
 
 namespace Mdu.Test;
+
+internal sealed class CaseSensitiveFileSystemFactAttribute : FactAttribute
+{
+    public CaseSensitiveFileSystemFactAttribute()
+    {
+        var probePath = Path.Combine(Path.GetTempPath(), $"mdu-case-{Guid.NewGuid():N}a");
+        var alternatePath = probePath[..^1] + "A";
+        File.WriteAllText(probePath, string.Empty);
+        try
+        {
+            if (File.Exists(alternatePath))
+                Skip = "Requires a case-sensitive filesystem.";
+        }
+        finally
+        {
+            File.Delete(probePath);
+        }
+    }
+}
+
+internal sealed class UnicodeNormalizationEquivalentFileSystemFactAttribute : FactAttribute
+{
+    public UnicodeNormalizationEquivalentFileSystemFactAttribute()
+    {
+        var probePath = Path.Combine(Path.GetTempPath(), $"mdu-unicode-{Guid.NewGuid():N}-\u00fc");
+        var equivalentPath = probePath.Normalize(NormalizationForm.FormD);
+        File.WriteAllText(probePath, string.Empty);
+        try
+        {
+            if (!File.Exists(equivalentPath))
+                Skip = "Requires a filesystem that treats canonically equivalent Unicode names as the same entry.";
+        }
+        finally
+        {
+            File.Delete(probePath);
+        }
+    }
+}
+
+internal sealed class MacCaseInsensitiveFileSystemFactAttribute : FactAttribute
+{
+    public MacCaseInsensitiveFileSystemFactAttribute()
+    {
+        if (!OperatingSystem.IsMacOS())
+        {
+            Skip = "Requires macOS.";
+            return;
+        }
+
+        if (Environment.UserName == "root")
+        {
+            Skip = "Requires a non-root user for directory permission checks.";
+            return;
+        }
+
+        var probePath = Path.Combine(Path.GetTempPath(), $"mdu-case-{Guid.NewGuid():N}a");
+        var alternatePath = probePath[..^1] + "A";
+        File.WriteAllText(probePath, string.Empty);
+        try
+        {
+            if (!File.Exists(alternatePath))
+                Skip = "Requires a case-insensitive filesystem.";
+        }
+        finally
+        {
+            File.Delete(probePath);
+        }
+    }
+}
+
+internal sealed class MacCaseSensitiveUnicodeEquivalentFileSystemFactAttribute : FactAttribute
+{
+    public MacCaseSensitiveUnicodeEquivalentFileSystemFactAttribute()
+    {
+        if (!OperatingSystem.IsMacOS())
+        {
+            Skip = "Requires macOS.";
+            return;
+        }
+
+        var caseProbePath = Path.Combine(Path.GetTempPath(), $"mdu-case-{Guid.NewGuid():N}a");
+        var alternateCasePath = caseProbePath[..^1] + "A";
+        File.WriteAllText(caseProbePath, string.Empty);
+        try
+        {
+            if (File.Exists(alternateCasePath))
+            {
+                Skip = "Requires a case-sensitive filesystem.";
+                return;
+            }
+        }
+        finally
+        {
+            File.Delete(caseProbePath);
+        }
+
+        var normalizationProbePath = Path.Combine(Path.GetTempPath(), $"mdu-unicode-{Guid.NewGuid():N}-\u00fc");
+        var equivalentPath = normalizationProbePath.Normalize(NormalizationForm.FormD);
+        File.WriteAllText(normalizationProbePath, string.Empty);
+        try
+        {
+            if (!File.Exists(equivalentPath))
+                Skip = "Requires a filesystem that treats canonically equivalent Unicode names as the same entry.";
+        }
+        finally
+        {
+            File.Delete(normalizationProbePath);
+        }
+    }
+}
 
 public class PageCommandTest : IDisposable
 {
@@ -189,6 +300,205 @@ public class PageCommandTest : IDisposable
 
         Assert.Contains("setup.md", Directory.GetFiles(_root).Select(Path.GetFileName));
         Assert.Contains("[Setup](setup.md#install)", Read("README.md"));
+    }
+
+    [CaseSensitiveFileSystemFact]
+    public void RefusesMoveWhenCaseSensitiveTargetAlreadyExists()
+    {
+        Write("Setup.md", "# Source\n");
+        Write("setup.md", "# Target\n");
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            PageMover.Plan(_root, Path.Combine(_root, "Setup.md"), Path.Combine(_root, "setup.md"), includeHidden: true));
+
+        Assert.Contains("setup.md already exists", exception.Message);
+        Assert.Equal("# Source\n", Read("Setup.md"));
+        Assert.Equal("# Target\n", Read("setup.md"));
+    }
+
+    [CaseSensitiveFileSystemFact]
+    public void RefusesMoveToCaseDistinctDirectoryMatchingTheDocsRoot()
+    {
+        var docs = Path.Combine(_root, "docs");
+        var caseDistinctDocs = Path.Combine(_root, "DOCS");
+        var source = Path.Combine(docs, "Guide.md");
+        var target = Path.Combine(caseDistinctDocs, "Guide.md");
+        Directory.CreateDirectory(docs);
+        Directory.CreateDirectory(caseDistinctDocs);
+        File.WriteAllText(source, "# Source\n");
+        File.WriteAllText(target, "# Target\n");
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            PageMover.Plan(docs, source, target, includeHidden: true));
+
+        Assert.Contains("not inside the documentation folder", exception.Message);
+        Assert.Equal("# Source\n", File.ReadAllText(source));
+        Assert.Equal("# Target\n", File.ReadAllText(target));
+    }
+
+    [MacCaseInsensitiveFileSystemFact]
+    public void AcceptsPathsWithCaseDifferentDocsRootSpelling()
+    {
+        var actualDocs = Path.Combine(_root, "Docs");
+        Directory.CreateDirectory(actualDocs);
+        File.WriteAllText(Path.Combine(actualDocs, "Guide.md"), "# Guide\n");
+
+        var output = new StringWriter();
+        Assert.Equal(0, new PageCommand().Move(
+            Path.Combine(_root, "docs"),
+            Path.Combine(actualDocs, "Guide.md"),
+            Path.Combine(_root, "docs", "Moved.md"),
+            includeHidden: true,
+            dryRun: true,
+            output));
+
+        Assert.Contains("Would move page: Guide.md -> Moved.md", output.ToString());
+    }
+
+    [UnicodeNormalizationEquivalentFileSystemFact]
+    public void AcceptsPathsWithUnicodeNormalizationDifferentDocsRootSpelling()
+    {
+        var actualDocs = Path.Combine(_root, "\u00fcber");
+        var equivalentDocs = Path.Combine(_root, "u\u0308ber");
+        Directory.CreateDirectory(actualDocs);
+        File.WriteAllText(Path.Combine(actualDocs, "Guide.md"), "# Guide\n");
+
+        var output = new StringWriter();
+        Assert.Equal(0, new PageCommand().Move(
+            actualDocs,
+            Path.Combine(equivalentDocs, "Guide.md"),
+            Path.Combine(equivalentDocs, "Moved.md"),
+            includeHidden: true,
+            dryRun: true,
+            output));
+
+        Assert.Contains("Would move page: Guide.md -> Moved.md", output.ToString());
+    }
+
+    [UnicodeNormalizationEquivalentFileSystemFact]
+    public void RenamesPageWhenCaseAndUnicodeNormalizationDiffer()
+    {
+        var source = "u\u0308ber.md";
+        var target = "\u00dcber.md";
+        Write(source, "# Guide\n");
+        Write("README.md", $"# Docs\n\n[Guide]({source})\n");
+
+        Assert.Equal(0, Move(source, target).Exit);
+
+        var movedPath = Assert.Single(Directory.EnumerateFiles(_root)
+            .Where(path => Path.GetFileName(path).Normalize(NormalizationForm.FormC) == target));
+        Assert.Equal("# Guide\n", File.ReadAllText(movedPath));
+        Assert.Equal($"# Docs\n\n[Guide]({Uri.EscapeDataString(target)})\n", Read("README.md"));
+    }
+
+    [UnicodeNormalizationEquivalentFileSystemFact]
+    public void RenamesDirectoryWhenCaseAndUnicodeNormalizationDiffer()
+    {
+        var source = "u\u0308ber";
+        var target = "\u00dcber";
+        Write($"{source}/README.md", "# Guide\n");
+        Write("README.md", $"# Docs\n\n[Guide]({source}/)\n");
+
+        Assert.Equal(0, Move(source, target).Exit);
+
+        var movedDirectory = Assert.Single(Directory.EnumerateDirectories(_root)
+            .Where(path => Path.GetFileName(path).Normalize(NormalizationForm.FormC) == target));
+        Assert.Equal("# Guide\n", File.ReadAllText(Path.Combine(movedDirectory, "README.md")));
+        Assert.Equal($"# Docs\n\n[Guide]({Uri.EscapeDataString(target)}/)\n", Read("README.md"));
+    }
+
+    [UnicodeNormalizationEquivalentFileSystemFact]
+    public void RewritesOpenApiReferenceWhenDirectoryUnicodeNormalizationChanges()
+    {
+        var source = "u\u0308ber";
+        var target = "\u00dcber";
+        Write($"{source}/api/orders.yaml", "openapi: 3.1.0\n");
+        Write("Reference.md", $"# Orders\n\n```openapi\n{source}/api/orders.yaml\n```\n");
+
+        Assert.Equal(0, Move(source, target).Exit);
+
+        Assert.Equal($"# Orders\n\n```openapi\n{target}/api/orders.yaml\n```\n", Read("Reference.md"));
+    }
+
+    [MacCaseSensitiveUnicodeEquivalentFileSystemFact]
+    public void RefusesToConflateCaseDistinctUnicodeEquivalentFiles()
+    {
+        var source = "u\u0308ber.md";
+        var target = "U\u0308ber.md";
+        Write(source, "# Source\n");
+        Write(target, "# Target\n");
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            PageMover.Plan(_root, Path.Combine(_root, source), Path.Combine(_root, target), includeHidden: true));
+
+        Assert.Contains($"{target} already exists", exception.Message);
+        Assert.Equal("# Source\n", Read(source));
+        Assert.Equal("# Target\n", Read(target));
+    }
+
+    [MacCaseSensitiveUnicodeEquivalentFileSystemFact]
+    public void RefusesMoveWhenUnicodeLinkAliasIsAmbiguous()
+    {
+        var source = "u\u0308ber.md";
+        var sibling = "U\u0308ber.md";
+        Write(source, "# Source\n");
+        Write(sibling, "# Sibling\n");
+        Write("README.md", "# Docs\n\n[Source](\u00fcber.md)\n");
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            PageMover.Plan(_root, Path.Combine(_root, source), Path.Combine(_root, "Moved.md"), includeHidden: true));
+
+        Assert.Contains("Could not unambiguously resolve", exception.Message);
+        Assert.Equal("# Source\n", Read(source));
+        Assert.Equal("# Sibling\n", Read(sibling));
+    }
+
+    [MacCaseInsensitiveFileSystemFact]
+    public void CaseOnlyRenameDoesNotEnumerateAncestorDirectories()
+    {
+        if (!OperatingSystem.IsMacOS()) return;
+
+        var restrictedParent = Path.Combine(_root, "restricted");
+        var docs = Path.Combine(restrictedParent, "docs");
+        Directory.CreateDirectory(docs);
+        File.WriteAllText(Path.Combine(docs, "Guide.md"), "# Guide\n");
+
+        try
+        {
+            File.SetUnixFileMode(restrictedParent, UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+
+            var output = new StringWriter();
+            Assert.Equal(0, new PageCommand().Move(
+                docs,
+                Path.Combine(docs, "Guide.md"),
+                Path.Combine(docs, "guide.md"),
+                includeHidden: true,
+                dryRun: true,
+                output));
+        }
+        finally
+        {
+            File.SetUnixFileMode(restrictedParent, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            Directory.Delete(restrictedParent, recursive: true);
+        }
+    }
+
+    [WindowsFact]
+    public void CaseOnlyRenameDoesNotResolveCaseDifferentAncestorsOutsideDocsRoot()
+    {
+        var parent = Path.Combine(_root, "ancestor");
+        var docs = Path.Combine(parent, "docs");
+        Directory.CreateDirectory(docs);
+        File.WriteAllText(Path.Combine(docs, "Guide.md"), "# Guide\n");
+
+        var output = new StringWriter();
+        Assert.Equal(0, new PageCommand().Move(
+            docs,
+            Path.Combine(docs, "Guide.md"),
+            Path.Combine(parent, "DOCS", "guide.md"),
+            includeHidden: true,
+            dryRun: true,
+            output));
     }
 
     [Theory]

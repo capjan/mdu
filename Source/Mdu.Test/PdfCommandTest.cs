@@ -8,8 +8,97 @@ using System.Text;
 
 namespace Mdu.Test;
 
+internal sealed class WindowsFactAttribute : FactAttribute
+{
+    public WindowsFactAttribute()
+    {
+        if (!OperatingSystem.IsWindows()) Skip = "Requires native Windows path handling.";
+    }
+}
+
 public class PdfCommandTest
 {
+    [WindowsFact]
+    public void AcceptsNativeWindowsSeparatorsInCliPageSelection()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-native-pdf-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(root, "API"));
+        File.WriteAllText(Path.Combine(root, "API", "README.md"), "# API");
+        try
+        {
+            Assert.Equal(0, CreateCommand().Execute(new RenderCommandSettings
+            {
+                RootPath = root, OutputPath = Path.Combine(root, "api.pdf"), PdfRootPage = @"API\README.md"
+            }));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void SelectsOnlyThePageAndItsNavigationDescendants()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-pdf-subtree-{Guid.NewGuid():N}");
+        var docs = Path.Combine(root, "docs");
+        var topic = Path.Combine(docs, "Topic");
+        Directory.CreateDirectory(Path.Combine(topic, "Deep"));
+        File.WriteAllText(Path.Combine(docs, "README.md"), "# Outside\n");
+        File.WriteAllText(Path.Combine(topic, "README.md"), "# Selected\n\n[Details](Details.md#details)");
+        File.WriteAllText(Path.Combine(topic, "Details.md"), "---\nnavigation.order: 1\n---\n# Details\n");
+        File.WriteAllText(Path.Combine(topic, "Deep", "README.md"), "# Nested\n");
+        File.WriteAllText(Path.Combine(topic, "Hidden.md"), "---\npdf.visible: false\n---\n# Invisible\n");
+        var output = Path.Combine(root, "topic.pdf");
+        try
+        {
+            Assert.Equal(0, CreateCommand().Execute(new RenderCommandSettings
+            {
+                RootPath = docs, OutputPath = output, PdfRootPage = "Topic/README.md"
+            }));
+            var pdf = File.ReadAllText(output, Encoding.Latin1);
+            Assert.Contains(Convert.ToHexString(Encoding.Latin1.GetBytes("Selected")), pdf);
+            Assert.Contains(Convert.ToHexString(Encoding.Latin1.GetBytes("Details")), pdf);
+            Assert.Contains(Convert.ToHexString(Encoding.Latin1.GetBytes("Nested")), pdf);
+            Assert.DoesNotContain(Convert.ToHexString(Encoding.Latin1.GetBytes("Outside")), pdf);
+            Assert.DoesNotContain(Convert.ToHexString(Encoding.Latin1.GetBytes("Invisible")), pdf);
+            Assert.Contains("/Subtype /Link", pdf);
+            Assert.Contains("/Dest [", pdf);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("Missing.md", false)]
+    [InlineData("../Outside.md", false)]
+    [InlineData("/README.md", false)]
+    [InlineData("README.html", false)]
+    [InlineData("", false)]
+    [InlineData("README.md", true)]
+    public void RejectsInvalidRootSelectionWithoutWritingPdf(string page, bool singleFile)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-pdf-invalid-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var input = Path.Combine(root, "README.md");
+        File.WriteAllText(input, "# Home");
+        var output = Path.Combine(root, "result.pdf");
+        try
+        {
+            Assert.Equal(1, CreateCommand().Execute(new RenderCommandSettings
+            {
+                RootPath = singleFile ? input : root, OutputPath = output, PdfRootPage = page
+            }));
+            Assert.False(File.Exists(output));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

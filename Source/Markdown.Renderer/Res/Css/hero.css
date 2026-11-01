@@ -158,9 +158,13 @@ body:has(.top-navigation.is-empty)::after {
     transition: transform 220ms cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 160ms ease, background-color 300ms ease;
 }
 
-/* The scroll script shows both logo variants on hero pages and fades between them. */
-.site-brand-logo.is-hidden-variant {
+/* Only a beach under the transparent header needs the light-on-dark logo outside the normal theme. */
+:root.is-over-hero:has(.hero-full[data-hero-scene="beach"]):not(:has(.site-layout.sidebar-open)) .site-brand-logo-light {
     filter: opacity(0);
+}
+
+:root.is-over-hero:has(.hero-full[data-hero-scene="beach"]):not(:has(.site-layout.sidebar-open)) .site-brand-logo-dark {
+    filter: none;
 }
 
 /* While the bars switch between transparent and solid, their text, icons, borders, and logo fade together with the

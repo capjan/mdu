@@ -210,6 +210,26 @@ public class HeroTest
     }
 
     [Fact]
+    public async Task RendersScopedGlossaryAndOnlyTheSelectedHeroEffectResources()
+    {
+        var renderer = new HtmlRenderer();
+        renderer.SetGlossary("*[API]: Site interface\n");
+        var scope = renderer.GetGlossaryScope(Glossary.Parse("*[API]: Imported interface\n"));
+        using var writer = new StringWriter();
+
+        await renderer.WriteHtml(writer, "Test", "", 0,
+            "# Home\n\nAPI.\n\n```hero\neffect: connections\nwidth: content\n```", "", glossaryScope: scope);
+        var page = writer.ToString();
+
+        Assert.Contains("<abbr title=\"Imported interface\">API</abbr>", page);
+        Assert.DoesNotContain("<abbr title=\"Site interface\">", page);
+        Assert.Contains("<section class=\"hero hero-inline", page);
+        Assert.Contains("hero.effects.connections", page);
+        Assert.DoesNotContain("const fragmentSource", page);
+        Assert.DoesNotContain("const exampleShader", page);
+    }
+
+    [Fact]
     public async Task PlaygroundIncludesAllEffectsAndKeepsOriginalActionLinks()
     {
         var page = await RenderPage("""

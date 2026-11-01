@@ -57,6 +57,8 @@ public class HtmlRenderer
         RegexOptions.Compiled | RegexOptions.Singleline);
     private readonly MarkdownPipeline _basePipeline;
     private MarkdownPipeline _pipeline;
+    private Glossary? _glossary;
+    private readonly Dictionary<Glossary, GlossaryScope> _glossaryScopes = new();
     private readonly LinkReplacer _linkReplacer = new LinkReplacer();
     private string? _basePath;
     private IReadOnlyList<string> _iconSearchAssets = Array.Empty<string>();
@@ -68,7 +70,7 @@ public class HtmlRenderer
         _pipeline = _basePipeline;
     }
 
-    private static MarkdownPipeline CreatePipeline(SharedAbbreviationsExtension? sharedAbbreviations = null)
+    internal static MarkdownPipeline CreatePipeline(SharedAbbreviationsExtension? sharedAbbreviations = null)
     {
         var pipelineBuilder = new MarkdownPipelineBuilder();
         pipelineBuilder
@@ -91,23 +93,39 @@ public class HtmlRenderer
     {
         if (markdown is null)
         {
+            _glossary = null;
             _pipeline = _basePipeline;
+            _glossaryScopes.Clear();
             return;
         }
 
-        var sharedAbbreviations = new SharedAbbreviationsExtension();
-        var pipeline = CreatePipeline(sharedAbbreviations);
-        var document = Markdig.Markdown.Parse(markdown, pipeline);
-        var definitions = document.GetAbbreviations();
-        var sharedDefinitions = definitions?.Select(pair => new SharedAbbreviation(
-            pair.Key,
-            pair.Value.Label ?? pair.Key,
-            pair.Value.Text.ToString())).ToArray() ?? [];
-        if (sharedDefinitions.Length == 0)
-            throw new InvalidOperationException("The configured glossary does not contain any abbreviation definitions.");
+        var glossary = Glossary.Parse(markdown);
+        _pipeline = CreateGlossaryPipeline(glossary.Definitions);
+        _glossary = glossary;
+        _glossaryScopes.Clear();
+    }
 
-        sharedAbbreviations.SetDefinitions(sharedDefinitions);
-        _pipeline = pipeline;
+    /// <summary>
+    /// Returns the abbreviations of a nested glossary, such as the one of an imported repository, layered over the
+    /// site glossary. Its definitions win on conflicts; site definitions it does not redefine still apply.
+    /// </summary>
+    public GlossaryScope GetGlossaryScope(Glossary glossary)
+    {
+        if (_glossaryScopes.TryGetValue(glossary, out var scope)) return scope;
+
+        var redefined = glossary.Definitions.Select(definition => definition.Key).ToHashSet(StringComparer.Ordinal);
+        var siteDefinitions = _glossary?.Definitions ?? [];
+        scope = new GlossaryScope(CreateGlossaryPipeline(
+            siteDefinitions.Where(definition => !redefined.Contains(definition.Key)).Concat(glossary.Definitions).ToArray()));
+        _glossaryScopes[glossary] = scope;
+        return scope;
+    }
+
+    private static MarkdownPipeline CreateGlossaryPipeline(SharedAbbreviation[] definitions)
+    {
+        var sharedAbbreviations = new SharedAbbreviationsExtension();
+        sharedAbbreviations.SetDefinitions(definitions);
+        return CreatePipeline(sharedAbbreviations);
     }
     /// <summary>
     /// The icon search files written to the base path because a rendered page contains an icon search.
@@ -125,17 +143,25 @@ public class HtmlRenderer
         WriteCssFileTo(cssFilePath);
     }
 
-    private MarkdownDocument ParseMarkdown(string markdown, string? pdfDownloadUrl = null)
+    private MarkdownDocument ParseMarkdown(string markdown, string? pdfDownloadUrl = null,
+        IReadOnlyDictionary<string, string>? pdfDownloadUrls = null,
+        IReadOnlyDictionary<string, string>? pdfDownloadNames = null,
+        MarkdownPipeline? pipeline = null)
     {
-        var document = Markdig.Markdown.Parse(markdown, _pipeline);
-        _linkReplacer.ReplaceAll(document, pdfDownloadUrl);
+        var document = Markdig.Markdown.Parse(markdown, pipeline ?? _pipeline);
+        _linkReplacer.ReplaceAll(document, pdfDownloadUrl, pdfDownloadUrls, pdfDownloadNames);
         return document;
     }
 
-    public bool ContainsPdfLink(string markdown) =>
+    public IReadOnlyList<string> FindPdfLinks(string markdown) =>
         Markdig.Markdown.Parse(markdown, _pipeline)
             .Descendants<LinkInline>()
-            .Any(link => LinkReplacer.IsPdfLink(link.Url));
+            .Where(link => !link.IsImage && LinkReplacer.IsPdfLink(link.Url))
+            .Select(link => link.Url!)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+    public bool ContainsPdfLink(string markdown) => FindPdfLinks(markdown).Count > 0;
 
     public IReadOnlyCollection<string> FindMediaProviders(string markdown)
     {
@@ -168,18 +194,22 @@ public class HtmlRenderer
         IReadOnlyList<NavigationItem>? topNavigationItems = null,
         DateTimeOffset? lastModified = null,
         string? pdfDownloadUrl = null,
-        DashboardOptions? dashboard = null)
+        DashboardOptions? dashboard = null,
+        IReadOnlyDictionary<string, string>? pdfDownloadUrls = null,
+        IReadOnlyDictionary<string, string>? pdfDownloadNames = null,
+        GlossaryScope? glossaryScope = null)
     {
         var prefix = string.Concat(Enumerable.Repeat("../", nestingDeep));
         var cssFileLink = prefix + "css/main.css";
         var searchScriptLink = prefix + "js/search.js";
         var searchIndexLink = prefix + "search-index.json";
+        var pipeline = glossaryScope?.Pipeline ?? _pipeline;
         
-        var document = ParseMarkdown(markdown, pdfDownloadUrl);
+        var document = ParseMarkdown(markdown, pdfDownloadUrl, pdfDownloadUrls, pdfDownloadNames, pipeline);
         var hasIconSearch = document.Descendants<FencedCodeBlock>()
             .Any(block => block.Info == IconSearch.CodeBlockLanguage);
         if (hasIconSearch) EnsureIconSearchAssets();
-        var renderedMarkdown = dashboard is null ? document.ToHtml(_pipeline) : Dashboard.Render(document, _pipeline, dashboard);
+        var renderedMarkdown = dashboard is null ? document.ToHtml(pipeline) : Dashboard.Render(document, pipeline, dashboard);
         var hasHero = renderedMarkdown.Contains(" data-hero-scene=\"", StringComparison.Ordinal);
         var heroScripts = hasHero ? Hero.ScriptsFor(renderedMarkdown) : string.Empty;
         // Only rendered phase controls need the playback script, not diagrams without phases or invalid ones.
@@ -192,7 +222,7 @@ public class HtmlRenderer
         if (!string.IsNullOrWhiteSpace(pageIcon))
         {
             var iconName = pageIcon.Trim().Trim(':').Replace('/', '-');
-            var iconHtml = Markdig.Markdown.Parse($":{iconName}:", _pipeline).ToHtml(_pipeline)
+            var iconHtml = Markdig.Markdown.Parse($":{iconName}:", pipeline).ToHtml(pipeline)
                 .Replace("<p>", string.Empty, StringComparison.Ordinal)
                 .Replace("</p>\n", string.Empty, StringComparison.Ordinal)
                 .Trim();
@@ -291,7 +321,7 @@ public class HtmlRenderer
         var renderedHtml = TemplateTokenRegex.Replace(Resources.HtmlTemplateContent(), match =>
             values.TryGetValue(match.Groups["name"].Value, out var value) ? value : match.Value);
         
-        await writer.WriteAsync(renderedHtml);
+        await writer.WriteAsync(renderedHtml).ConfigureAwait(false);
     }
 
     private void EnsureIconSearchAssets()
@@ -306,8 +336,11 @@ public class HtmlRenderer
         var heading = HtmlEncoder.Default.Encode(pageHeading.Length > 0 ? pageHeading : configuration.SiteName);
         var light = ResolveAssetUrl(prefix, configuration.LogoLight);
         var dark = ResolveAssetUrl(prefix, configuration.LogoDark);
+        // Both variants are in the markup so the stylesheet shows the one for the current theme before the first paint.
         var logo = light.Length == 0 ? string.Empty :
-            $"<span class=\"site-brand-logo-slot\"><img class=\"site-brand-logo\" src=\"{HtmlEncoder.Default.Encode(light)}\" data-light-src=\"{HtmlEncoder.Default.Encode(light)}\" data-dark-src=\"{HtmlEncoder.Default.Encode(dark)}\" alt=\"\"></span>";
+            dark.Length == 0 || string.Equals(light, dark, StringComparison.Ordinal)
+                ? $"<span class=\"site-brand-logo-slot\"><img class=\"site-brand-logo\" src=\"{HtmlEncoder.Default.Encode(light)}\" alt=\"\"></span>"
+                : $"<span class=\"site-brand-logo-slot\"><img class=\"site-brand-logo site-brand-logo-light\" src=\"{HtmlEncoder.Default.Encode(light)}\" alt=\"\"><img class=\"site-brand-logo site-brand-logo-dark\" src=\"{HtmlEncoder.Default.Encode(dark)}\" alt=\"\"></span>";
         return $"<div class=\"site-header-leading\"><div class=\"site-header-icon-slot\"><button class=\"navigation-toggle panel-toggle\" id=\"navigation-toggle\" type=\"button\" aria-expanded=\"true\" aria-controls=\"site-navigation\" aria-label=\"Collapse navigation\" title=\"Collapse navigation\"><svg viewBox=\"0 0 20 20\" aria-hidden=\"true\" focusable=\"false\"><rect x=\"2.5\" y=\"3.5\" width=\"15\" height=\"13\" rx=\"2\"></rect><path class=\"panel-fill\" d=\"M3 4h5v12H3z\"></path><path d=\"M8 4v12\"></path></svg></button></div><a class=\"site-brand\" href=\"{HtmlEncoder.Default.Encode(prefix + "index.html")}\">{logo}<span id=\"site-brand-title\" data-site-title=\"{name}\" data-page-title=\"{heading}\">{name}</span></a></div>";
     }
 
