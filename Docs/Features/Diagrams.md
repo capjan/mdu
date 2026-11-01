@@ -522,7 +522,7 @@ A node appears in the first phase that links to it, and a zone appears with its 
 
 ## Clickable nodes
 
-A Mermaid `click` statement links a flowchart, state, or context node; PlantUML's `url of` statement links a component. The linked node is recognizable and can be opened from the rendered HTML. Its label uses the page's link color and is underlined on hover, like links in the text.
+A Mermaid `click` statement links a flowchart, state, or context node; PlantUML's `url of` statement links a component. The linked node is recognizable and can be opened from the rendered HTML. Its label uses the page's link color and is underlined on hover or keyboard focus, like links in the text. Start, end, fork, and choice states have no label, so the symbol itself uses the link color.
 
 | Diagram | Syntax | Meaning |
 | --- | --- | --- |

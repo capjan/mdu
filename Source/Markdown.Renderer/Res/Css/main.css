@@ -2619,9 +2619,13 @@ pre code {
     text-decoration: underline;
 }
 
-/* Start, end, and fork symbols have no label, so the symbol itself carries the link color. */
+/* Start, end, fork, and choice symbols have no label, so the symbol itself carries the link color. */
 .diagram-link .diagram-state-symbol {
     fill: var(--link);
+}
+
+.diagram-link .diagram-state-choice .diagram-node-shape {
+    stroke: var(--link);
 }
 
 .diagram-link:focus-visible {
