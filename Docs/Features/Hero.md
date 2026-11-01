@@ -1,9 +1,12 @@
 # Hero Banner
 
+<!-- pdf:hidden -->
+
 ```hero
 title: Make it your own
 text: Try an effect, change the colors, and build your own hero banner right on this page.
 effect: connections
+width: content
 height: 420
 playground: true
 actions:
@@ -13,13 +16,15 @@ actions:
 
 ## Try it
 
-This feature page is the playground. Choose an effect, **Full width** or **Content width**, the site theme, and speed directly in the compact controls. The width switch moves the same live banner between the header and its original place in the article. Expand **Text & layout** for the title, description, height, alignment, and quality. **Scene & colors** contains the accent color or, for **Beach**, lighting, waves, and water, shallows, and sand colors. **Use default colors** restores the theme-aware palette. All changes preview immediately.
+This feature page is the playground. It starts in **Content width** so navigation between feature pages keeps the same layout. Choose an effect, **Full width** or **Content width**, the site theme, and speed directly in the compact controls. The width switch moves the same live banner between the header and its original place in the article. Expand **Text & layout** for the title, description, height, alignment, and quality. **Scene & colors** contains the accent color or, for **Beach**, lighting, waves, and water, shallows, and sand colors. **Use default colors** restores the theme-aware palette. All changes preview immediately.
 
 The action bar stays accessible while you edit. **View preview** takes you to the actual banner; **Back to controls** returns to the last focused setting. **Hero YAML** is collapsed initially but updates live. **Copy YAML** exports your settings whether or not that section is open.
 
 **Own shader (advanced)** previews an original animated hexagonal tunnel with depth and glowing edges. Expand its optional editor to experiment with the code. Changes preview automatically after a 300 ms typing pause, without an Apply button. If the code does not compile, the last valid animation remains visible with an explicit error; copying is disabled until the shader is valid.
 
-The site-theme selector changes the whole page without saving that preference. Other controls affect only the first banner. Pause is preview-only; `speed: 0` exports a still banner. The browser's reduced-motion preference always wins. Reset also restores the original width. Action links remain YAML options.
+The site-theme selector changes the whole page without saving that preference. Other controls affect only the first banner. Pause is preview-only; `speed: 0` exports a still banner. The browser's reduced-motion preference always wins. Reset returns this playground to **Content width**. Action links remain YAML options.
+
+<!-- /pdf:hidden -->
 
 ## Overview
 
