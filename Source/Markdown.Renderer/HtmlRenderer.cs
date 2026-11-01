@@ -161,6 +161,31 @@ public class HtmlRenderer
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 
+    internal IReadOnlyList<string> FindVisiblePdfLinks(string markdown)
+    {
+        var document = Markdig.Markdown.Parse(markdown, _pipeline);
+        PdfHiddenContent.Remove(document);
+        return document.Descendants<LinkInline>()
+            .Where(link => !link.IsImage && LinkReplacer.IsPdfLink(link.Url))
+            .Select(link => link.Url!)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    internal IReadOnlySet<int> FindHiddenOpenApiBlocks(string markdown)
+    {
+        if (!markdown.Contains("openapi", StringComparison.OrdinalIgnoreCase) ||
+            !markdown.Contains("pdf", StringComparison.OrdinalIgnoreCase)) return new HashSet<int>();
+
+        var document = Markdig.Markdown.Parse(markdown, _pipeline);
+        var blocks = document.Descendants<FencedCodeBlock>()
+            .Where(block => string.Equals(block.Info?.Trim(), "openapi", StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (blocks.Length == 0) return new HashSet<int>();
+        PdfHiddenContent.Remove(document);
+        var visible = document.Descendants<FencedCodeBlock>().ToHashSet();
+        return blocks.Where(block => !visible.Contains(block)).Select(block => block.Span.Start).ToHashSet();
+    }
+
     public bool ContainsPdfLink(string markdown) => FindPdfLinks(markdown).Count > 0;
 
     public IReadOnlyCollection<string> FindMediaProviders(string markdown)
@@ -171,9 +196,41 @@ public class HtmlRenderer
         return providers;
     }
 
-    public string RenderMarkdownFragment(string markdown)
+    public string RenderMarkdownFragment(string markdown) => RenderFragment(ParseMarkdown(markdown));
+
+    /// <summary>Renders a fragment without the headings and regions that are marked as hidden in PDF output.</summary>
+    internal string RenderPdfMarkdownFragment(string markdown)
     {
         var document = ParseMarkdown(markdown);
+        PdfHiddenContent.Remove(document);
+        return RenderFragment(document);
+    }
+
+    /// <summary>Returns whether the first level-one heading, which usually provides the page title, is hidden in PDF output.</summary>
+    public bool ExcludesTitleHeadingFromPdf(string markdown)
+    {
+        // Every pdf-hidden class and pdf:hidden marker contains "pdf", so most pages need no second parse.
+        if (!markdown.Contains("pdf", StringComparison.OrdinalIgnoreCase)) return false;
+        var document = ParseMarkdown(markdown);
+        var title = document.Descendants<HeadingBlock>().FirstOrDefault(heading => heading.Level == 1);
+        if (title is null) return false;
+        try
+        {
+            PdfHiddenContent.Remove(document);
+        }
+        catch (PdfHiddenContentException)
+        {
+            // Rendering the page reports the error.
+            return false;
+        }
+
+        Block? block = title;
+        while (block.Parent is not null) block = block.Parent;
+        return !ReferenceEquals(block, document);
+    }
+
+    private string RenderFragment(MarkdownDocument document)
+    {
         var html = document.ToHtml(_pipeline)
             .Replace(OpenApiMarkdownRenderer.BlockStartMarker, string.Empty, StringComparison.Ordinal)
             .Replace(OpenApiMarkdownRenderer.BlockEndMarker, string.Empty, StringComparison.Ordinal);

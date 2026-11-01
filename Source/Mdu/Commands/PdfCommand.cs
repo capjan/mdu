@@ -95,6 +95,7 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         var roots = graph.ToArray();
         var files = Flatten(rootPath, roots).ToArray();
         var requests = new Dictionary<string, MarkdownFile?>(MarkdownLinks.PathComparer);
+        var failed = false;
         foreach (var (page, _) in files)
         {
             var markdown = OpenApiMarkdownRenderer.ExpandCodeBlocks(
@@ -104,8 +105,20 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
                 specificationPages.SelectMany(specification => pdfRenderer.FindPdfLinks(specification.Markdown)));
             foreach (var url in links.Distinct(StringComparer.Ordinal))
             {
-                var path = LinkReplacer.GetPdfRoot(url);
-                var selected = path is null ? null : PdfSelection.FindPage(rootPath, roots, path, page);
+                MarkdownFile? selected;
+                try
+                {
+                    var path = LinkReplacer.GetPdfRoot(url);
+                    selected = path is null ? null : PdfSelection.FindPage(rootPath, roots, path, page);
+                }
+                catch (InvalidOperationException exception)
+                {
+                    // Keep collecting, so that the other downloads are still regenerated and none stays outdated.
+                    Console.Error.WriteLine(
+                        $"Could not write PDF: {PageLabel(PdfSelection.GetTitle(rootPath, page), GetRelativeHtmlPath(rootPath, page))}: {exception.Message}");
+                    failed = true;
+                    continue;
+                }
                 var destination = selected is null ? outputPath :
                     Path.GetFullPath(Path.Combine(Path.GetDirectoryName(outputPath)!,
                         PdfSelection.GetOutputPath(rootPath, selected)));
@@ -116,7 +129,7 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         foreach (var (destination, selected) in requests)
             if (WritePdf(rootPath, destination, selected is null ? files : Flatten(rootPath, [selected]),
                     includeFrontMatter: true, reuseUnchanged: reuseUnchanged, trackSitePdf: true) != 0)
-                return 1;
+                failed = true;
 
         if (!requests.ContainsKey(outputPath) && File.Exists(outputPath)) File.Delete(outputPath);
         var scopedDirectory = Path.Combine(Path.GetDirectoryName(outputPath)!, PdfSelection.OutputDirectory);
@@ -128,7 +141,7 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         foreach (var oldPath in _sitePdfSections.Keys.Where(path => !requests.ContainsKey(path)).ToArray())
             _sitePdfSections.Remove(oldPath);
         GeneratedSitePdfPaths = requests.Keys.ToArray();
-        return 0;
+        return failed ? 1 : 0;
     }
 
     private int WritePdf(
@@ -139,25 +152,64 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         bool reuseUnchanged = false,
         bool trackSitePdf = false)
     {
-        var sections = files.Where(item => IsPdfVisible(item.File.FrontMatter))
-            .Select(item =>
-            {
-                var markdown = OpenApiMarkdownRenderer.ExpandCodeBlocks(
-                    RemoveFrontMatter(item.File.ReadMarkdown(), item.File.FrontMatter),
-                    item.File.FileInfo.FullName,
-                    item.File.SourceRootPath,
-                    includeSpecificationPageLink: false);
-                return new PdfSourceSection(
-                    PdfSelection.GetTitle(rootPath, item.File),
-                    GetRelativeHtmlPath(rootPath, item.File),
-                    markdown,
-                    item.Depth);
-            })
-            .ToArray();
+        PdfSourceSection[] sections;
+        try
+        {
+            sections = files.Where(item => IsPdfVisible(item.File.FrontMatter))
+                .Select(item =>
+                {
+                    var source = RemoveFrontMatter(item.File.ReadMarkdown(), item.File.FrontMatter);
+                    IReadOnlySet<int> excludedBlocks;
+                    try
+                    {
+                        excludedBlocks = pdfRenderer.FindHiddenOpenApiBlocks(source);
+                    }
+                    catch (PdfHiddenContentException exception)
+                    {
+                        throw new PdfHiddenContentException($"{PageLabel(PdfSelection.GetTitle(rootPath, item.File), GetRelativeHtmlPath(rootPath, item.File))}: {exception.Message}");
+                    }
+                    var markdown = OpenApiMarkdownRenderer.ExpandCodeBlocks(
+                        source,
+                        item.File.FileInfo.FullName,
+                        item.File.SourceRootPath,
+                        includeSpecificationPageLink: false,
+                        excludedBlockStarts: excludedBlocks);
+                    return new PdfSourceSection(
+                        PdfSelection.GetPdfTitle(rootPath, item.File, markdown, pdfRenderer.ExcludesTitleHeading),
+                        GetRelativeHtmlPath(rootPath, item.File),
+                        markdown,
+                        item.Depth);
+                })
+                .ToArray();
+        }
+        catch (PdfHiddenContentException exception)
+        {
+            Console.Error.WriteLine($"Could not write PDF: {exception.Message}");
+            if (trackSitePdf) DiscardSitePdf(outputPath);
+            return 1;
+        }
 
         if (sections.Length == 0)
         {
             Console.Error.WriteLine("No Markdown pages selected for PDF output.");
+            if (trackSitePdf) DiscardSitePdf(outputPath);
+            return 1;
+        }
+
+        // Site PDFs resolve their links in WriteSitePdfIfLinked. Without that step, a malformed link would become a dead link.
+        string? malformedLink;
+        try
+        {
+            malformedLink = trackSitePdf ? null : FindMalformedPdfLink(sections);
+        }
+        catch (PdfHiddenContentException exception)
+        {
+            Console.Error.WriteLine($"Could not write PDF: {exception.Message}");
+            return 1;
+        }
+        if (malformedLink is not null)
+        {
+            Console.Error.WriteLine($"Could not write PDF: {malformedLink}");
             return 1;
         }
 
@@ -176,15 +228,56 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
             File.Move(temporaryPath, outputPath, true);
             if (trackSitePdf) _sitePdfSections[outputPath] = sections;
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or XmlException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or XmlException or PdfHiddenContentException)
         {
             Console.Error.WriteLine($"Could not write PDF: {exception.Message}");
             if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
+            if (trackSitePdf) DiscardSitePdf(outputPath);
             return 1;
         }
 
         Console.WriteLine($"Wrote {sections.Length} Markdown files to {outputPath}");
         return 0;
+    }
+
+    private string? FindMalformedPdfLink(IEnumerable<PdfSourceSection> sections)
+    {
+        foreach (var section in sections)
+        foreach (var url in FindVisiblePdfLinks(section))
+        {
+            try
+            {
+                LinkReplacer.GetPdfRoot(url);
+            }
+            catch (InvalidOperationException exception)
+            {
+                return $"{PageLabel(section.Title, section.RelativeHtmlPath)}: {exception.Message}";
+            }
+        }
+
+        return null;
+    }
+
+    private IReadOnlyList<string> FindVisiblePdfLinks(PdfSourceSection section)
+    {
+        try
+        {
+            return pdfRenderer.FindVisiblePdfLinks(section.Markdown);
+        }
+        catch (PdfHiddenContentException exception)
+        {
+            throw new PdfHiddenContentException($"{PageLabel(section.Title, section.RelativeHtmlPath)}: {exception.Message}");
+        }
+    }
+
+    // Matches the page label of the errors that PdfRenderer reports.
+    private static string PageLabel(string title, string relativeHtmlPath) => $"Page \"{title}\" ({relativeHtmlPath})";
+
+    // A failed site PDF must not stay downloadable, because it may still contain content the author meant to exclude.
+    private void DiscardSitePdf(string outputPath)
+    {
+        _sitePdfSections.Remove(outputPath);
+        if (File.Exists(outputPath)) File.Delete(outputPath);
     }
 
     private static IEnumerable<(MarkdownFile File, int Depth)> Flatten(string rootPath, IEnumerable<MarkdownFile> files, int depth = 0)

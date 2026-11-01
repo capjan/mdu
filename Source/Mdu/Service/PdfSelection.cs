@@ -35,6 +35,17 @@ internal static class PdfSelection
     internal static string GetTitle(string rootPath, MarkdownFile page) =>
         !string.IsNullOrWhiteSpace(page.Title) ? page.Title.Trim() : GetFallbackTitle(rootPath, page);
 
+    /// <summary>
+    /// Returns the title of a page in PDF output. When the PDF excludes the page's title heading and no front matter
+    /// title is set, the title falls back to the file or folder name, so the PDF and its download name do not show it.
+    /// </summary>
+    /// <param name="markdown">The page's Markdown without front matter.</param>
+    /// <param name="excludesTitleHeading">Returns whether the PDF excludes the title heading of the given Markdown.</param>
+    internal static string GetPdfTitle(string rootPath, MarkdownFile page, string markdown, Func<string, bool> excludesTitleHeading) =>
+        page.FrontMatterTitle is null && excludesTitleHeading(markdown)
+            ? GetFallbackTitle(rootPath, page)
+            : GetTitle(rootPath, page);
+
     internal static string GetFallbackTitle(string rootPath, MarkdownFile page)
     {
         var path = GetSitePath(rootPath, page);

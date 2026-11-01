@@ -30,6 +30,7 @@ public class MarkdownFile: INode<MarkdownFile>
 
     public string Title { get; set; } = string.Empty;
     public string HeadingTitle { get; set; } = string.Empty;
+    public string? FrontMatterTitle { get; set; }
     public string Description { get; set; } = string.Empty;
     public string Icon { get; set; } = string.Empty;
     public string FrontMatter { get; set; } = string.Empty;

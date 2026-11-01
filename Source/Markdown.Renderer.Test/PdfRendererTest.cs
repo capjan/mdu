@@ -198,6 +198,741 @@ public class PdfRendererTest
         Assert.Equal(PdfLayout.PageHeight - PdfLayout.Top - 22 * 0.95, title.Y, 3);
     }
 
+    [Fact]
+    public void HidesAMarkedHeadingAndItsContentUntilTheNextHeadingOfTheSameOrAHigherLevel()
+    {
+        const string markdown = """
+            # FirstTitle
+
+            IntroText
+
+            ## HiddenHeading {.pdf-hidden}
+
+            HiddenText
+
+            ### NestedHeading
+
+            NestedText
+
+            ## PublicHeading
+
+            PublicText
+
+            ### DeepHidden {.pdf-hidden}
+
+            DeepText
+
+            # SecondTitle
+
+            ClosingText
+            """;
+
+        var content = string.Concat(Layout(markdown).Pages.Select(page => page.Content.ToString()));
+
+        foreach (var text in new[] { "FirstTitle", "IntroText", "PublicHeading", "PublicText", "SecondTitle", "ClosingText" })
+            Assert.Contains(Hex(text), content);
+        foreach (var text in new[] { "HiddenHeading", "HiddenText", "NestedHeading", "NestedText", "DeepHidden", "DeepText" })
+            Assert.DoesNotContain(Hex(text), content);
+    }
+
+    [Fact]
+    public void HidesMarkedRegionsAtEveryNestingLevel()
+    {
+        const string markdown = """
+            BeforeText
+            <!-- pdf:hidden -->
+            HiddenParagraph
+
+            ## HiddenRegionHeading
+
+            - HiddenListItem
+            <!-- /pdf:hidden -->
+
+            - KeptItem
+
+              <!-- pdf:hidden -->
+              HiddenItemText
+              <!-- /pdf:hidden -->
+
+            > QuoteText
+            >
+            > <!-- pdf:hidden -->
+            > HiddenQuoteText
+            > <!-- /pdf:hidden -->
+
+            AfterText
+            """;
+
+        var content = string.Concat(Layout(markdown).Pages.Select(page => page.Content.ToString()));
+
+        foreach (var text in new[] { "BeforeText", "KeptItem", "QuoteText", "AfterText" })
+            Assert.Contains(Hex(text), content);
+        foreach (var text in new[] { "HiddenParagraph", "HiddenRegionHeading", "HiddenListItem", "HiddenItemText", "HiddenQuoteText" })
+            Assert.DoesNotContain(Hex(text), content);
+    }
+
+    [Fact]
+    public void IgnoresMarkersInCode()
+    {
+        const string markdown = """
+            ```markdown
+            <!-- pdf:hidden -->
+            ```
+
+            Inline `<!-- /pdf:hidden -->` StillVisible
+
+            AfterCode
+            """;
+
+        var content = string.Concat(Layout(markdown).Pages.Select(page => page.Content.ToString()));
+
+        Assert.Contains(Hex("pdf:hidden"), content);
+        Assert.Contains(Hex("StillVisible"), content);
+        Assert.Contains(Hex("AfterCode"), content);
+    }
+
+    [Theory]
+    [InlineData("InlineText <!-- pdf:hidden --> Secret <!-- /pdf:hidden -->", "not inside a paragraph")]
+    [InlineData("<!-- pdf:hidden --> SecretTrailingText\n\n<!-- /pdf:hidden -->", "must stand alone")]
+    [InlineData("<div>\n<!-- pdf:hidden -->\nSecretInsideDiv\n<!-- /pdf:hidden -->\n</div>", "must stand alone")]
+    [InlineData("<div>\n<!-- pdf-hidden -->\n</div>", "is not a valid marker")]
+    [InlineData("<div>Intro</div>\n<!-- pdf:hidden -->\n\nSecret\n\n<!-- /pdf:hidden -->", "must stand alone")]
+    [InlineData("<!-- pdf:hiden -->\nSecret\n\n<!-- /pdf:hiden -->", "is not a valid marker")]
+    [InlineData("<!-- pdf:hide -->", "is not a valid marker")]
+    public void RejectsMarkersThatWouldOtherwiseBeIgnored(string markdown, string reason)
+    {
+        var exception = Assert.Throws<PdfHiddenContentException>(() => new HtmlRenderer().RenderPdfMarkdownFragment(markdown));
+
+        Assert.Contains(reason, exception.Message);
+    }
+
+    [Fact]
+    public void RejectsUnbalancedMarkersInNestedContainersOfAHiddenRange()
+    {
+        const string markdown = "<!-- pdf:hidden -->\n\n- Item\n\n  <!-- pdf:hidden -->\n\n<!-- /pdf:hidden -->\n";
+
+        var exception = Assert.Throws<PdfHiddenContentException>(() => new HtmlRenderer().RenderPdfMarkdownFragment(markdown));
+
+        Assert.Contains("has no matching", exception.Message);
+    }
+
+    [Theory]
+    [InlineData("<!-- pdf:hidden -->\nOpen", "has no matching")]
+    [InlineData("Text\n\n<!-- /pdf:hidden -->", "has no preceding")]
+    [InlineData("<!-- pdf:hidden -->\n\n<!-- pdf:hidden -->\n\n<!-- /pdf:hidden -->", "before the previous one is closed")]
+    [InlineData("- Item\n\n  <!-- pdf:hidden -->\n\n<!-- /pdf:hidden -->", "has no matching")]
+    [InlineData("## Hidden {.pdf-hidden}\n\n<!-- pdf:hidden -->", "has no matching")]
+    public void RejectsUnbalancedMarkersAndNamesThePage(string markdown, string reason)
+    {
+        var layout = new PdfLayout(new HtmlRenderer(), "");
+
+        var exception = Assert.Throws<PdfHiddenContentException>(() =>
+            layout.RenderSection(new PdfSourceSection("Broken page", "guide/broken.html", markdown)));
+
+        Assert.Contains("Broken page", exception.Message);
+        Assert.Contains("guide/broken.html", exception.Message);
+        Assert.Contains(reason, exception.Message);
+    }
+
+    [Fact]
+    public void KeepsHiddenContentInHtmlOutput()
+    {
+        const string markdown = "## Internal {.pdf-hidden}\n\nSecret\n\n<!-- pdf:hidden -->\nRegion\n<!-- /pdf:hidden -->\n";
+
+        var html = new HtmlRenderer().RenderMarkdownFragment(markdown);
+
+        Assert.Contains("Internal", html);
+        Assert.Contains("Secret", html);
+        Assert.Contains("Region", html);
+    }
+
+    [Fact]
+    public void DropsAndRenumbersFootnotesReferencedOnlyByHiddenContent()
+    {
+        const string markdown = """
+            <!-- pdf:hidden -->
+            Hidden[^hidden].
+            <!-- /pdf:hidden -->
+
+            Kept[^kept].
+
+            [^hidden]: HiddenFootnote
+            [^kept]: KeptFootnote
+            """;
+
+        var html = new HtmlRenderer().RenderPdfMarkdownFragment(markdown);
+
+        Assert.DoesNotContain("HiddenFootnote", html);
+        Assert.Contains("KeptFootnote", html);
+        Assert.Contains("id=\"fn:1\"", html);
+        Assert.DoesNotContain("fn:2", html);
+    }
+
+    [Fact]
+    public void LeavesHiddenTextOutOfTheCoverDescription()
+    {
+        const string markdown = """
+            # Guide
+
+            <!-- pdf:hidden -->
+            SecretIntro
+            <!-- /pdf:hidden -->
+
+            PublicIntro
+            """;
+        using var output = new MemoryStream();
+
+        new PdfRenderer(new HtmlRenderer()).WritePdf(output, "Guide", [new PdfSourceSection("Guide", "index.html", markdown)]);
+
+        var pdf = Encoding.Latin1.GetString(output.ToArray());
+        Assert.DoesNotContain(Hex("SecretIntro"), pdf);
+        Assert.Contains(Hex("PublicIntro"), pdf);
+    }
+
+    [Fact]
+    public void HidesAnOpenApiReferenceUnderAHiddenHeading()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"mdu-pdf-hidden-openapi-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            File.WriteAllText(Path.Combine(directory, "api.json"), """
+                {
+                  "openapi": "3.1.0",
+                  "info": { "title": "SecretApiTitle", "version": "1" },
+                  "paths": { "/launches": { "get": { "summary": "ListLaunches", "responses": { "200": { "description": "SecretResponse" } } } } }
+                }
+                """);
+            var markdown = OpenApiMarkdownRenderer.ExpandCodeBlocks(
+                "# Guide\n\n## Internal API {.pdf-hidden}\n\n```openapi\napi.json\n```\n\nAfterApiText\n\n## PublicHeading\n\nPublicText\n",
+                Path.Combine(directory, "guide.md"),
+                includeSpecificationPageLink: false);
+
+            var html = new HtmlRenderer().RenderPdfMarkdownFragment(markdown);
+
+            foreach (var text in new[] { "Internal API", "API overview", "SecretApiTitle", "ListLaunches", "SecretResponse", "AfterApiText" })
+                Assert.DoesNotContain(text, html);
+            Assert.Contains("PublicHeading", html);
+            Assert.Contains("PublicText", html);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("<!--pdf:hidden-->", "<!--/pdf:hidden-->")]
+    [InlineData("<!-- PDF:Hidden -->", "<!-- / PDF:HIDDEN -->")]
+    [InlineData("<!--   pdf:hidden   -->", "<!--   /pdf:hidden   -->")]
+    [InlineData("<!-- pdf: hidden -->", "<!-- / pdf : hidden -->")]
+    public void RecognizesMarkerSpellingVariants(string start, string end)
+    {
+        var html = new HtmlRenderer().RenderPdfMarkdownFragment($"Before\n\n{start}\nSecretText\n{end}\n\nAfter");
+
+        Assert.DoesNotContain("SecretText", html);
+        Assert.Contains("Before", html);
+        Assert.Contains("After", html);
+    }
+
+    [Fact]
+    public void HandlesSetextHeadingsAndWindowsLineEndings()
+    {
+        const string markdown = "Intro\r\n\r\nHidden setext {.pdf-hidden}\r\n-------------\r\n\r\nSetextSecret\r\n\r\n<!-- pdf:hidden -->\r\nRegionSecret\r\n<!-- /pdf:hidden -->\r\n\r\nVisible heading\r\n---------------\r\n\r\nVisibleText\r\n";
+
+        var html = new HtmlRenderer().RenderPdfMarkdownFragment(markdown);
+
+        Assert.DoesNotContain("Hidden setext", html);
+        Assert.DoesNotContain("SetextSecret", html);
+        Assert.DoesNotContain("RegionSecret", html);
+        Assert.Contains("Visible heading", html);
+        Assert.Contains("VisibleText", html);
+    }
+
+    [Fact]
+    public void KeepsFootnotesOfVisibleTextWhenTheLastSectionIsHidden()
+    {
+        const string markdown = """
+            Kept[^kept].
+
+            [^kept]: KeptFootnote
+
+            ## Internal {.pdf-hidden}
+
+            Hidden[^hidden].
+
+            [^hidden]: HiddenFootnote
+            """;
+
+        var html = new HtmlRenderer().RenderPdfMarkdownFragment(markdown);
+
+        Assert.Contains("KeptFootnote", html);
+        Assert.DoesNotContain("HiddenFootnote", html);
+        Assert.Contains("id=\"fn:1\"", html);
+    }
+
+    [Fact]
+    public void DropsFootnotesReachableOnlyThroughHiddenFootnotesAndDeadBackLinks()
+    {
+        const string markdown = """
+            <!-- pdf:hidden -->
+            Hidden[^outer] and[^shared].
+            <!-- /pdf:hidden -->
+
+            Kept[^shared].
+
+            [^outer]: OuterFootnote[^inner]
+            [^inner]: InnerFootnote
+            [^shared]: SharedFootnote
+            """;
+
+        var html = new HtmlRenderer().RenderPdfMarkdownFragment(markdown);
+
+        Assert.DoesNotContain("OuterFootnote", html);
+        Assert.DoesNotContain("InnerFootnote", html);
+        Assert.Contains("SharedFootnote", html);
+        var targets = Regex.Matches(html, @"href=""#(?<id>fnref:\d+)""").Select(match => match.Groups["id"].Value).ToArray();
+        Assert.NotEmpty(targets);
+        Assert.All(targets, id => Assert.Contains($"id=\"{id}\"", html));
+    }
+
+    [Fact]
+    public void EndsAHiddenSectionAtTheEndOfAnEnclosingHtmlElement()
+    {
+        const string markdown = """
+            <details>
+            <summary>Summary</summary>
+
+            ## Hidden {.pdf-hidden}
+
+            DetailsSecret
+
+            </details>
+
+            AfterDetails
+
+            ## Also hidden {.pdf-hidden}
+
+            <details>
+            <summary>InnerSummary</summary>
+
+            InnerSecret
+
+            </details>
+
+            TrailingSecret
+
+            ## PublicHeading
+            """;
+        var layout = new PdfLayout(new HtmlRenderer(), "");
+
+        layout.RenderSection(new PdfSourceSection("Details", "details.html", markdown));
+
+        var content = string.Concat(layout.Complete().Pages.Select(page => page.Content.ToString()));
+        Assert.Contains(Hex("AfterDetails"), content);
+        Assert.Contains(Hex("PublicHeading"), content);
+        foreach (var text in new[] { "DetailsSecret", "InnerSummary", "InnerSecret", "TrailingSecret" })
+            Assert.DoesNotContain(Hex(text), content);
+    }
+
+    [Theory]
+    [InlineData("<!-- pdf-hidden -->")]
+    [InlineData("<!--PDF_hidden-->")]
+    [InlineData("<!-- /pdf hidden -->")]
+    public void RejectsMarkerLookalikes(string marker)
+    {
+        var exception = Assert.Throws<PdfHiddenContentException>(() =>
+            new HtmlRenderer().RenderPdfMarkdownFragment($"Before\n\n{marker}\n\nAfter"));
+
+        Assert.Contains(marker, exception.Message);
+        Assert.Contains("<!-- pdf:hidden -->", exception.Message);
+    }
+
+    [Fact]
+    public void KeepsOrdinaryCommentsThatMentionTheMarkerWords()
+    {
+        var html = new HtmlRenderer().RenderPdfMarkdownFragment("Before\n\n<!-- remove the pdf hidden flag later -->\n\nAfter");
+
+        Assert.Contains("Before", html);
+        Assert.Contains("After", html);
+    }
+
+    [Fact]
+    public void RejectsAHiddenSectionThatEndsInsideAnHtmlBlock()
+    {
+        const string markdown = """
+            <details>
+            <summary>Summary</summary>
+
+            ## Hidden {.pdf-hidden}
+
+            <p>SecretParagraph</p>
+            </details>
+
+            After
+            """;
+
+        var exception = Assert.Throws<PdfHiddenContentException>(() => new HtmlRenderer().RenderPdfMarkdownFragment(markdown));
+
+        Assert.Contains("\"Hidden\"", exception.Message);
+        Assert.Contains("</details> closes an element that starts before it", exception.Message);
+    }
+
+    [Theory]
+    [InlineData("<script>for (let i = 0; i<items.length; i++) { items[i].onclick = () => go(i); }</script>")]
+    [InlineData("<script>el.innerHTML = \"<p>Hello\";</script>")]
+    [InlineData("<script>\n//<![CDATA[\nconst template = \"<div>\";\n//]]>\n</script>")]
+    [InlineData("<style>.a > .b { color: red; }</style>")]
+    [InlineData("<div title=\"a > b\" data-x='c>d'><DIV>Secret</Div></div>")]
+    public void AcceptsValidHtmlInsideHiddenSections(string block)
+    {
+        var html = new HtmlRenderer().RenderPdfMarkdownFragment($"## Hidden {{.pdf-hidden}}\n\n{block}\n\n## Next\n\nAfterText\n");
+
+        Assert.Contains("AfterText", html);
+        Assert.DoesNotContain("Hidden", html);
+    }
+
+    [Fact]
+    public void RejectsAHiddenSectionThatEndsInsideAParagraph()
+    {
+        const string markdown = """
+            <details>
+            <summary>Summary</summary>
+
+            ## Internal {.pdf-hidden}
+
+            SecretInsideDetails</details>
+
+            After
+            """;
+
+        var exception = Assert.Throws<PdfHiddenContentException>(() => new HtmlRenderer().RenderPdfMarkdownFragment(markdown));
+
+        Assert.Contains("</details> closes an element that starts before it", exception.Message);
+    }
+
+    [Fact]
+    public void NamesThePageWhenItsHtmlCannotBeParsed()
+    {
+        var layout = new PdfLayout(new HtmlRenderer(), "");
+
+        var exception = Assert.Throws<System.Xml.XmlException>(() =>
+            layout.RenderSection(new PdfSourceSection("Broken HTML", "broken/index.html", "<div>\n\nOpen")));
+
+        Assert.Contains("Page \"Broken HTML\" (broken/index.html)", exception.Message);
+    }
+
+    [Theory]
+    [InlineData("# SecretTitle {.pdf-hidden}\n\nBody", true)]
+    [InlineData("<!-- pdf:hidden -->\n# SecretTitle\n<!-- /pdf:hidden -->\n\nBody", true)]
+    [InlineData("# Title\n\n## Hidden {.pdf-hidden}\n\nBody", false)]
+    [InlineData("Body without a title", false)]
+    public void DetectsAnExcludedTitleHeading(string markdown, bool excluded)
+    {
+        Assert.Equal(excluded, new PdfRenderer(new HtmlRenderer()).ExcludesTitleHeading(markdown));
+    }
+
+    [Fact]
+    public void EndsAHiddenSectionAtTheClosingTagOfAnEnclosingTableCell()
+    {
+        const string markdown = """
+            <table><tr><td>
+
+            ## Example {.pdf-hidden}
+
+            CellSecret
+
+            </td>
+
+            </tr>
+
+            </table>
+
+            AfterTable
+            """;
+        var layout = new PdfLayout(new HtmlRenderer(), "");
+
+        layout.RenderSection(new PdfSourceSection("Table", "table.html", markdown));
+
+        var content = string.Concat(layout.Complete().Pages.Select(page => page.Content.ToString()));
+        Assert.DoesNotContain(Hex("CellSecret"), content);
+        Assert.Contains(Hex("AfterTable"), content);
+    }
+
+    [Theory]
+    [InlineData("<script>\n//<![CDATA[\nconst marker = \"<!-- pdf:hidden -->\";\n//]]>\n</script>")]
+    [InlineData("<script>\n// <!-- pdf:hidden -->\n</script>")]
+    [InlineData("<pre>&lt;!-- pdf:hidden --&gt; &lt;!-- /pdf:hidden --&gt;</pre>")]
+    [InlineData("Text <script>// <!-- pdf:hidden --></script> more text")]
+    [InlineData("Text <style>/* <!-- /pdf:hidden --> */</style> more text")]
+    public void IgnoresMarkersInRawTextElements(string block)
+    {
+        var html = new HtmlRenderer().RenderPdfMarkdownFragment($"Before\n\n{block}\n\nAfter");
+
+        Assert.Contains("Before", html);
+        Assert.Contains("After", html);
+    }
+
+    [Theory]
+    [InlineData("<iframe src=\"https://example.org\"></iframe>")]
+    [InlineData("<details>\n<summary>Summary</summary>\nDetailsSecret\n</details>")]
+    public void AcceptsAnEndMarkerDirectlyAfterHtml(string html)
+    {
+        var rendered = new HtmlRenderer().RenderPdfMarkdownFragment($"Before\n\n<!-- pdf:hidden -->\n{html}\n<!-- /pdf:hidden -->\n\nAfter");
+
+        Assert.DoesNotContain("iframe", rendered);
+        Assert.DoesNotContain("DetailsSecret", rendered);
+        Assert.Contains("Before", rendered);
+        Assert.Contains("After", rendered);
+    }
+
+    [Fact]
+    public void EndsAHiddenSectionAtTheClosingTagOfAnEnclosingSvgElement()
+    {
+        const string markdown = """
+            <svg width="100" height="100" xmlns="http://www.w3.org/2000/svg">
+            <foreignObject width="100" height="100">
+
+            ## Example {.pdf-hidden}
+
+            SvgSecret
+
+            </foreignObject>
+
+            </svg>
+
+            Outside
+            """;
+        var layout = new PdfLayout(new HtmlRenderer(), "");
+
+        layout.RenderSection(new PdfSourceSection("Svg", "svg.html", markdown));
+
+        var content = string.Concat(layout.Complete().Pages.Select(page => page.Content.ToString()));
+        Assert.DoesNotContain(Hex("SvgSecret"), content);
+        Assert.Contains(Hex("Outside"), content);
+    }
+
+    [Fact]
+    public void RejectsARangeWrittenInsidePre()
+    {
+        const string markdown = "<pre>\n\n<!-- pdf:hidden -->\n\nSecretInsidePre\n\n<!-- /pdf:hidden -->\n\n</pre>";
+
+        var exception = Assert.Throws<PdfHiddenContentException>(() => new HtmlRenderer().RenderPdfMarkdownFragment(markdown));
+
+        Assert.Contains("must stand alone", exception.Message);
+    }
+
+    [Theory]
+    [InlineData("<details>\n<summary>Open</summary>\n\n<!-- pdf:hidden -->\nSecret\n</details>\n<!-- /pdf:hidden -->")]
+    [InlineData("<details>\n<summary>Open</summary>\n\n<!-- pdf:hidden -->\n\nSecret\n\n</details>\n\n<!-- /pdf:hidden -->")]
+    public void RejectsARangeThatClosesAnElementOpenedBeforeIt(string markdown)
+    {
+        var exception = Assert.Throws<PdfHiddenContentException>(() => new HtmlRenderer().RenderPdfMarkdownFragment(markdown));
+
+        Assert.Contains("closes an element that starts before it", exception.Message);
+    }
+
+    [Theory]
+    [InlineData("Text <pre><!-- pdf:hidden -->SecretInlinePre<!-- /pdf:hidden --></pre> end.", "not inside a paragraph")]
+    [InlineData("Text <!-- note <pre> --> and <!-- pdf:hidden --> SecretAfterNote <!-- /pdf:hidden --> end.", "not inside a paragraph")]
+    [InlineData("Inline <textarea><!-- pdf:hidden -->SecretInlineTextarea<!-- /pdf:hidden --></textarea> after.", "not inside a paragraph")]
+    [InlineData("<textarea>\n<!-- pdf:hidden -->\nSecretInTextarea\n<!-- /pdf:hidden -->\n</textarea>", "must stand alone")]
+    [InlineData("<title><!-- pdf:hidden --></title>", "must stand alone")]
+    [InlineData("Text <script src=\"a.js\"/> and <!-- pdf:hidden --> SecretAfterScript <!-- /pdf:hidden --> end.", "not inside a paragraph")]
+    public void RejectsMarkersInDisplayedRawText(string markdown, string reason)
+    {
+        var exception = Assert.Throws<PdfHiddenContentException>(() => new HtmlRenderer().RenderPdfMarkdownFragment(markdown));
+
+        Assert.Contains(reason, exception.Message);
+    }
+
+    [Theory]
+    [InlineData("<script>const example = \"<pre><!-- pdf:hidden --></pre>\";</script>")]
+    [InlineData("<style>/* <pre><!-- /pdf:hidden --></pre> */</style>")]
+    [InlineData("Text <script>const example = \"<pre><!-- pdf:hidden --></pre>\";</script> more")]
+    public void IgnoresPreLikeTextInScripts(string markdown)
+    {
+        var html = new HtmlRenderer().RenderPdfMarkdownFragment($"Before\n\n{markdown}\n\nAfter");
+
+        Assert.Contains("After", html);
+    }
+
+    [Fact]
+    public void ChecksRangesInDocumentOrderAcrossNestedContainers()
+    {
+        var balanced = new HtmlRenderer().RenderPdfMarkdownFragment(
+            "Intro\n\n<!-- pdf:hidden -->\n\n> Text <span>open\n>\n> </span>\n\n<!-- /pdf:hidden -->\n\nAfter");
+        Assert.Contains("After", balanced);
+        Assert.DoesNotContain("open", balanced);
+
+        var exception = Assert.Throws<PdfHiddenContentException>(() => new HtmlRenderer().RenderPdfMarkdownFragment(
+            "<details>\n<summary>Outer</summary>\n\n<!-- pdf:hidden -->\n\n> Close </details>\n>\n> <details>\n\n<!-- /pdf:hidden -->\n\n</details>"));
+        Assert.Contains("closes an element that starts before it", exception.Message);
+    }
+
+    [Theory]
+    [InlineData("## Hidden {.pdf-hidden}\n\nText <script>const s = \"</details>\";</script> more\n\n## Next\n\nNextText")]
+    [InlineData("<!-- pdf:hidden -->\n\nText <script>const s = \"</details>\";</script> more\n\n<!-- /pdf:hidden -->\n\nNextText")]
+    public void IgnoresClosingTagsInInlineScripts(string markdown)
+    {
+        var html = new HtmlRenderer().RenderPdfMarkdownFragment(markdown);
+
+        Assert.Contains("NextText", html);
+        Assert.DoesNotContain("const s", html);
+    }
+
+    [Fact]
+    public void LeavesScriptsStylesAndTemplatesOutOfThePdf()
+    {
+        const string markdown = """
+            # Guide
+
+            Intro <script>var inline = "InlineScriptText";</script> text.
+
+            <script>
+            <!-- pdf:hidden -->
+            var secret = "ScriptRangeSecret";
+            <!-- /pdf:hidden -->
+            </script>
+
+            <style>.x { content: "StyleText"; }</style>
+
+            <template><p>TemplateText</p></template>
+
+            <noscript>NoscriptText</noscript>
+
+            After
+            """;
+        using var output = new MemoryStream();
+
+        new PdfRenderer(new HtmlRenderer()).WritePdf(output, "Guide", [new PdfSourceSection("Guide", "index.html", markdown)]);
+
+        var pdf = Encoding.Latin1.GetString(output.ToArray());
+        foreach (var text in new[] { "InlineScriptText", "ScriptRangeSecret", "StyleText", "TemplateText" })
+            Assert.DoesNotContain(Hex(text), pdf);
+        Assert.Contains(Hex("NoscriptText"), pdf);
+        Assert.Contains(Hex("After"), pdf);
+        Assert.Contains(Hex("Intro"), pdf);
+    }
+
+    [Theory]
+    [InlineData("<pre><script>\n<!-- pdf:hidden -->\nPreScriptSecret\n<!-- /pdf:hidden -->\n</script>PreVisible</pre>")]
+    [InlineData("<pre><template><p>PreTemplateSecret</p></template>PreVisible</pre>")]
+    [InlineData("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"40\" height=\"40\"><foreignObject width=\"40\" height=\"40\"><template><svg><text>SvgTemplateSecret</text></svg></template></foreignObject></svg>\n\nPreVisible")]
+    [InlineData("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"40\" height=\"40\">\n<style>text{fill:red}</style>\n</svg>\n\nPreVisible")]
+    public void RemovesScriptsStylesAndTemplatesFromEveryLayoutPath(string markdown)
+    {
+        using var output = new MemoryStream();
+
+        new PdfRenderer(new HtmlRenderer()).WritePdf(output, "Guide", [new PdfSourceSection("Guide", "index.html", markdown)],
+            includeFrontMatter: false);
+
+        var pdf = Encoding.Latin1.GetString(output.ToArray());
+        Assert.Contains(Hex("PreVisible"), pdf);
+        foreach (var text in new[] { "PreScriptSecret", "PreTemplateSecret", "SvgTemplateSecret", "run()", "fill:red" })
+            Assert.DoesNotContain(Hex(text), pdf);
+    }
+
+    [Fact]
+    public void KeepsAHeadingWithTheParagraphAfterAScript()
+    {
+        for (var lines = 20; lines <= 60; lines++)
+        {
+            var result = Layout($"{Filler(lines)}\n\n## HeadingBeforeScript\n\n<script>var x = 1;</script>\n\nParagraphAfterScript");
+
+            Assert.Equal(PageContaining(result, "HeadingBeforeScript"), PageContaining(result, "ParagraphAfterScript"));
+        }
+    }
+
+    [Theory]
+    [InlineData("## Hidden {.pdf-hidden}\n\n<div>\n\nSecret\n\n## Next\n", "<div> is not closed before the section ends")]
+    [InlineData("## Hidden {.pdf-hidden}\n\n<p>Secret\n\n## Next\n", "<p> is not closed before the section ends")]
+    [InlineData("## Hidden {.pdf-hidden}\n\nValues are List<String> here.\n\n## Next\n", "<String> is not closed before the section ends")]
+    [InlineData("## Hidden {.pdf-hidden}\n\nSecret <b><i>both</b> italic</i> text.\n\n## Next\n", "</b> does not match the open <i>")]
+    [InlineData("## Hidden {.pdf-hidden}\n\n<details>\n<summary>S</summary>\n\n## Inner\n\nSecret\n\n</details>\n\n## Next\n", "<details> is not closed before the section ends")]
+    [InlineData("<!-- pdf:hidden -->\n\n<div>\n\nSecret\n\n<!-- /pdf:hidden -->\n\n</div>", "<div> is not closed")]
+    [InlineData("<!-- pdf:hidden -->\n\nValues are List<String> here.\n\n<!-- /pdf:hidden -->", "<String> is not closed")]
+    public void RejectsIncompleteHtmlInExcludedContent(string markdown, string problem)
+    {
+        var exception = Assert.Throws<PdfHiddenContentException>(() => new HtmlRenderer().RenderPdfMarkdownFragment(markdown));
+
+        Assert.Contains(problem, exception.Message);
+    }
+
+    [Theory]
+    [InlineData("<style-guide>\nVisibleGuide\n</style-guide>\n\nMiddleVisible\n\n<template-card>\nVisibleCard\n</template-card>\n\n<style>.x { color: red; }</style>")]
+    [InlineData("<!-- Remember to remove the <script> tag later -->\n\nMiddleVisible\n\n<script>var x = 1;</script>")]
+    [InlineData("<!-- <script> -->\n\nMiddleVisible\n\n<!-- </script> -->")]
+    [InlineData("<script src=\"analytics.js\" />\n\nMiddleVisible\n\n<script>var x = 1;</script>")]
+    [InlineData("<template />\n\nMiddleVisible\n\n<template>var x</template>")]
+    [InlineData("<![CDATA[ <script> ]]>\n\nMiddleVisible\n\n<script>var x = 1;</script>")]
+    [InlineData("<textarea><script>MiddleVisible</script></textarea>")]
+    public void RemovesOnlyRealScriptsStylesAndTemplates(string markdown)
+    {
+        using var output = new MemoryStream();
+
+        new PdfRenderer(new HtmlRenderer()).WritePdf(output, "Guide", [new PdfSourceSection("Guide", "index.html", markdown)],
+            includeFrontMatter: false);
+
+        var pdf = Encoding.Latin1.GetString(output.ToArray());
+        Assert.Contains(Hex("MiddleVisible"), pdf);
+        Assert.DoesNotContain(Hex("var x"), pdf);
+    }
+
+    [Theory]
+    [InlineData("Visible[^v].\n\n## Hidden {.pdf-hidden}\n\n[^v]: SecretDefinition\n\nHidden text.\n")]
+    [InlineData("Visible[^v].\n\n<!-- pdf:hidden -->\n\n[^v]: SecretDefinition\n\n<!-- /pdf:hidden -->\n\nAfter\n")]
+    public void RejectsFootnoteDefinitionsInExcludedContentThatVisibleTextUses(string markdown)
+    {
+        var exception = Assert.Throws<PdfHiddenContentException>(() => new HtmlRenderer().RenderPdfMarkdownFragment(markdown));
+
+        Assert.Contains("Footnote [^v] is defined in excluded content", exception.Message);
+    }
+
+    [Theory]
+    [InlineData("Visible[^v] [Link][r].\n\n## Hidden {.pdf-hidden}\n\nHidden text.\n\n[^v]: KeptDefinition\n\n[r]: https://kept.example\n")]
+    [InlineData("Visible[^v] [Link][r].\n\n## Hidden {.pdf-hidden}\n\nHidden text.\n\n[^v]: KeptDefinition\n\n[r]: https://kept.example\n\n## Next\n\nAfter\n")]
+    public void KeepsDefinitionsWrittenBelowTheLastBlockOfAHiddenSection(string markdown)
+    {
+        var html = new HtmlRenderer().RenderPdfMarkdownFragment(markdown);
+
+        Assert.DoesNotContain("Hidden text", html);
+        Assert.Contains("KeptDefinition", html);
+        Assert.Contains("href=\"https://kept.example\"", html);
+    }
+
+    [Theory]
+    [InlineData("Visible.\n\n## Hidden {.pdf-hidden}\n\nHidden[^h] text.\n\n[^h]: SecretDefinition\n")]
+    [InlineData("Visible[^v].\n\n[^v]: KeptDefinition\n\n<!-- pdf:hidden -->\n\nHidden[^h].\n\n[^h]: SecretDefinition\n\n<!-- /pdf:hidden -->\n")]
+    public void DropsFootnoteDefinitionsInExcludedContentThatOnlyExcludedTextUses(string markdown)
+    {
+        var html = new HtmlRenderer().RenderPdfMarkdownFragment(markdown);
+
+        Assert.DoesNotContain("SecretDefinition", html);
+        Assert.DoesNotContain("Hidden", html);
+    }
+
+    [Theory]
+    [InlineData("[Visible][secret]\n\n<!-- pdf:hidden -->\n[secret]: https://secret.example/confidential\n<!-- /pdf:hidden -->\n")]
+    [InlineData("![Logo][secret]\n\n## Hidden {.pdf-hidden}\n\n[secret]: https://secret.example/logo.png\n\nHidden text.\n")]
+    public void RejectsVisibleLinksToExcludedLinkDefinitions(string markdown)
+    {
+        var exception = Assert.Throws<PdfHiddenContentException>(() => new HtmlRenderer().RenderPdfMarkdownFragment(markdown));
+
+        Assert.Contains("Link reference [secret] is defined in excluded content", exception.Message);
+    }
+
+    [Fact]
+    public void AcceptsLinkDefinitionsInExcludedContentThatOnlyExcludedTextUses()
+    {
+        const string markdown = "[Kept][kept]\n\n[kept]: https://kept.example\n\n<!-- pdf:hidden -->\n[Hidden][secret]\n\n[secret]: https://secret.example\n<!-- /pdf:hidden -->\n";
+
+        var html = new HtmlRenderer().RenderPdfMarkdownFragment(markdown);
+
+        Assert.Contains("https://kept.example", html);
+        Assert.DoesNotContain("secret.example", html);
+    }
+
     private static PdfLayoutResult Layout(string markdown)
     {
         var layout = new PdfLayout(new HtmlRenderer(), "");

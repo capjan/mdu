@@ -8,6 +8,35 @@ namespace Mdu.Test;
 public class ServeCommandIntegrationTest
 {
     [Fact]
+    public async Task UpdatesPdfDownloadNamesWhenTheTargetTitleIsHiddenOrShown()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-serve-pdf-title-{Guid.NewGuid():N}");
+        var docs = Path.Combine(root, "Docs");
+        var site = Path.Combine(root, "site");
+        Directory.CreateDirectory(docs);
+        File.WriteAllText(Path.Combine(docs, "README.md"), "# Home\n\n[Guide PDF](mdu:pdf?root=Guide.md)");
+        var guide = Path.Combine(docs, "Guide.md");
+        File.WriteAllText(guide, "# Secret Title\n\nBody");
+        var (process, port) = await StartServerOnFreePortAsync(docs, site);
+        using var _ = process;
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+        var baseUrl = $"http://127.0.0.1:{port}/";
+        try
+        {
+            await WaitUntilAsync(async () => await PageContainsAsync(client, baseUrl, "download=\"Secret Title.pdf\""), process);
+            File.WriteAllText(guide, "# Secret Title {.pdf-hidden}\n\nBody\n\n# Public\n\nVisible");
+            await WaitUntilAsync(async () => await PageContainsAsync(client, baseUrl, "download=\"Guide.pdf\""), process);
+            File.WriteAllText(guide, "# Secret Title\n\nBody");
+            await WaitUntilAsync(async () => await PageContainsAsync(client, baseUrl, "download=\"Secret Title.pdf\""), process);
+        }
+        finally
+        {
+            StopServer(process);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task UpdatesScopedPdfsAndRemovesDownloadsWhenLinksDisappear()
     {
         var root = Path.Combine(Path.GetTempPath(), $"mdu-serve-pdf-{Guid.NewGuid():N}");
@@ -66,6 +95,78 @@ public class ServeCommandIntegrationTest
                 return response.StatusCode == HttpStatusCode.NotFound;
             }, process);
             Assert.False(File.Exists(Path.Combine(site, "documentation.pdf")));
+        }
+        finally
+        {
+            StopServer(process);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task KeepsUpdatingPagesWhileAPdfExportFails()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-serve-pdf-error-{Guid.NewGuid():N}");
+        var docs = Path.Combine(root, "Docs");
+        var site = Path.Combine(root, "site");
+        Directory.CreateDirectory(Path.Combine(docs, "Topic"));
+        File.WriteAllText(Path.Combine(docs, "README.md"), "# Home\n\n[Topic](mdu:pdf?root=Topic/README.md)");
+        File.WriteAllText(Path.Combine(docs, "Topic", "README.md"), "# Topic");
+        var draft = Path.Combine(docs, "Topic", "Draft.md");
+        var (process, port) = await StartServerOnFreePortAsync(docs, site);
+        using var _ = process;
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+        var baseUrl = $"http://127.0.0.1:{port}/";
+        static string Hex(string text) => Convert.ToHexString(System.Text.Encoding.Latin1.GetBytes(text));
+        try
+        {
+            await WaitUntilAsync(async () => await PageContainsAsync(client, baseUrl, "_mdu-pdf/"), process);
+            var pdfUrl = System.Text.RegularExpressions.Regex.Match(await client.GetStringAsync(baseUrl),
+                "href=\"(?<url>_mdu-pdf/[a-f0-9]+\\.pdf)\"").Groups["url"].Value;
+            Assert.NotEmpty(pdfUrl);
+
+            File.WriteAllText(draft, "# Draft\n\nDraftVisible\n\n<!-- pdf:hidden -->\nUnfinished");
+            await WaitUntilAsync(async () => await PageContainsAsync(client, baseUrl + "Topic/Draft.html", "DraftVisible"), process);
+            await WaitUntilAsync(async () =>
+            {
+                using var response = await client.GetAsync(baseUrl + pdfUrl);
+                return response.StatusCode == HttpStatusCode.NotFound;
+            }, process);
+
+            File.WriteAllText(draft, "# Draft\n\nDraftFixed\n\n<!-- pdf:hidden -->\nUnfinished\n<!-- /pdf:hidden -->\n");
+            await WaitUntilAsync(async () =>
+            {
+                var pdf = System.Text.Encoding.Latin1.GetString(await client.GetByteArrayAsync(baseUrl + pdfUrl));
+                return pdf.Contains(Hex("DraftFixed"), StringComparison.Ordinal) && !pdf.Contains(Hex("Unfinished"), StringComparison.Ordinal);
+            }, process);
+        }
+        finally
+        {
+            StopServer(process);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task KeepsUpdatingPagesWhenAPdfLinkHasAnInvalidRoot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-serve-pdf-root-{Guid.NewGuid():N}");
+        var docs = Path.Combine(root, "Docs");
+        var site = Path.Combine(root, "site");
+        Directory.CreateDirectory(docs);
+        var guide = Path.Combine(docs, "Guide.md");
+        File.WriteAllText(Path.Combine(docs, "README.md"), "# Home\n\n[PDF](mdu:pdf)");
+        File.WriteAllText(guide, "# Guide\n\nGuideBefore");
+        var (process, port) = await StartServerOnFreePortAsync(docs, site);
+        using var _ = process;
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+        var baseUrl = $"http://127.0.0.1:{port}/";
+        try
+        {
+            await WaitUntilAsync(async () => await PageContainsAsync(client, baseUrl + "Guide.html", "GuideBefore"), process);
+
+            File.WriteAllText(guide, "# Guide\n\nGuideAfter\n\n[Broken](mdu:pdf?root=Missing.md)");
+            await WaitUntilAsync(async () => await PageContainsAsync(client, baseUrl + "Guide.html", "GuideAfter"), process);
         }
         finally
         {

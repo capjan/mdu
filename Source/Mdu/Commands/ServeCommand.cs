@@ -40,6 +40,7 @@ public sealed class ServeCommand
     private Dictionary<string, HashSet<string>> _pagesByAsset => _dependencyIndex.PagesByAsset;
     private Dictionary<string, IReadOnlyList<string>> _openApiSpecsByPage => _dependencyIndex.OpenApiSpecsByPage;
     private Dictionary<string, IReadOnlyList<string>> _openApiSpecPagesByPage => _dependencyIndex.OpenApiSpecPagesByPage;
+    private Dictionary<string, string> _pdfTitlesByPage => _dependencyIndex.PdfTitlesByPage;
 
     public ServeCommand(
         GraphBuilder graphBuilder,
@@ -102,7 +103,7 @@ public sealed class ServeCommand
         _watchers = watcher;
         try
         {
-            RebuildSite();
+            RebuildSite(failOnPdfError: true);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or YamlDotNet.Core.YamlException)
         {
@@ -167,7 +168,7 @@ public sealed class ServeCommand
         return 0;
     }
 
-    private void RebuildSite()
+    private void RebuildSite(bool failOnPdfError = false)
     {
         var previousFiles = new HashSet<string>(_generatedFiles, PathComparer);
         var siteConfiguration = SiteConfigurationReader.Read(_rootPath);
@@ -196,8 +197,11 @@ public sealed class ServeCommand
         RebuildDependencyIndex(graph);
         graph.Visit(new LocalAssetsCopy(_rootPath, _outputPath));
         var pdfOutputPath = Path.Combine(_outputPath, "documentation.pdf");
-        if (_pdfCommand.WriteSitePdfIfLinked(_rootPath, pdfOutputPath, graph) != 0)
-            throw new InvalidOperationException("Could not render the documentation PDF.");
+        if (!TryWriteSitePdf(() => _pdfCommand.WriteSitePdfIfLinked(_rootPath, pdfOutputPath, graph)))
+        {
+            if (failOnPdfError) throw new InvalidOperationException("Could not render the documentation PDF.");
+            ReportPdfFailure();
+        }
         var rendererVisitor = new MarkdigVisitor(
             _rootPath,
             _outputPath,
@@ -254,9 +258,8 @@ public sealed class ServeCommand
         }
     }
 
-    private void UpdatePageAssets(string pagePath, MarkdownFile page)
+    private void UpdatePageAssets(string pagePath, PageDependencies dependencies)
     {
-        var dependencies = ReadPageDependencies(page);
         RemovePageAssets(pagePath);
         AddPageDependencies(_dependencyIndex, pagePath, dependencies);
     }
@@ -283,7 +286,8 @@ public sealed class ServeCommand
                 page.SourceRootPath))
             .ToArray();
 
-        return new PageDependencies(pageAssets, referencedSpecs);
+        var pdfTitle = PdfSelection.GetPdfTitle(_rootPath, page, body, _renderer.ExcludesTitleHeadingFromPdf);
+        return new PageDependencies(pageAssets, referencedSpecs, pdfTitle);
     }
 
     private static void AddPageDependencies(
@@ -304,6 +308,7 @@ public sealed class ServeCommand
         }
 
         index.OpenApiSpecsByPage[pagePath] = dependencies.OpenApiSpecs;
+        index.PdfTitlesByPage[pagePath] = dependencies.PdfTitle;
     }
 
     private void RemovePageAssets(string pagePath)
@@ -434,6 +439,7 @@ public sealed class ServeCommand
             var previousNavigationPlacement = page.NavigationPlacement;
             var previousInvalidNavigationPlacement = page.InvalidNavigationPlacement;
             _dataPreparationVisitor.Process(page, depth);
+            var dependencies = ReadPageDependencies(page);
             // Pages that already import a repository are handled above, so a set source means a newly added import.
             if (page.ImportSource is not null ||
                 !previousTitle.Equals(page.Title, StringComparison.Ordinal) ||
@@ -442,7 +448,9 @@ public sealed class ServeCommand
                 previousNavigationVisible != page.NavigationVisible ||
                 previousNavigationExpanded != page.NavigationExpanded ||
                 previousNavigationPlacement != page.NavigationPlacement ||
-                previousInvalidNavigationPlacement != page.InvalidNavigationPlacement)
+                previousInvalidNavigationPlacement != page.InvalidNavigationPlacement ||
+                !_pdfTitlesByPage.TryGetValue(pagePath, out var previousPdfTitle) ||
+                !previousPdfTitle.Equals(dependencies.PdfTitle, StringComparison.Ordinal))
             {
                 RebuildSite();
                 server.Publish(reloadAll: true);
@@ -450,7 +458,7 @@ public sealed class ServeCommand
             }
 
             var previousSpecPages = _openApiSpecPagesByPage.GetValueOrDefault(pagePath) ?? Array.Empty<string>();
-            UpdatePageAssets(pagePath, page);
+            UpdatePageAssets(pagePath, dependencies);
             _watchers?.UpdateExternalFiles(_openApiSpecsByPage.Values.SelectMany(paths => paths), _glossaryPath);
             new LocalAssetsCopy(_rootPath, _outputPath).Process(page, depth);
             var rendererVisitor = new MarkdigVisitor(
@@ -508,8 +516,8 @@ public sealed class ServeCommand
         {
             _searchIndexBuilder.WriteIndex(_outputPath);
             var pdfOutputPath = Path.Combine(_outputPath, "documentation.pdf");
-            if (_pdfCommand.WriteSitePdfIfLinked(_rootPath, pdfOutputPath, _navigationRoots, reuseUnchanged: true) != 0)
-                throw new InvalidOperationException("Could not render the documentation PDF.");
+            if (!TryWriteSitePdf(() => _pdfCommand.WriteSitePdfIfLinked(_rootPath, pdfOutputPath, _navigationRoots, reuseUnchanged: true)))
+                ReportPdfFailure();
         }
 
         var assetChanges = relevantChanges
@@ -539,6 +547,24 @@ public sealed class ServeCommand
             server.Publish(affectedPageUrls);
         }
     }
+
+    // An invalid PDF root throws instead of returning an error code.
+    private static bool TryWriteSitePdf(Func<int> write)
+    {
+        try
+        {
+            return write() == 0;
+        }
+        catch (InvalidOperationException exception)
+        {
+            Console.Error.WriteLine($"Could not write PDF: {exception.Message}");
+            return false;
+        }
+    }
+
+    // While serving, a PDF error must not block page updates, because a page is often briefly invalid while it is edited.
+    private static void ReportPdfFailure() =>
+        Console.Error.WriteLine("Could not render the documentation PDF. Pages are still updated; the PDF is available again once the error is fixed.");
 
     private bool ChangesPageSet(string path) =>
         _pages.ContainsKey(path) ? !File.Exists(path) : File.Exists(path) && IsMarkdownCandidate(path);
@@ -733,21 +759,24 @@ public sealed class ServeCommand
 
     private sealed record PageDependencies(
         HashSet<string> Assets,
-        IReadOnlyList<string> OpenApiSpecs);
+        IReadOnlyList<string> OpenApiSpecs,
+        string PdfTitle);
 
     private sealed record DependencyIndex(
         Dictionary<string, MarkdownFile> Pages,
         Dictionary<string, HashSet<string>> AssetsByPage,
         Dictionary<string, HashSet<string>> PagesByAsset,
         Dictionary<string, IReadOnlyList<string>> OpenApiSpecsByPage,
-        Dictionary<string, IReadOnlyList<string>> OpenApiSpecPagesByPage)
+        Dictionary<string, IReadOnlyList<string>> OpenApiSpecPagesByPage,
+        Dictionary<string, string> PdfTitlesByPage)
     {
         public static DependencyIndex CreateEmpty() => new(
             new Dictionary<string, MarkdownFile>(PathComparer),
             new Dictionary<string, HashSet<string>>(PathComparer),
             new Dictionary<string, HashSet<string>>(PathComparer),
             new Dictionary<string, IReadOnlyList<string>>(PathComparer),
-            new Dictionary<string, IReadOnlyList<string>>(PathComparer));
+            new Dictionary<string, IReadOnlyList<string>>(PathComparer),
+            new Dictionary<string, string>(PathComparer));
     }
 
     private sealed record FileChange(string Path, string? OldPath, FileChangeKind Kind);

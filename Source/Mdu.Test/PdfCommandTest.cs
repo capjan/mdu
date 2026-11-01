@@ -200,3 +200,189 @@ public class PdfCommandTest
         return new PdfCommand(graphBuilder, new PdfRenderer(new HtmlRenderer()));
     }
 }
+
+[Collection("Process state")]
+public class PdfCommandHiddenContentTest
+{
+    [Theory]
+    [InlineData("<!-- pdf:hidden -->\n[Hidden](mdu:pdf?root=)\n<!-- /pdf:hidden -->")]
+    [InlineData("## Hidden {.pdf-hidden}\n\n[Hidden](mdu:pdf?root=)\n\n## Public")]
+    public void IgnoresMalformedPdfLinksInExcludedContent(string hidden)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-pdf-hidden-link-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var page = Path.Combine(root, "Guide.md");
+        var output = Path.Combine(root, "guide.pdf");
+        try
+        {
+            File.WriteAllText(page, $"# Guide\n\nVisible\n\n{hidden}\n");
+            Assert.Equal(0, CreateCommand().Execute(new RenderCommandSettings { RootPath = page, OutputPath = output }));
+            Assert.Contains(Hex("Visible"), File.ReadAllText(output, Encoding.Latin1));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("<!-- pdf:hidden -->\n```openapi\nmissing.json\n```\n<!-- /pdf:hidden -->")]
+    [InlineData("## Hidden {.pdf-hidden}\n\n```openapi\nmissing.json\n```\n\n## Public")]
+    public void DoesNotLoadExcludedOpenApiDocuments(string hidden)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-pdf-hidden-openapi-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var page = Path.Combine(root, "Guide.md");
+        var output = Path.Combine(root, "guide.pdf");
+        try
+        {
+            File.WriteAllText(page, $"# Guide\n\nVisible\n\n{hidden}\n");
+            Assert.Equal(0, CreateCommand().Execute(new RenderCommandSettings { RootPath = page, OutputPath = output }));
+            Assert.Contains(Hex("Visible"), File.ReadAllText(output, Encoding.Latin1));
+
+            File.WriteAllText(page, "# Guide\n\n```openapi\nmissing.json\n```\n");
+            Assert.Equal(1, CreateCommand().Execute(new RenderCommandSettings { RootPath = page, OutputPath = output }));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void RendersVisibleOpenApiAlongsideAnExcludedDocument()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-pdf-mixed-openapi-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var page = Path.Combine(root, "Guide.md");
+        var output = Path.Combine(root, "guide.pdf");
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "visible.json"),
+                """{"openapi":"3.1.0","info":{"title":"VisibleApi","version":"1"},"paths":{}}""");
+            File.WriteAllText(page, """
+                # Guide
+
+                <!-- pdf:hidden -->
+                ```openapi
+                missing.json
+                ```
+                <!-- /pdf:hidden -->
+
+                ```openapi
+                visible.json
+                ```
+                """);
+            Assert.Equal(0, CreateCommand().Execute(new RenderCommandSettings { RootPath = page, OutputPath = output }));
+            Assert.Contains(Hex("VisibleApi"), File.ReadAllText(output, Encoding.Latin1));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ExcludesHiddenSectionsAndFailsOnUnbalancedMarkers()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-pdf-hidden-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var page = Path.Combine(root, "README.md");
+        var output = Path.Combine(root, "manual.pdf");
+        var originalError = Console.Error;
+        try
+        {
+            File.WriteAllText(page,
+                "---\nnavigation.order: 1\n---\n# Home\n\nVisibleText\n\n## Internal {.pdf-hidden}\n\nSecretText\n\n<!-- pdf:hidden -->\nRegionText\n<!-- /pdf:hidden -->\n");
+            Assert.Equal(0, CreateCommand().Execute(new RenderCommandSettings { RootPath = root, OutputPath = output }));
+            var pdf = File.ReadAllText(output, Encoding.Latin1);
+            Assert.Contains(Hex("VisibleText"), pdf);
+            Assert.DoesNotContain(Hex("SecretText"), pdf);
+            Assert.DoesNotContain(Hex("RegionText"), pdf);
+
+            File.Delete(output);
+            File.WriteAllText(page, "# Home\n\n<!-- pdf:hidden -->\nOpen\n");
+            using var error = new StringWriter();
+            Console.SetError(error);
+
+            Assert.Equal(1, CreateCommand().Execute(new RenderCommandSettings { RootPath = root, OutputPath = output }));
+
+            Assert.False(File.Exists(output));
+            Assert.Empty(Directory.EnumerateFiles(root, "*.tmp"));
+            Assert.Contains("Could not write PDF", error.ToString());
+            Assert.Contains("<!-- pdf:hidden --> has no matching <!-- /pdf:hidden -->", error.ToString());
+        }
+        finally
+        {
+            Console.SetError(originalError);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("<!-- pdf:hidden -->\n# SecretPageTitle\n<!-- /pdf:hidden -->\n\nVisibleBody\n", "Secret-Page")]
+    [InlineData("# SecretPageTitle {.pdf-hidden}\n\nHiddenBody\n\n# Chapter\n\nVisibleBody\n", "Secret-Page")]
+    [InlineData("---\ntitle: FrontMatterTitle\n---\n<!-- pdf:hidden -->\n# SecretPageTitle\n<!-- /pdf:hidden -->\n\nVisibleBody\n", "FrontMatterTitle")]
+    public void UsesAFallbackTitleWhenThePageTitleHeadingIsExcluded(string markdown, string expectedTitle)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-pdf-hidden-title-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        File.WriteAllText(Path.Combine(root, "Secret-Page.md"), markdown);
+        var output = Path.Combine(root, "manual.pdf");
+        try
+        {
+            Assert.Equal(0, CreateCommand().Execute(new RenderCommandSettings { RootPath = root, OutputPath = output }));
+            var pdf = File.ReadAllText(output, Encoding.Latin1);
+            Assert.DoesNotContain(Hex("SecretPageTitle"), pdf);
+            Assert.Contains(Hex("VisibleBody"), pdf);
+            Assert.Contains(Hex(expectedTitle), pdf);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void NamesThePageOfMalformedAndUnresolvedPdfLinks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-pdf-link-error-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var page = Path.Combine(root, "README.md");
+        var output = Path.Combine(root, "manual.pdf");
+        var originalError = Console.Error;
+        try
+        {
+            File.WriteAllText(page, "# Home\n\n[PDF](mdu:pdf?unknown=x)\n");
+            using var error = new StringWriter();
+            Console.SetError(error);
+
+            Assert.Equal(1, CreateCommand().Execute(new RenderCommandSettings { RootPath = root, OutputPath = output }));
+
+            Assert.False(File.Exists(output));
+            Assert.Contains("Page \"Home\" (index.html): Invalid PDF link 'mdu:pdf?unknown=x'", error.ToString());
+
+            File.WriteAllText(page, "# Home\n\n[PDF](mdu:pdf?root=Missing.md)\n");
+            var graphBuilder = new GraphBuilder(new DataPreparationVisitor(new MarkdownDocumentReader()));
+            var graph = graphBuilder.CreateGraph(new RenderCommandSettings { RootPath = root });
+
+            Assert.Equal(1, CreateCommand().WriteSitePdfIfLinked(root, Path.Combine(root, "site", "documentation.pdf"), graph));
+
+            Assert.Contains("Page \"Home\" (index.html): PDF root page not found or ambiguous: 'Missing.md'", error.ToString());
+        }
+        finally
+        {
+            Console.SetError(originalError);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static string Hex(string text) => Convert.ToHexString(Encoding.Latin1.GetBytes(text));
+
+    private static PdfCommand CreateCommand()
+    {
+        var reader = new MarkdownDocumentReader();
+        var graphBuilder = new GraphBuilder(new DataPreparationVisitor(reader));
+        return new PdfCommand(graphBuilder, new PdfRenderer(new HtmlRenderer()));
+    }
+}
