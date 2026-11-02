@@ -20,6 +20,7 @@ internal sealed class Browser : IAsyncDisposable
     private readonly Task<string> _stdout, _stderr;
     private string? _session;
     private int _nextId;
+    internal JsonObject Version { get; private set; } = new();
 
     private Browser(string executable)
     {
@@ -49,6 +50,7 @@ internal sealed class Browser : IAsyncDisposable
             var lines = await File.ReadAllLinesAsync(portFile, timeout.Token);
             await browser._socket.ConnectAsync(new Uri($"ws://127.0.0.1:{lines[0]}{lines[1]}"), timeout.Token);
             browser._reader = browser.Receive();
+            browser.Version = await browser.Command("Browser.getVersion");
             var target = await browser.Command("Target.createTarget", new JsonObject { ["url"] = "about:blank" });
             var attached = await browser.Command("Target.attachToTarget", new JsonObject { ["targetId"] = target["targetId"]!.GetValue<string>(), ["flatten"] = true });
             browser._session = attached["sessionId"]!.GetValue<string>();

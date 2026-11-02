@@ -27,7 +27,7 @@ public sealed record OpenApiSiblingPage(
     string HtmlFileName,
     string? AllowedRootPath = null);
 
-public static class OpenApiMarkdownRenderer
+public static partial class OpenApiMarkdownRenderer
 {
     public const string CodeBlockLanguage = "openapi";
     public const string BlockStartMarker = "<!--mdu-openapi-start-->";
@@ -37,14 +37,39 @@ public static class OpenApiMarkdownRenderer
     {
         "GET", "PUT", "POST", "DELETE", "OPTIONS", "HEAD", "PATCH", "TRACE", "QUERY"
     };
-    private static readonly Regex PathParameterRegex = new(@"\{[^{}]+\}", RegexOptions.Compiled);
-    private static readonly Regex UrlSchemeRegex = new(@"^[A-Za-z][A-Za-z0-9+.-]*://", RegexOptions.Compiled);
+    private static readonly Regex PathParameterRegex = PathParameterRegexPattern();
+
+    [GeneratedRegex(@"\{[^{}]+\}", RegexOptions.Compiled)]
+    private static partial Regex PathParameterRegexPattern();
+    private static readonly Regex UrlSchemeRegex = UrlSchemeRegexPattern();
+
+    [GeneratedRegex(@"^[A-Za-z][A-Za-z0-9+.-]*://", RegexOptions.Compiled)]
+    private static partial Regex UrlSchemeRegexPattern();
     private static readonly MarkdownPipeline CodeBlockPipeline = new MarkdownPipelineBuilder().UsePreciseSourceLocation().Build();
 
     private static readonly ConcurrentDictionary<string, CachedDocument> Cache = new(
         OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
             ? StringComparer.OrdinalIgnoreCase
             : StringComparer.Ordinal);
+    private static readonly object CacheGate = new();
+    private const int MaximumCachedDocuments = 128;
+    private const long MaximumCachedTextCharacters = 8 * 1024 * 1024;
+
+    private static void CacheDocument(string key, CachedDocument document)
+    {
+        lock (CacheGate)
+        {
+            Cache.TryRemove(key, out _);
+            if (document.RawText.Length > MaximumCachedTextCharacters) return;
+            Cache[key] = document;
+            var characters = Cache.Values.Sum(value => (long)value.RawText.Length);
+            foreach (var entry in Cache)
+            {
+                if (Cache.Count <= MaximumCachedDocuments && characters <= MaximumCachedTextCharacters) break;
+                if (Cache.TryRemove(entry.Key, out var removed)) characters -= removed.RawText.Length;
+            }
+        }
+    }
 
     public static string ResolveSpecPath(string markdownPath, string specPath, string? allowedRootPath = null)
     {
@@ -580,7 +605,7 @@ public static class OpenApiMarkdownRenderer
 
             var rawText = DecodeUtf8WithoutBom(bytes);
             var document = ParseOpenApiDocument(bytes, format, path);
-            Cache[path] = new CachedDocument(hash, document, rawText);
+            CacheDocument(path, new CachedDocument(hash, document, rawText));
             return new LoadedSpecification(document, rawText, format);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or OpenApiException or JsonException)
@@ -623,7 +648,7 @@ public static class OpenApiMarkdownRenderer
         try
         {
             var document = ParseOpenApiDocument(bytes, format, markdownPath);
-            Cache[cacheKey] = new CachedDocument(hash, document, trimmed);
+            CacheDocument(cacheKey, new CachedDocument(hash, document, trimmed));
             return new LoadedSpecification(document, trimmed, format);
         }
         catch (Exception exception) when (exception is OpenApiException or JsonException)

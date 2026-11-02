@@ -16,8 +16,9 @@ internal static class ProcessMeter
         if (!OperatingSystem.IsMacOS() && !OperatingSystem.IsLinux())
             throw new PlatformNotSupportedException("Exact process resource measurements currently support macOS and Linux.");
         var resultFile = args[1];
-        var start = new ProcessStartInfo("dotnet");
-        foreach (var argument in args.Skip(2)) start.ArgumentList.Add(argument);
+        var frameworkDependent = args[2].EndsWith(".dll", StringComparison.OrdinalIgnoreCase);
+        var start = new ProcessStartInfo(frameworkDependent ? "dotnet" : args[2]);
+        foreach (var argument in args.Skip(frameworkDependent ? 2 : 3)) start.ArgumentList.Add(argument);
         var started = Stopwatch.GetTimestamp();
         Console.WriteLine(StartPrefix + started);
         using var child = Process.Start(start) ?? throw new InvalidOperationException("Could not start measured CLI.");

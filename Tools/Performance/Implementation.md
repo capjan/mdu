@@ -8,9 +8,11 @@ Approved scope: native .NET development tools, local static website assets, resp
 - [x] Remove site-wide media/PDF rediscovery from ordinary edits, preserving validation.
 - [x] Reuse navigation preparation and reduce avoidable HTML allocations.
 - [x] Restrict specification and asset rebuilds to affected dependencies; shared metadata still rebuilds the site.
-- [ ] Coalesce changes, prioritize active previews, and prevent obsolete work from winning.
-- [ ] Make initial preview usable early, with correct navigation/search and clear download readiness.
+- [x] Coalesce changes, prioritize requested pending HTML, and prevent obsolete pending pages from winning.
+- [x] Make initial HTML preview usable early, with complete navigation/search and on-demand pending pages. Required PDFs currently finish synchronously.
 - [ ] Verify bounded memory and all latency/allocation targets; document measurements and remaining limits.
+
+Remaining work includes percentile acceptance across multiple processes, extended memory acceptance, PDF scheduling for expensive download workloads, and the startup/full-render targets of the normal framework-dependent .NET tool. The existing native release format must be reported separately; it does not silently replace the agreed reference execution mode.
 
 Preserve the historical baseline and its provenance. Each implementation step requires focused correctness checks and measured end-to-end comparisons. Pause for the user's decision if a target proves incompatible with correctness or the approved architecture.
 

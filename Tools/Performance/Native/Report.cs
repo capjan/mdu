@@ -24,6 +24,9 @@ internal static class Report
             }
             if (servers.Length == 0) continue;
             Console.WriteLine("  startup ms: " + Spread(servers.Select(r => r!["startupMs"]!.GetValue<double>())));
+            var completeStartups = servers.Where(r => r!["completeSiteStartupMs"] is not null)
+                .Select(r => r!["completeSiteStartupMs"]!.GetValue<double>()).ToArray();
+            if (completeStartups.Length > 0) Console.WriteLine("  complete-site startup ms: " + Spread(completeStartups));
             foreach (var edits in servers.SelectMany(r => r!["edits"]!.AsArray()).GroupBy(e => e!["kind"]!.GetValue<string>()))
             {
                 Console.WriteLine($"  {edits.Key} complete ms: " + Spread(edits.Select(e => e!["completeMs"]!.GetValue<double>())));

@@ -52,7 +52,7 @@ The baseline for the large reference site was about 326 ms until a text edit bec
 | **Consistent output** | Preserve atomic page replacement, links, anchors, navigation, search results, media consent, and PDF behavior, including strict `pdf-hidden` validation. If expensive downloads are updated separately, their readiness and revision must be clear rather than silently serving stale content. |
 | **Bounded reuse** | Invalidate saved results when their inputs or dependencies change; release obsolete entries after changes and deletions. Large cached results need explicit memory limits. |
 
-Per-page snapshots, retained media/PDF analysis, and dependency-scoped asset and specification updates implement part of these constraints. Prioritized scheduling and early preview startup remain planned. The [processing pipeline](Pipeline.md#live-preview) describes current behavior.
+Per-page snapshots, retained media/PDF analysis, dependency-scoped updates, early HTML preview, and prioritized pending pages implement part of these constraints. Expensive PDF work remains synchronous. The [processing pipeline](Pipeline.md#live-preview) describes current behavior and limits.
 
 ### Verification and regression checks
 

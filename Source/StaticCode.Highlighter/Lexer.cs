@@ -10,7 +10,7 @@ namespace StaticCode.Highlighter;
 
 public class Lexer
 {
-    private static readonly ConcurrentDictionary<string, Lazy<Lexer>> Cache = new(StringComparer.Ordinal);
+    private static readonly ConcurrentDictionary<Func<Grammar>, Lazy<Lexer>> Cache = new();
     private static readonly Regex NumberRegex = new(
         @"(?<![\p{L}\p{N}_$#])\d+(?:\.\d+)?",
         RegexOptions.Compiled);
@@ -56,8 +56,8 @@ public class Lexer
 
     public static Lexer ForLanguage(string name)
     {
-        return Cache.GetOrAdd(name, language => new Lazy<Lexer>(
-            () => new Lexer(GrammarStore.GetByName(language)),
+        return Cache.GetOrAdd(GrammarStore.GetFactory(name), factory => new Lazy<Lexer>(
+            () => new Lexer(factory()),
             LazyThreadSafetyMode.ExecutionAndPublication)).Value;
     }
     private readonly Regex? _keywordRegex;

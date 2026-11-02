@@ -57,6 +57,7 @@ internal static class Measurements
             await child.WaitLine("Serving ");
             Require((await Fetch(url)).Contains("baseline-content-sentinel", StringComparison.Ordinal), "Missing initial page content.");
             var startup = Stopwatch.GetElapsedTime(child.Started).TotalMilliseconds;
+            var completeStartup = WaitCompleteSite(url, child.Started);
             double? browserStartup = null;
             if (browser is not null)
             {
@@ -67,6 +68,7 @@ internal static class Measurements
                 Require(state["iframes"]!.GetValue<int>() == 0 && state["localScripts"]!.GetValue<bool>(), "The initial page must use only local scripts and no eager video player.");
             }
             await child.WaitLine("Site updated.");
+            var completeSiteStartup = await completeStartup;
             Validate(output);
             if (options.Mode == "browser-check")
                 await browser!.VerifyInteractions(url, Log(options, $"{name}-browser-check.png"));
@@ -136,13 +138,17 @@ internal static class Measurements
                 Require((await Fetch(url + target)).Contains(marker, StringComparison.Ordinal), "Reload event published stale content.");
                 if (kind is "content" or "spec")
                     Require(File.ReadAllText(Path.Combine(output, "search-index.json")).Contains(marker, StringComparison.Ordinal), $"Search index is stale after {name} edit {number} ({kind}).");
+                var reloadMs = Stopwatch.GetElapsedTime(started, completed.Time).TotalMilliseconds;
+                var completeMs = reloadMs;
+                if (JsonNode.Parse(await Fetch(url + "__mdu/status"))?["building"]?.GetValue<bool>() == true)
+                    completeMs = await WaitCompleteSite(url, started);
                 var changed = HtmlTimes(output).Where(p => !before.TryGetValue(p.Key, out var value) || value != p.Value).Select(p => p.Key).ToArray();
                 Require(changed.Contains(target, StringComparer.Ordinal), "Changed page was not rewritten.");
                 edits.Add(new JsonObject
                 {
                     ["edit"] = number, ["kind"] = kind, ["visibleMs"] = visible,
                     ["browserDisplayMs"] = displayed,
-                    ["completeMs"] = Stopwatch.GetElapsedTime(started, completed.Time).TotalMilliseconds,
+                    ["reloadMs"] = reloadMs, ["completeMs"] = completeMs,
                     ["rewrittenHtml"] = changed.Length
                 });
                 if (options.Mode == "memory" && (number % 10 == 0 || number == kinds.Length)) memory.Add(await Collect(probe!, number));
@@ -156,7 +162,9 @@ internal static class Measurements
             usage["command"] = "serve";
             usage["sample"] = sample;
             usage["startupMs"] = startup;
+            usage["completeSiteStartupMs"] = completeSiteStartup;
             usage["browserStartupMs"] = browserStartup;
+            usage["browser"] = browser?.Version.DeepClone();
             if (options.Mode == "browser-check") usage["browserChecks"] = new JsonObject
             {
                 ["consentAndRevocation"] = true, ["searchSection"] = true, ["keyboardFocus"] = true, ["anchorsAndNavigation"] = true
@@ -180,6 +188,14 @@ internal static class Measurements
         while (await reader.ReadLineAsync(cancellation) is { } line)
             if (line.StartsWith("data: ", StringComparison.Ordinal))
                 await writer.WriteAsync((Stopwatch.GetTimestamp(), JsonNode.Parse(line[6..])!.AsObject()), cancellation);
+    }
+
+    private static async Task<double> WaitCompleteSite(string url, long started)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+        while (JsonNode.Parse(await Fetch(url + "__mdu/status"))?["building"]?.GetValue<bool>() == true)
+            await Task.Delay(10, timeout.Token);
+        return Stopwatch.GetElapsedTime(started).TotalMilliseconds;
     }
 
     private static async Task<(long Time, JsonObject Message)> NextEvent(ChannelReader<(long Time, JsonObject Message)> reader)

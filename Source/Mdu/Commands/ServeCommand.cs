@@ -26,6 +26,11 @@ public sealed class ServeCommand
     private readonly HashSet<string> _generatedFiles = new(PathComparer);
     private readonly HashSet<string> _configurationAssets = new(PathComparer);
     private FileWatcherSet? _watchers;
+    private readonly SemaphoreSlim _renderLock = new(1, 1);
+    private readonly Dictionary<string, MarkdownFile> _pendingPages = new(PathComparer);
+    private readonly Dictionary<string, MarkdownFile> _pendingOutputs = new(PathComparer);
+    private MarkdigVisitor? _pendingVisitor;
+    private PreviewServer? _server;
 
     private MarkdownFile[] _navigationRoots = Array.Empty<MarkdownFile>();
     private IReadOnlyCollection<string> _siteMediaProviders = Array.Empty<string>();
@@ -112,7 +117,9 @@ public sealed class ServeCommand
             return 1;
         }
 
-        using var server = new PreviewServer(_outputPath, port);
+        using var server = new PreviewServer(_outputPath, port, PrepareOutputAsync);
+        _server = server;
+        server.SetBuilding(_pendingPages.Count > 0);
         try
         {
             server.Start();
@@ -170,6 +177,7 @@ public sealed class ServeCommand
 
     private void RebuildSite(bool failOnPdfError = false)
     {
+        _server?.SetBuilding(true);
         var previousFiles = new HashSet<string>(_generatedFiles, PathComparer);
         var siteConfiguration = SiteConfigurationReader.Read(_rootPath);
         _glossaryPath = SiteConfigurationReader.GetGlossaryPath(_rootPath, siteConfiguration);
@@ -212,18 +220,66 @@ public sealed class ServeCommand
             _searchIndexBuilder,
             _navigationRoots,
             _siteMediaProviders);
+        rendererVisitor.PrepareSearchIndex();
+        _pendingPages.Clear();
+        _pendingOutputs.Clear();
+        _pendingVisitor = rendererVisitor;
+        foreach (var (pagePath, page) in _pages)
+        {
+            _pendingPages[pagePath] = page;
+            _pendingOutputs[GetPageOutputPath(page)] = page;
+            var alias = GetAliasOutputPath(page);
+            if (alias is not null) _pendingOutputs[alias] = page;
+            var specificationPages = rendererVisitor.GetPreparedSpecificationPagePaths(page);
+            _openApiSpecPagesByPage[pagePath] = specificationPages;
+            foreach (var path in specificationPages) _pendingOutputs[path] = page;
+        }
+        _searchIndexBuilder.WriteIndex(_outputPath);
+        var initialPage = _pendingOutputs.GetValueOrDefault(Path.Combine(_outputPath, "index.html")) ??
+            _pendingOutputs.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(entry => entry.Value).FirstOrDefault();
+        if (initialPage is not null) CompletePendingPage(initialPage);
+        else FinishPendingSite();
+        ReconcileGeneratedFiles(previousFiles);
+        if (_pendingPages.Count > 0) Console.WriteLine("Preview ready; completing remaining pages.");
+    }
+
+    private async Task PrepareOutputAsync(string path, CancellationToken cancellationToken)
+    {
+        await _renderLock.WaitAsync(cancellationToken);
         try
         {
-            graph.Visit(rendererVisitor);
+            var page = _pendingOutputs.GetValueOrDefault(path) ??
+                       _pendingOutputs.GetValueOrDefault(Path.Combine(path, "index.html"));
+            if (page is not null) CompletePendingPage(page);
         }
         finally
         {
-            // Record the specification pages that were written, even when rendering stops early.
-            foreach (var (page, specPagePaths) in rendererVisitor.OpenApiSpecPagePaths)
-                _openApiSpecPagesByPage[GetPageKey(page)] = specPagePaths;
+            _renderLock.Release();
         }
-        _searchIndexBuilder.WriteIndex(_outputPath);
-        ReconcileGeneratedFiles(previousFiles);
+    }
+
+    private void CompletePendingPage(MarkdownFile page)
+    {
+        if (!_pendingPages.Remove(GetPageKey(page))) return;
+        var visitor = _pendingVisitor!;
+        try
+        {
+            visitor.Process(page, page.CountDepth());
+            _openApiSpecPagesByPage[GetPageKey(page)] = visitor.OpenApiSpecPagePaths.GetValueOrDefault(page) ?? Array.Empty<string>();
+        }
+        finally
+        {
+            FinishPendingSite();
+        }
+    }
+
+    private void FinishPendingSite()
+    {
+        if (_pendingPages.Count != 0 || _pendingVisitor is null) return;
+        _pendingVisitor = null;
+        _pendingOutputs.Clear();
+        _server?.SetBuilding(false);
         Console.WriteLine("Site updated.");
     }
 
@@ -337,12 +393,42 @@ public sealed class ServeCommand
         PreviewServer server,
         CancellationToken cancellationToken)
     {
-        while (await changes.WaitToReadAsync(cancellationToken))
+        while (!cancellationToken.IsCancellationRequested)
         {
+            if (!changes.TryPeek(out _))
+            {
+                var completedPage = false;
+                await _renderLock.WaitAsync(cancellationToken);
+                try
+                {
+                    if (_pendingPages.Count > 0)
+                    {
+                        CompletePendingPage(_pendingPages.Values.First());
+                        completedPage = true;
+                    }
+                    else FinishPendingSite();
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or YamlDotNet.Core.YamlException)
+                {
+                    Console.Error.WriteLine($"Could not update the site: {exception.Message}");
+                    completedPage = true;
+                }
+                finally
+                {
+                    _renderLock.Release();
+                }
+                if (completedPage)
+                {
+                    await Task.Yield();
+                    continue;
+                }
+                if (!await changes.WaitToReadAsync(cancellationToken)) return;
+            }
             await Task.Delay(TimeSpan.FromMilliseconds(20), cancellationToken);
             var batch = new List<FileChange>();
             while (changes.TryRead(out var change)) batch.Add(change);
 
+            await _renderLock.WaitAsync(cancellationToken);
             try
             {
                 ProcessChangeBatch(batch, server);
@@ -350,6 +436,10 @@ public sealed class ServeCommand
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or YamlDotNet.Core.YamlException)
             {
                 Console.Error.WriteLine($"Could not update the site: {exception.Message}");
+            }
+            finally
+            {
+                _renderLock.Release();
             }
         }
     }
@@ -439,6 +529,7 @@ public sealed class ServeCommand
         foreach (var pagePath in changedPages)
         {
             var page = _pages[pagePath];
+            _pendingPages.Remove(pagePath);
             page.InvalidateMarkdown();
             var depth = page.CountDepth();
             var previousTitle = page.Title;

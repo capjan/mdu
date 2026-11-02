@@ -21,29 +21,30 @@ public static class GrammarStore
     /// </summary>
     /// <param name="name">name of the language <see href="https://rdmd.readme.io/docs/code-blocks"/></param>
     /// <returns>The resolved language setting or plain if not found</returns>
-    public static Grammar GetByName(string name)
+    public static Grammar GetByName(string name) => GetFactory(name)();
+
+    // The finite grammar factories also identify lexer cache entries: aliases share one entry, and
+    // arbitrary unknown code-fence names all use Plain without retaining their names.
+    internal static Func<Grammar> GetFactory(string name) => name switch
     {
-        switch (name)
-        {
-            case "cs": case "csharp": return CSharp();
-            case "swift": return Swift();
-            case "js": case "javascript": case "jsx": return JavaScript();
-            case "ts": case "typescript": return TypeScript();
-            case "py": case "python": return Python();
-            case "kt": case "kotlin": return Kotlin();
-            case "json": return Json();
-            case "sql": return Sql();
-            case "html": case "htm": return Html();
-            case "css": return Css();
-            case "java": return Java();
-            case "rs": case "rust": return Rust();
-            case "go": case "golang": return Go();
-            case "yaml": case "yml": return Yaml();
-            case "bash": case "zsh": case "sh": case "shell": return Shell();
-            case "md": case "markdown": return Markdown();
-            default: return Plain();
-        }
-    }
+        "cs" or "csharp" => CSharp,
+        "swift" => Swift,
+        "js" or "javascript" or "jsx" => JavaScript,
+        "ts" or "typescript" => TypeScript,
+        "py" or "python" => Python,
+        "kt" or "kotlin" => Kotlin,
+        "json" => Json,
+        "sql" => Sql,
+        "html" or "htm" => Html,
+        "css" => Css,
+        "java" => Java,
+        "rs" or "rust" => Rust,
+        "go" or "golang" => Go,
+        "yaml" or "yml" => Yaml,
+        "bash" or "zsh" or "sh" or "shell" => Shell,
+        "md" or "markdown" => Markdown,
+        _ => Plain
+    };
 
     private static Grammar Markdown()
     {

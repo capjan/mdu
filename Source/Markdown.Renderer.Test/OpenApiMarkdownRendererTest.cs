@@ -6,6 +6,21 @@ namespace Markdown.Renderer.Test;
 public class OpenApiMarkdownRendererTest
 {
     [Fact]
+    public void SpecificationsStayCorrectAfterCacheChurnAndSourceChanges()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-openapi-churn-{Guid.NewGuid():N}");
+        var page = Path.Combine(root, "first.md");
+        var markdown = "```openapi\n" + ReferencedSpecification("Order") + "\n```";
+        var expected = OpenApiMarkdownRenderer.ExpandCodeBlocks(markdown, page);
+        for (var number = 0; number < 170; number++)
+            OpenApiMarkdownRenderer.ExpandCodeBlocks(markdown, Path.Combine(root, $"page{number}.md"));
+        Assert.Equal(expected, OpenApiMarkdownRenderer.ExpandCodeBlocks(markdown, page));
+        var updated = "```openapi\n" + ReferencedSpecification("UpdatedOrder") + "\n```";
+        Assert.Contains("**`UpdatedOrder`**", OpenApiMarkdownRenderer.ExpandCodeBlocks(updated, page));
+        Assert.Equal(expected, OpenApiMarkdownRenderer.ExpandCodeBlocks(markdown, page));
+    }
+
+    [Fact]
     public void ResolveSpecPathRejectsPathsOutsideAnAllowedRoot()
     {
         var root = Path.Combine(Path.GetTempPath(), $"mdu-openapi-root-{Guid.NewGuid():N}");

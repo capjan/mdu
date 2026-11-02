@@ -80,7 +80,7 @@ Assets are found through the links on each page. Only linked local files are cop
 
 The [quality requirements](README.md#quality-requirements) define the responsiveness, startup, memory, and correctness targets for future optimization. The flow below describes the current implementation.
 
-`mdu serve` renders the site once, starts a local HTTP server, and watches the source folder. Changes are collected for a short moment and handled as one batch:
+`mdu serve` prepares the complete navigation and search index, renders the entry page, and starts the local HTTP server. Other HTML pages are completed one at a time. A request for a pending page renders it before responding, so navigation and search results remain usable. The preview-only `/__mdu/status` endpoint distinguishes pending HTML work from complete-site readiness. Changes are collected for 20 ms and handled as one batch:
 
 ```mermaid
 sequenceDiagram
@@ -95,18 +95,25 @@ sequenceDiagram
     alt Only page content changed
         Serve->>Serve: Render the changed pages
     else Pages added or removed, import front matter, navigation or mdu.yml changed
-        Serve->>Serve: Rebuild the whole site
+        Serve->>Serve: Prepare shared state, search and entry page
     end
     Serve->>Server: Publish changed pages
     Server-->>Browser: Server-sent event
     Browser->>Browser: Reload if the open page changed
+    Serve->>Serve: Complete remaining pages between change batches
 ```
 
 `serve` remembers which assets and OpenAPI specifications each page references. When an image changes, it copies the new file and reloads only the pages that show it. Specification changes refresh their referencing pages, companion specification pages, search entries, and linked PDFs. Unrelated HTML stays untouched unless shared metadata changes. A changed import page triggers a rebuild and resolves its GitHub URL again; restarting `serve` picks up remote branch changes when no local import page changed. Files that disappear from the site are removed from the output folder.
 
 Markdown is held as a stable per-page snapshot for a build and invalidated when that page or its specification changes. Media-provider membership and PDF-link analysis are retained per page; ordinary edits do not render all other pages to rediscover them. Changing the site's provider membership still refreshes every page's shared consent dialog. Navigation entries are prepared once per rendering visitor, and immutable HTML template parts are reused and streamed to the output writer.
 
+Requests, changed pages, and background HTML work share a serialized renderer. A new batch takes priority over the next background page; a new shared rebuild replaces the pending work of its predecessor. Changed pages leave that queue before rendering, preventing prepared older content from overwriting the update. Prepared HTML inputs are released as pages finish, and all pending state is released when the generation completes.
+
+The OpenAPI parse cache retains at most 128 documents and 8,388,608 UTF-16 source characters (16 MiB of source text); larger individual inputs are parsed without retention. Parsed object graphs add memory beyond the source-text budget. Eviction affects reuse, not correctness: each hit still requires the current content hash. Syntax-highlighter cache keys are the finite built-in grammar factories, so arbitrary unknown language names cannot accumulate entries. Fixed regex patterns in the main HTML and diagram paths use .NET source generation to avoid runtime regex compilation.
+
 When Markdown content changes, `serve` refreshes `documentation.pdf` if a PDF Link remains in the project. Adding the first link creates the file; removing the last link deletes it.
+
+PDF work remains synchronous before the relevant completion notification; the preview does not advertise unfinished downloads as ready. Expensive PDF workloads still delay initial readiness and change processing and require further scheduling work if their separate responsiveness budget demands it. `mdu render` still completes every HTML, search, asset, and required PDF output before succeeding.
 
 ## PDF export
 

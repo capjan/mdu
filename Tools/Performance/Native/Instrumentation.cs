@@ -98,7 +98,8 @@ internal static class Instrumentation
             Scope("Markdown.Renderer/HtmlRenderer.cs", "private static async Task WriteTemplate(", "\"html.write\"");
         }
         Replace("Mdu/Program.cs", "var registrations = new ServiceCollection();", "Mdu.Performance.Probe.Initialize();\nvar registrations = new ServiceCollection();");
-        Replace("Mdu/Commands/ServeCommand.cs", "var url = server.BaseUrl;", "Mdu.Performance.Probe.Snapshot(\"serve.initial\");\n        var url = server.BaseUrl;");
+        Replace("Mdu/Commands/ServeCommand.cs", "var url = server.BaseUrl;", "Mdu.Performance.Probe.Snapshot(\"serve.first-ready\");\n        var url = server.BaseUrl;");
+        Replace("Mdu/Commands/ServeCommand.cs", "Console.WriteLine(\"Site updated.\");", "Mdu.Performance.Probe.Snapshot(\"serve.complete\");\n        Console.WriteLine(\"Site updated.\");");
         if (!light)
             foreach (var path in Directory.EnumerateFiles(Path.Combine(dest, "Source"), "*.cs", SearchOption.AllDirectories))
                 File.WriteAllText(path, File.ReadAllText(path).Replace("Markdig.Markdown.Parse(", "Mdu.Performance.MarkdownParse.Parse(", StringComparison.Ordinal)

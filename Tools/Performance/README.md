@@ -23,6 +23,8 @@ Use a dedicated disposable work directory outside the repository. Generation rep
 
 Defaults: seven fresh render processes, three server processes, three rounds per server of body/configuration/diagram/API edits (nine observations per kind). Change `--samples`, `--servers`, `--rounds`, `--workloads small docs large` or `--repo` for exploration and retain the invocation. Exact resource collection currently supports macOS and Linux.
 
+Use `--cli /absolute/path/to/mdu` for a separately published native executable. Build it from the recorded revision with `dotnet publish Source/Mdu/Mdu.csproj -c Release -r osx-arm64 --self-contained true -p:PublishAot=true --output /tmp/mdu-native`. Record its build invocation and keep these results separate from the framework-dependent reference. The runner records its SHA-256 and working-tree status. Diagnostic modes use their own instrumented framework-dependent source build and reject `--cli`.
+
 ## Browser observations
 
 ```sh
@@ -55,11 +57,15 @@ A fresh .NET helper starts exactly one CLI process and reads OS `getrusage(RUSAG
 
 Serve startup ends at the first expected HTTP response; complete initial output is checked separately. Edits start just before the on-disk write. HTTP is polled every 10 ms; completion is a separately timestamped SSE event. Watcher debounce is included. Browser readiness is another interval. Saves are direct writes with a 100 ms quiet interval outside timing; atomic saves/bursts need explicit acceptance scenarios. Originals are restored after stopping the server.
 
+For progressive HTML generation, `completeSiteStartupMs` separately observes `/__mdu/status` becoming ready. `reloadMs` records the SSE notification; `completeMs` additionally waits for any pending HTML generation. Queued notifications observed before a new edit are discarded. Search must already contain the new text when its relevant reload notification arrives. Functional integration tests also exercise atomic saves, write bursts, invalid intermediate content, requested pending pages, and changes during completion; these are separate from latency distributions.
+
 ## Diagnostics and memory
 
 `Instrumentation` makes an isolated source copy and inserts guarded method scopes, failing when boundaries move. Its Probe project uses the source's Markdig version. References and instrumentation never enter the shipped CLI. Package auditing is disabled only for the disposable diagnostic build.
 
 Profiles record nested paths, counts, inclusive/exclusive times and inclusive allocation estimates. Parents include children; do not sum inclusive rows. Async/command/page scopes use process counters and synchronous leaves use thread counters. Exclusive allocations are not subtracted across different domains. Process totals are authoritative; leaf attribution is approximate for threaded libraries. Report profile overhead separately from normal timings.
+
+Streamed template output now appears under `html.write`, including token lookup; the historical separate `html.template` stage no longer applies. `serve.first-ready` precedes background HTML work and `serve.complete` records its completion. `markdown.read` counts snapshot access, while `markdown.disk-read` distinguishes physical reads.
 
 `memory` uses only command/edit scopes. Each server processes 60 body edits and 15 configuration/diagram/API edits. Startup, every tenth edit and the end have idle checkpoints with two full collections and finalizer draining. Post-GC `GC.GetTotalMemory(false)` estimates retention; heap/fragmentation, collection counts, cumulative allocations and working set are retained too. Forced collections never occur in normal runs. Serving allocations include observation requests and snapshots. These sequences assess stabilization, not multi-hour leak freedom.
 

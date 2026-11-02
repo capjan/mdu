@@ -8,6 +8,46 @@ namespace Mdu.Test;
 public class ServeCommandIntegrationTest
 {
     [Fact]
+    public async Task RequestedPagesAndNewEditsStayCurrentWhileCompletingTheSite()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-serve-early-{Guid.NewGuid():N}");
+        var docs = Path.Combine(root, "Docs");
+        var site = Path.Combine(root, "site");
+        Directory.CreateDirectory(docs);
+        var home = Path.Combine(docs, "README.md");
+        File.WriteAllText(home, "# Home\n\n[Last page](Page079.md)");
+        for (var number = 0; number < 80; number++)
+            File.WriteAllText(Path.Combine(docs, $"Page{number:000}.md"),
+                $"# Page {number}\n\nLastSentinel{number}\n\n```mermaid\nflowchart LR\nA --> B --> C --> D\n```\n");
+        var (process, port) = await StartServerOnFreePortAsync(docs, site);
+        using var _ = process;
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+        var url = $"http://127.0.0.1:{port}/";
+        try
+        {
+            await WaitUntilAsync(async () => await PageContainsAsync(client, url, "Last page"), process);
+            Assert.Contains("LastSentinel79", await client.GetStringAsync(url + "search-index.json"));
+            Assert.Contains("Page079.html", await client.GetStringAsync(url + "Page079"));
+            Assert.Contains("LastSentinel79", await client.GetStringAsync(url + "Page079.html"));
+            File.WriteAllText(home, "# Home\n\nLatestHome");
+            await WaitUntilAsync(async () => await PageContainsAsync(client, url, "LatestHome"), process);
+            File.WriteAllText(Path.Combine(docs, "mdu.yml"), "site_name: RebuiltSite\n");
+            await WaitUntilAsync(async () => await PageContainsAsync(client, url, "RebuiltSite"), process);
+            File.WriteAllText(Path.Combine(docs, "Page079.md"), "# Page 79\n\nLatestDuringBuild");
+            await WaitUntilAsync(async () => await PageContainsAsync(client, url + "Page079.html", "LatestDuringBuild"), process);
+            await WaitUntilAsync(async () => (await client.GetStringAsync(url + "__mdu/status")).Contains("\"building\":false"), process);
+            Assert.Contains("LatestDuringBuild", await client.GetStringAsync(url + "Page079.html"));
+            Assert.Contains("LatestDuringBuild", await client.GetStringAsync(url + "search-index.json"));
+            Assert.Contains("LatestHome", await client.GetStringAsync(url));
+        }
+        finally
+        {
+            StopServer(process);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task AtomicSavesAndBurstsRecoverFromInvalidIntermediateContent()
     {
         var root = Path.Combine(Path.GetTempPath(), $"mdu-serve-saves-{Guid.NewGuid():N}");

@@ -35,9 +35,12 @@ internal static class Program
                 if (options.Archive is not null) Report.Archive(options.Work, options.Archive);
                 return 0;
             }
-            var dll = Path.Combine(options.Repo, "Source/Mdu/bin/Release/net10.0/mdu.dll");
+            var dll = options.Cli ?? Path.Combine(options.Repo, "Source/Mdu/bin/Release/net10.0/mdu.dll");
             if (options.Mode is "diagnostic" or "memory")
+            {
+                if (options.Cli is not null) throw new ArgumentException("Diagnostic modes instrument their own source build; omit --cli.");
                 dll = await Instrumentation.Build(options);
+            }
             var results = new JsonObject
             {
                 ["environment"] = await EnvironmentInfo(options),
@@ -98,6 +101,9 @@ internal static class Program
     private static async Task<JsonObject> EnvironmentInfo(Options options) => new()
     {
         ["commit"] = (await Command("git", ["-C", options.Repo, "rev-parse", "HEAD"])).Trim(),
+        ["workingTreeStatus"] = await Command("git", ["-C", options.Repo, "status", "--porcelain"]),
+        ["cli"] = options.Cli ?? "framework-dependent Release mdu.dll",
+        ["cliSha256"] = options.Cli is null ? null : Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(await File.ReadAllBytesAsync(options.Cli))).ToLowerInvariant(),
         ["platform"] = RuntimeInformation.OSDescription,
         ["machine"] = RuntimeInformation.ProcessArchitecture.ToString(),
         ["dotnet"] = await Command("dotnet", ["--info"]),
@@ -124,7 +130,7 @@ internal static class Program
     }
 }
 
-internal sealed record Options(string Repo, string Work, string Mode, int Samples, int Servers, int Rounds, string[] Workloads, string? Archive)
+internal sealed record Options(string Repo, string Work, string Mode, int Samples, int Servers, int Rounds, string[] Workloads, string? Archive, string? Cli = null)
 {
     public bool Diagnostic => Mode is "diagnostic" or "memory";
 
@@ -146,7 +152,8 @@ internal sealed record Options(string Repo, string Work, string Mode, int Sample
             Canonical(Value("--work", Path.Combine(Path.GetTempPath(), "mdu-performance-188"))),
             Value("--mode", "baseline"), int.Parse(Value("--samples", "7")), int.Parse(Value("--servers", "3")),
             int.Parse(Value("--rounds", "3")), values.TryGetValue("--workloads", out var names) ? names.ToArray() : ["small", "docs", "large"],
-            values.TryGetValue("--archive", out var archive) ? Path.GetFullPath(archive.Single()) : null);
+            values.TryGetValue("--archive", out var archive) ? Path.GetFullPath(archive.Single()) : null,
+            values.TryGetValue("--cli", out var cli) ? Path.GetFullPath(cli.Single()) : null);
     }
 
     private static string Canonical(string path)
