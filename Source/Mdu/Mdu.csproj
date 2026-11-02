@@ -22,7 +22,6 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="Cap.Core" Version="11.0.0" />
       <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
       <PackageReference Include="System.CommandLine" Version="2.0.12" />
       <PackageReference Include="YamlDotNet" Version="18.1.0" />
@@ -33,7 +32,6 @@
         <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
         <None Include="..\StaticCode.Icons\THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="\" />
         <None Include="..\StaticCode.Icons\Res\dashboard-icons.LICENSE" Pack="true" PackagePath="licenses" />
-        <ProjectReference Include="..\Core.Collections.NodeGraph\Core.Collections.NodeGraph.csproj" />
         <ProjectReference Include="..\Markdown.Document\Markdown.Document.csproj" />
         <ProjectReference Include="..\Markdown.Linter\Markdown.Linter.csproj" />
         <ProjectReference Include="..\Markdown.Renderer\Markdown.Renderer.csproj" />

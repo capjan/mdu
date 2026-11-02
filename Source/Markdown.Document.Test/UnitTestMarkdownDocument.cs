@@ -8,6 +8,7 @@ namespace Markdown.Document.Test;
 public class UnitTestMarkdownDocument
 {
     [Theory]
+    [InlineData("# Ho\rme\r\n", "Home")]
     [InlineData("# Home\n\n## Themen\n\nOtherText", "Home")]
     [InlineData("  # Home\n\n## Themen\n\nOtherText", "Home")]
     [InlineData("", "")]

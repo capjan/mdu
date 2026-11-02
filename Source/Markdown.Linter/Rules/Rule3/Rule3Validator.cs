@@ -1,7 +1,7 @@
 using System.Text.RegularExpressions;
 using FluentValidation;
 using Markdown.Linter;
-using SuperiorIO;
+using Markdown.Linter.Paths;
 
 namespace Markdown.Linter.Rules.Rule3;
 

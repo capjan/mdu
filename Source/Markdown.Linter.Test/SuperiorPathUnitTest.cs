@@ -1,4 +1,6 @@
-namespace SuperiorIO.Test;
+using Markdown.Linter.Paths;
+
+namespace Markdown.Linter.Test;
 
 public class SuperiorPathUnitTest
 {

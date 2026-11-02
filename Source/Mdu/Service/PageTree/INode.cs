@@ -1,4 +1,4 @@
-namespace Core.Collections.NodeGraph;
+namespace Mdu.Service.PageTree;
 
 /// <summary>
 /// Interface for the nodes of the graph

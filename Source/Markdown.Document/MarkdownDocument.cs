@@ -1,4 +1,3 @@
-using Core.Parser.Special;
 using Markdown.Document.Impl;
 using Markdown.Document.Model;
 
