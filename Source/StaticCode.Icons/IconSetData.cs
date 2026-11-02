@@ -5,7 +5,7 @@ using System.Text.Json.Serialization;
 namespace StaticCode.Icons;
 
 /// <summary>
-/// An icon set in the reduced Iconify JSON format written by <c>update-icon-sets.sh</c>.
+/// An icon set in the reduced Iconify JSON format written by <c>Tools/IconSets</c>.
 /// </summary>
 internal sealed class IconSetData
 {

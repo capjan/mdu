@@ -2,11 +2,66 @@ using Markdown.Renderer;
 using Markdown.Search;
 using Mdu.Model;
 using Mdu.Service.Visitors;
+using Mdu.Service.PageTree.Extensions;
 
 namespace Mdu.Test;
 
 public class MarkdigVisitorTest
 {
+    [Fact]
+    public void PreparingSearchBeforeOutOfOrderPagesPreservesCompleteOutput()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-prepared-render-{Guid.NewGuid():N}");
+        var docs = Path.Combine(root, "Docs");
+        Directory.CreateDirectory(docs);
+        File.WriteAllText(Path.Combine(docs, "README.md"), "# Home\n\n[API](Api.md)\n");
+        File.WriteAllText(Path.Combine(docs, "Api.md"), "# API\n\n```openapi\n./api.json\n```\n");
+        File.WriteAllText(Path.Combine(docs, "api.json"), """
+            {"openapi":"3.0.3","info":{"title":"Prepared API","version":"1"},"paths":{}}
+            """);
+        var home = new MarkdownFile(new FileInfo(Path.Combine(docs, "README.md")), null) { Title = "Home" };
+        var api = new MarkdownFile(new FileInfo(Path.Combine(docs, "Api.md")), home) { Title = "API" };
+        home.Children = [api];
+        try
+        {
+            var normal = Path.Combine(root, "normal");
+            var early = Path.Combine(root, "early");
+            foreach (var output in new[] { normal, early })
+            {
+                var renderer = new HtmlRenderer();
+                renderer.PrepareBasePath(output);
+                var search = new SearchIndexBuilder();
+                var visitor = new MarkdigVisitor(docs, output, renderer, "", search, [home]);
+                if (output == early)
+                {
+                    visitor.PrepareSearchIndex();
+                    search.WriteIndex(output);
+                    var preparedIndex = File.ReadAllBytes(Path.Combine(output, "search-index.json"));
+                    Assert.Contains("Prepared API", File.ReadAllText(Path.Combine(output, "search-index.json")));
+                    Assert.Empty(Directory.EnumerateFiles(output, "*.html", SearchOption.AllDirectories));
+                    var specifications = visitor.GetPreparedSpecificationPagePaths(api);
+                    Assert.NotEmpty(specifications);
+                    visitor.Process(api, 1);
+                    visitor.Process(home, 0);
+                    Assert.All(specifications, path => Assert.True(File.Exists(path)));
+                    search.WriteIndex(output);
+                    Assert.Equal(preparedIndex, File.ReadAllBytes(Path.Combine(output, "search-index.json")));
+                }
+                else
+                {
+                    home.Visit(visitor);
+                    search.WriteIndex(output);
+                }
+            }
+            foreach (var path in Directory.EnumerateFiles(normal, "*", SearchOption.AllDirectories))
+                Assert.Equal(File.ReadAllBytes(path), File.ReadAllBytes(Path.Combine(early, Path.GetRelativePath(normal, path))));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public void RemovesIconShortcodesFromTitlesAndEscapesEditPagePaths()
     {

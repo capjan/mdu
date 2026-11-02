@@ -2,7 +2,9 @@
 
 MDU bundles the icon sets below in `StaticCode.Icons/Res`. The files are converted from their original
 formats: the Iconify JSON packages are reduced to the SVG content, and the Dashboard Icons SVG files are optimized with
-SVGO, which also prefixes their IDs and class names and turns their styles into attributes.
+SVGO, which also prefixes their IDs and class names and turns their styles into attributes. These existing bundles
+retain that provenance. Updates now use the .NET tool in `Tools/IconSets`, which sanitizes SVG and isolates identifiers
+and styles with MDU's native SVG reader.
 
 Several sets contain logos and brand names. They remain trademarks of their owners, and these licenses do not grant
 any trademark rights.

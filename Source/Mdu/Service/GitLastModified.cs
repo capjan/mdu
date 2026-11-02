@@ -19,6 +19,11 @@ public static class GitLastModified
     public static IReadOnlyDictionary<string, DateTimeOffset> Read(string rootPath)
     {
         var dates = new Dictionary<string, DateTimeOffset>(StringComparer.Ordinal);
+        // Avoid starting Git for each preview edit in an ordinary folder. Respect explicit Git locations,
+        // linked worktrees (.git files), and bare repositories; Git still decides their actual validity.
+        if (Environment.GetEnvironmentVariable("GIT_DIR") is null &&
+            Environment.GetEnvironmentVariable("GIT_WORK_TREE") is null &&
+            !HasRepositoryAncestor(rootPath)) return dates;
         if (RunGit(rootPath, "rev-parse", "--is-shallow-repository")?.Trim() != "false") return dates;
 
         var log = RunGit(rootPath, "-c", "core.quotePath=false", "log", "--format=@%cI", "--name-only", "--relative", "--", ".");
@@ -41,6 +46,18 @@ public static class GitLastModified
         }
 
         return dates;
+    }
+
+    private static bool HasRepositoryAncestor(string rootPath)
+    {
+        for (var directory = new DirectoryInfo(rootPath); directory is not null; directory = directory.Parent)
+        {
+            var marker = Path.Combine(directory.FullName, ".git");
+            if (Directory.Exists(marker) || File.Exists(marker) ||
+                File.Exists(Path.Combine(directory.FullName, "HEAD")) &&
+                Directory.Exists(Path.Combine(directory.FullName, "objects"))) return true;
+        }
+        return false;
     }
 
     private static string? RunGit(string workingDirectory, params string[] arguments)

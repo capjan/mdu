@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
@@ -26,6 +27,19 @@ public sealed class ServeCommand
     private readonly HashSet<string> _generatedFiles = new(PathComparer);
     private readonly HashSet<string> _configurationAssets = new(PathComparer);
     private FileWatcherSet? _watchers;
+    private readonly SemaphoreSlim _renderLock = new(1, 1);
+    private readonly Dictionary<string, MarkdownFile> _pendingPages = new(PathComparer);
+    private readonly HashSet<string> _failedPendingPages = new(PathComparer);
+    private readonly HashSet<string> _unfinishedPages = new(PathComparer);
+    private bool _rebuildAfterFailure;
+    private readonly ConcurrentDictionary<string, MarkdownFile> _pendingOutputs = new(PathComparer);
+    private MarkdigVisitor? _pendingVisitor;
+    private PreviewServer? _server;
+    private readonly Queue<PdfCommand.SitePdfJob> _pendingPdfs = new();
+    private bool _pdfFailed;
+    private bool _siteCompletionPending;
+    private bool _pdfRefreshRequired;
+    private readonly GitLastModifiedCache _gitDates = new();
 
     private MarkdownFile[] _navigationRoots = Array.Empty<MarkdownFile>();
     private IReadOnlyCollection<string> _siteMediaProviders = Array.Empty<string>();
@@ -103,7 +117,7 @@ public sealed class ServeCommand
         _watchers = watcher;
         try
         {
-            RebuildSite(failOnPdfError: true);
+            RebuildSite();
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or YamlDotNet.Core.YamlException)
         {
@@ -112,7 +126,10 @@ public sealed class ServeCommand
             return 1;
         }
 
-        using var server = new PreviewServer(_outputPath, port);
+        using var server = new PreviewServer(_outputPath, port, PrepareOutputAsync);
+        _server = server;
+        server.SetBuilding(_pendingPages.Count > 0 || _pendingPdfs.Count > 0);
+        UpdatePdfStatus();
         try
         {
             server.Start();
@@ -168,8 +185,11 @@ public sealed class ServeCommand
         return 0;
     }
 
-    private void RebuildSite(bool failOnPdfError = false)
+    private void RebuildSite()
     {
+        _siteCompletionPending = true;
+        InvalidatePdfs();
+        _server?.SetBuilding(true);
         var previousFiles = new HashSet<string>(_generatedFiles, PathComparer);
         var siteConfiguration = SiteConfigurationReader.Read(_rootPath);
         _glossaryPath = SiteConfigurationReader.GetGlossaryPath(_rootPath, siteConfiguration);
@@ -196,35 +216,135 @@ public sealed class ServeCommand
         _searchIndexBuilder.Clear();
         // Register external OpenAPI watchers before PDF generation and page rendering.
         RebuildDependencyIndex(graph);
+        _siteMediaProviders = GetSiteMediaProviders();
         graph.Visit(new LocalAssetsCopy(_rootPath, _outputPath));
-        var pdfOutputPath = Path.Combine(_outputPath, "documentation.pdf");
-        if (!TryWriteSitePdf(() => _pdfCommand.WriteSitePdfIfLinked(_rootPath, pdfOutputPath, graph)))
-        {
-            if (failOnPdfError) throw new InvalidOperationException("Could not render the documentation PDF.");
-            ReportPdfFailure();
-        }
         var rendererVisitor = new MarkdigVisitor(
             _rootPath,
             _outputPath,
             _renderer,
             _settings.EditPageRoot,
             _searchIndexBuilder,
-            _navigationRoots);
-        _siteMediaProviders = rendererVisitor.SiteMediaProviders;
+            _navigationRoots,
+            _siteMediaProviders,
+            _gitDates.Read(_rootPath));
+        rendererVisitor.PrepareSearchIndex();
+        SchedulePdfs(reuseUnchanged: false);
+        // Keep the last usable generation available until the replacement is prepared successfully.
+        _pendingPages.Clear();
+        _failedPendingPages.Clear();
+        _pendingOutputs.Clear();
+        _unfinishedPages.Clear();
+        _rebuildAfterFailure = false;
+        _pendingVisitor = rendererVisitor;
+        foreach (var (pagePath, page) in _pages)
+        {
+            _pendingPages[pagePath] = page;
+            _pendingOutputs[GetPageOutputPath(page)] = page;
+            var alias = GetAliasOutputPath(page);
+            if (alias is not null) _pendingOutputs[alias] = page;
+            var specificationPages = rendererVisitor.GetPreparedSpecificationPagePaths(page);
+            _openApiSpecPagesByPage[pagePath] = specificationPages;
+            foreach (var path in specificationPages) _pendingOutputs[path] = page;
+        }
+        _searchIndexBuilder.WriteIndex(_outputPath);
+        var initialPage = _pendingOutputs.GetValueOrDefault(Path.Combine(_outputPath, "index.html")) ??
+            _pendingOutputs.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(entry => entry.Value).FirstOrDefault();
+        if (initialPage is not null) CompletePendingPage(initialPage);
+        else FinishPendingSite();
+        ReconcileGeneratedFiles(previousFiles);
+        if (_pendingPages.Count > 0) Console.WriteLine("Preview ready; completing remaining pages.");
+    }
+
+    private async Task PrepareOutputAsync(string path, CancellationToken cancellationToken)
+    {
+        // Assets and unavailable PDFs need no rendering. Existing HTML still shares the lock with its writer.
+        if (!Path.GetExtension(path).Equals(".html", StringComparison.OrdinalIgnoreCase) &&
+            !_pendingOutputs.ContainsKey(path) && !_pendingOutputs.ContainsKey(Path.Combine(path, "index.html")))
+            return;
+        await _renderLock.WaitAsync(cancellationToken);
         try
         {
-            graph.Visit(rendererVisitor);
+            if (_unfinishedPages.Count > 0)
+            {
+                foreach (var (pagePath, candidate) in _pages)
+                    if (_unfinishedPages.Contains(pagePath) &&
+                        (PathComparer.Equals(path, GetPageOutputPath(candidate)) ||
+                         PathComparer.Equals(path, GetAliasOutputPath(candidate)) ||
+                         _openApiSpecPagesByPage.GetValueOrDefault(pagePath)?.Contains(path, PathComparer) == true))
+                        throw new InvalidOperationException("The page update failed. Fix the source and save again.");
+            }
+            var page = _pendingOutputs.GetValueOrDefault(path) ??
+                       _pendingOutputs.GetValueOrDefault(Path.Combine(path, "index.html"));
+            if (page is not null) CompletePendingPage(page);
         }
         finally
         {
-            // Record the specification pages that were written, even when rendering stops early.
-            foreach (var (page, specPagePaths) in rendererVisitor.OpenApiSpecPagePaths)
-                _openApiSpecPagesByPage[GetPageKey(page)] = specPagePaths;
+            _renderLock.Release();
         }
-        _searchIndexBuilder.WriteIndex(_outputPath);
-        ReconcileGeneratedFiles(previousFiles);
+    }
+
+    private void CompletePendingPage(MarkdownFile page)
+    {
+        var pageKey = GetPageKey(page);
+        if (!_pendingPages.ContainsKey(pageKey)) return;
+        var visitor = _pendingVisitor!;
+        try
+        {
+            visitor.Process(page, page.CountDepth());
+            _openApiSpecPagesByPage[pageKey] = visitor.OpenApiSpecPagePaths.GetValueOrDefault(page) ?? Array.Empty<string>();
+            if (_failedPendingPages.Contains(pageKey)) _searchIndexBuilder.WriteIndex(_outputPath);
+            _pendingPages.Remove(pageKey);
+            _failedPendingPages.Remove(pageKey);
+        }
+        catch
+        {
+            _failedPendingPages.Add(pageKey);
+            visitor.InvalidatePreparedPage(page);
+            throw;
+        }
+        FinishPendingSite();
+    }
+
+    private void FinishPendingSite()
+    {
+        if (_pendingPages.Count != 0 || _rebuildAfterFailure) return;
+        _pendingVisitor = null;
+        _pendingOutputs.Clear();
+        if (_pendingPdfs.Count != 0 || !_siteCompletionPending) return;
+        _siteCompletionPending = false;
+        _server?.SetBuilding(false);
         Console.WriteLine("Site updated.");
     }
+
+    private void SchedulePdfs(bool reuseUnchanged)
+    {
+        // All rendering is serialized. Dropping these sessions prevents an older save from publishing a PDF.
+        _pendingPdfs.Clear();
+        _pdfFailed = !TryWriteSitePdf(() => _pdfCommand.WriteSitePdfIfLinked(
+            _rootPath, Path.Combine(_outputPath, "documentation.pdf"), _navigationRoots, reuseUnchanged,
+            (path, sections) => _pendingPdfs.Enqueue(_pdfCommand.CreateSitePdfJob(path, sections))));
+        _pdfRefreshRequired = false;
+        if (_pdfFailed) ReportPdfFailure();
+        if (_pendingPdfs.Count > 0)
+        {
+            _siteCompletionPending = true;
+            _server?.SetBuilding(true);
+        }
+        UpdatePdfStatus();
+    }
+
+    private void InvalidatePdfs()
+    {
+        _pendingPdfs.Clear();
+        _pdfRefreshRequired = _pdfCommand.GeneratedSitePdfPaths.Count > 0;
+        if (_pdfCommand.GeneratedSitePdfPaths.Count > 0)
+            _server?.SetDownloads(_pdfCommand.GeneratedSitePdfPaths, "pending");
+    }
+
+    private void UpdatePdfStatus() => _server?.SetDownloads(_pdfCommand.GeneratedSitePdfPaths,
+        _pendingPdfs.Count > 0 ? "pending" : _pdfFailed ? "failed" :
+        _pdfCommand.GeneratedSitePdfPaths.Count > 0 ? "ready" : "none");
 
     private void RebuildDependencyIndex(IEnumerable<MarkdownFile> graph)
     {
@@ -288,7 +408,13 @@ public sealed class ServeCommand
             .ToArray();
 
         var pdfTitle = PdfSelection.GetPdfTitle(_rootPath, page, body, _renderer.ExcludesTitleHeadingFromPdf);
-        return new PageDependencies(pageAssets, referencedSpecs, pdfTitle);
+        return new PageDependencies(pageAssets, referencedSpecs, pdfTitle, _renderer.FindMediaProviders(body));
+    }
+
+    private IReadOnlyCollection<string> GetSiteMediaProviders()
+    {
+        var providers = _dependencyIndex.MediaProvidersByPage.Values.SelectMany(values => values).ToHashSet(StringComparer.Ordinal);
+        return new[] { "YouTube", "Vimeo" }.Where(providers.Contains).ToArray();
     }
 
     private static void AddPageDependencies(
@@ -310,6 +436,7 @@ public sealed class ServeCommand
 
         index.OpenApiSpecsByPage[pagePath] = dependencies.OpenApiSpecs;
         index.PdfTitlesByPage[pagePath] = dependencies.PdfTitle;
+        index.MediaProvidersByPage[pagePath] = dependencies.MediaProviders;
     }
 
     private void RemovePageAssets(string pagePath)
@@ -329,19 +456,84 @@ public sealed class ServeCommand
         PreviewServer server,
         CancellationToken cancellationToken)
     {
-        while (await changes.WaitToReadAsync(cancellationToken))
+        while (!cancellationToken.IsCancellationRequested)
         {
-            await Task.Delay(TimeSpan.FromMilliseconds(75), cancellationToken);
+            if (!changes.TryPeek(out _))
+            {
+                var completedPage = false;
+                await _renderLock.WaitAsync(cancellationToken);
+                try
+                {
+                    if (_pendingPages.FirstOrDefault(entry => !_failedPendingPages.Contains(entry.Key)).Value is { } pendingPage)
+                    {
+                        CompletePendingPage(pendingPage);
+                        completedPage = true;
+                    }
+                    else if (_pendingPdfs.Count > 0)
+                    {
+                        var job = _pendingPdfs.Peek();
+                        if (_pdfCommand.AdvanceSitePdfJob(job))
+                        {
+                            _pendingPdfs.Dequeue();
+                            _pdfFailed |= job.Failed;
+                            UpdatePdfStatus();
+                            FinishPendingSite();
+                        }
+                        completedPage = true;
+                    }
+                    else FinishPendingSite();
+                }
+                catch (Exception exception)
+                {
+                    Console.Error.WriteLine($"Could not update the site: {exception.Message}");
+                    completedPage = true;
+                }
+                finally
+                {
+                    _renderLock.Release();
+                }
+                if (completedPage)
+                {
+                    await Task.Yield();
+                    continue;
+                }
+                if (!await changes.WaitToReadAsync(cancellationToken)) return;
+            }
+            await Task.Delay(TimeSpan.FromMilliseconds(20), cancellationToken);
             var batch = new List<FileChange>();
             while (changes.TryRead(out var change)) batch.Add(change);
+            // Structural saves often rename the old file before creating its replacement.
+            // Give those events more time to settle without delaying ordinary content edits.
+            if (batch.Any(change => change.Kind is (FileChangeKind.Deleted or FileChangeKind.Renamed) &&
+                                    (_pages.ContainsKey(change.Path) && !File.Exists(change.Path) ||
+                                     change.OldPath is not null && _pages.ContainsKey(change.OldPath) && !File.Exists(change.OldPath))))
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(75), cancellationToken);
+                while (changes.TryRead(out var change)) batch.Add(change);
+            }
 
+            await _renderLock.WaitAsync(cancellationToken);
             try
             {
                 ProcessChangeBatch(batch, server);
             }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or YamlDotNet.Core.YamlException)
+            catch (Exception exception)
             {
+                // A partial batch can leave metadata/dependencies unfinished. Rebuild from fresh sources on the next save.
+                _rebuildAfterFailure = true;
+                _siteCompletionPending = true;
+                server.SetBuilding(true);
                 Console.Error.WriteLine($"Could not update the site: {exception.Message}");
+                if (_pdfRefreshRequired)
+                {
+                    _pdfFailed = true;
+                    UpdatePdfStatus();
+                    FinishPendingSite();
+                }
+            }
+            finally
+            {
+                _renderLock.Release();
             }
         }
     }
@@ -355,8 +547,34 @@ public sealed class ServeCommand
             .ToArray();
         if (relevantChanges.Length == 0) return;
 
+        var changedPaths = relevantChanges
+            .SelectMany(change => change.OldPath is null ? new[] { change.Path } : new[] { change.Path, change.OldPath })
+            .ToHashSet(PathComparer);
+        var specificationPages = _openApiSpecsByPage
+            .Where(entry => entry.Value.Any(changedPaths.Contains))
+            .Select(entry => entry.Key);
+        var changedPages = relevantChanges
+            .Where(change => change.Kind is FileChangeKind.Changed or FileChangeKind.Created or FileChangeKind.Renamed &&
+                             _pages.ContainsKey(change.Path) && File.Exists(change.Path))
+            .Select(change => change.Path)
+            .Concat(specificationPages)
+            .Distinct(PathComparer)
+            .ToArray();
+
+        // Invalidate the complete batch before any parsing can fail, including configuration-triggered rebuilds.
+        foreach (var pagePath in changedPages)
+        {
+            var page = _pages[pagePath];
+            _unfinishedPages.Add(pagePath);
+            page.InvalidateMarkdown();
+            _pendingVisitor?.InvalidatePreparedPage(page);
+            _pendingPages.Remove(pagePath);
+            _failedPendingPages.Remove(pagePath);
+        }
+        if (changedPages.Length > 0) InvalidatePdfs();
+
         var siteConfigurationPath = Path.Combine(_rootPath, "mdu.yml");
-        if (relevantChanges.Any(change => PathComparer.Equals(change.Path, siteConfigurationPath) ||
+        if (_rebuildAfterFailure || relevantChanges.Any(change => PathComparer.Equals(change.Path, siteConfigurationPath) ||
                                           _configurationAssets.Contains(change.Path) ||
                                           change.OldPath is not null && _configurationAssets.Contains(change.OldPath)))
         {
@@ -394,13 +612,6 @@ public sealed class ServeCommand
             return;
         }
 
-        if (relevantChanges.Any(IsOpenApiSpecChange))
-        {
-            RebuildSite();
-            server.Publish(reloadAll: true);
-            return;
-        }
-
         // Editors that save through a temporary file report creations, renames, and deletions for a page whose
         // content only changed. Only the state after the batch decides whether pages were added or removed.
         var requiresRebuild = relevantChanges.Any(change =>
@@ -419,13 +630,6 @@ public sealed class ServeCommand
             server.Publish(reloadAll: true);
             return;
         }
-
-        var changedPages = relevantChanges
-            .Where(change => change.Kind is FileChangeKind.Changed or FileChangeKind.Created or FileChangeKind.Renamed &&
-                             _pages.ContainsKey(change.Path) && File.Exists(change.Path))
-            .Select(change => change.Path)
-            .Distinct(PathComparer)
-            .ToArray();
 
         var affectedPageUrls = new HashSet<string>(StringComparer.Ordinal);
         foreach (var pagePath in changedPages)
@@ -460,6 +664,13 @@ public sealed class ServeCommand
 
             var previousSpecPages = _openApiSpecPagesByPage.GetValueOrDefault(pagePath) ?? Array.Empty<string>();
             UpdatePageAssets(pagePath, dependencies);
+            var providers = GetSiteMediaProviders();
+            if (!new HashSet<string>(_siteMediaProviders, StringComparer.Ordinal).SetEquals(providers))
+            {
+                RebuildSite();
+                server.Publish(reloadAll: true);
+                return;
+            }
             _watchers?.UpdateExternalFiles(_openApiSpecsByPage.Values.SelectMany(paths => paths), _glossaryPath);
             new LocalAssetsCopy(_rootPath, _outputPath).Process(page, depth);
             var rendererVisitor = new MarkdigVisitor(
@@ -468,19 +679,17 @@ public sealed class ServeCommand
                 _renderer,
                 _settings.EditPageRoot,
                 _searchIndexBuilder,
-                _navigationRoots);
-            if (!new HashSet<string>(_siteMediaProviders, StringComparer.Ordinal).SetEquals(rendererVisitor.SiteMediaProviders))
-            {
-                RebuildSite();
-                server.Publish(reloadAll: true);
-                return;
-            }
+                _navigationRoots,
+                _siteMediaProviders,
+                _gitDates.Read(_rootPath));
 
             rendererVisitor.Process(page, depth);
             var specPages = rendererVisitor.OpenApiSpecPagePaths.GetValueOrDefault(page) ?? Array.Empty<string>();
             _openApiSpecPagesByPage[pagePath] = specPages;
             var specPagesChanged = !previousSpecPages.SequenceEqual(specPages, PathComparer);
             affectedPageUrls.Add(PreviewServer.ToUrlPath(_outputPath, GetPageOutputPath(page)));
+            foreach (var specPage in previousSpecPages.Concat(specPages).Distinct(PathComparer))
+                affectedPageUrls.Add(PreviewServer.ToUrlPath(_outputPath, specPage));
 
             if (specPagesChanged)
             {
@@ -497,18 +706,14 @@ public sealed class ServeCommand
                     var previousSiblingSpecPages = _openApiSpecPagesByPage.GetValueOrDefault(siblingKey) ?? Array.Empty<string>();
                     if (previousSiblingSpecPages.Count == 0) continue;
 
-                    try
-                    {
-                        rendererVisitor.Process(siblingPage, siblingPage.CountDepth());
-                        var siblingSpecPages = rendererVisitor.OpenApiSpecPagePaths.GetValueOrDefault(siblingPage) ?? Array.Empty<string>();
-                        _openApiSpecPagesByPage[siblingKey] = siblingSpecPages;
-                        if (!previousSiblingSpecPages.SequenceEqual(siblingSpecPages, PathComparer))
-                            affectedPageUrls.Add(PreviewServer.ToUrlPath(_outputPath, siblingOutputPath));
-                    }
-                    catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or YamlDotNet.Core.YamlException)
-                    {
-                        Console.Error.WriteLine($"Could not update the site: {exception.Message}");
-                    }
+                    _pendingVisitor?.InvalidatePreparedPage(siblingPage);
+                    rendererVisitor.Process(siblingPage, siblingPage.CountDepth());
+                    _pendingPages.Remove(siblingKey);
+                    _failedPendingPages.Remove(siblingKey);
+                    var siblingSpecPages = rendererVisitor.OpenApiSpecPagePaths.GetValueOrDefault(siblingPage) ?? Array.Empty<string>();
+                    _openApiSpecPagesByPage[siblingKey] = siblingSpecPages;
+                    if (!previousSiblingSpecPages.SequenceEqual(siblingSpecPages, PathComparer))
+                        affectedPageUrls.Add(PreviewServer.ToUrlPath(_outputPath, siblingOutputPath));
                 }
             }
         }
@@ -516,9 +721,7 @@ public sealed class ServeCommand
         if (changedPages.Length > 0)
         {
             _searchIndexBuilder.WriteIndex(_outputPath);
-            var pdfOutputPath = Path.Combine(_outputPath, "documentation.pdf");
-            if (!TryWriteSitePdf(() => _pdfCommand.WriteSitePdfIfLinked(_rootPath, pdfOutputPath, _navigationRoots, reuseUnchanged: true)))
-                ReportPdfFailure();
+            SchedulePdfs(reuseUnchanged: true);
         }
 
         var assetChanges = relevantChanges
@@ -547,6 +750,8 @@ public sealed class ServeCommand
             Console.WriteLine($"Updated {affectedPageUrls.Count} page(s).");
             server.Publish(affectedPageUrls);
         }
+        _unfinishedPages.ExceptWith(changedPages);
+        FinishPendingSite();
     }
 
     // An invalid PDF root throws instead of returning an error code.
@@ -569,19 +774,6 @@ public sealed class ServeCommand
 
     private bool ChangesPageSet(string path) =>
         _pages.ContainsKey(path) ? !File.Exists(path) : File.Exists(path) && IsMarkdownCandidate(path);
-
-    private bool IsOpenApiSpecChange(FileChange change)
-    {
-        foreach (var specPaths in _openApiSpecsByPage.Values)
-        {
-            foreach (var specPath in specPaths)
-            {
-                if (PathComparer.Equals(specPath, change.Path) ||
-                    change.OldPath is not null && PathComparer.Equals(specPath, change.OldPath)) return true;
-            }
-        }
-        return false;
-    }
 
     private bool IsMarkdownCandidate(string path)
     {
@@ -761,7 +953,8 @@ public sealed class ServeCommand
     private sealed record PageDependencies(
         HashSet<string> Assets,
         IReadOnlyList<string> OpenApiSpecs,
-        string PdfTitle);
+        string PdfTitle,
+        IReadOnlyCollection<string> MediaProviders);
 
     private sealed record DependencyIndex(
         Dictionary<string, MarkdownFile> Pages,
@@ -769,7 +962,8 @@ public sealed class ServeCommand
         Dictionary<string, HashSet<string>> PagesByAsset,
         Dictionary<string, IReadOnlyList<string>> OpenApiSpecsByPage,
         Dictionary<string, IReadOnlyList<string>> OpenApiSpecPagesByPage,
-        Dictionary<string, string> PdfTitlesByPage)
+        Dictionary<string, string> PdfTitlesByPage,
+        Dictionary<string, IReadOnlyCollection<string>> MediaProvidersByPage)
     {
         public static DependencyIndex CreateEmpty() => new(
             new Dictionary<string, MarkdownFile>(PathComparer),
@@ -777,7 +971,8 @@ public sealed class ServeCommand
             new Dictionary<string, HashSet<string>>(PathComparer),
             new Dictionary<string, IReadOnlyList<string>>(PathComparer),
             new Dictionary<string, IReadOnlyList<string>>(PathComparer),
-            new Dictionary<string, string>(PathComparer));
+            new Dictionary<string, string>(PathComparer),
+            new Dictionary<string, IReadOnlyCollection<string>>(PathComparer));
     }
 
     private sealed record FileChange(string Path, string? OldPath, FileChangeKind Kind);

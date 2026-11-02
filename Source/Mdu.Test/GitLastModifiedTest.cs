@@ -5,6 +5,72 @@ namespace Mdu.Test;
 
 public class GitLastModifiedTest
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PreviewDatesRefreshForCommitsPackedRefsAndDetachedHeads(bool linkedWorktree)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-git-cache-{Guid.NewGuid():N}");
+        var repository = Path.Combine(root, "repository");
+        Directory.CreateDirectory(Path.Combine(repository, "Docs"));
+        try
+        {
+            Git(repository, null, "init", "--quiet");
+            File.WriteAllText(Path.Combine(repository, "Docs/README.md"), "# Home");
+            Git(repository, null, "add", ".");
+            Git(repository, "2026-01-02T10:00:00Z", "commit", "--quiet", "-m", "chore: first");
+            var checkout = repository;
+            if (linkedWorktree)
+            {
+                checkout = Path.Combine(root, "linked");
+                Git(repository, null, "worktree", "add", "--quiet", "-b", "preview", checkout);
+            }
+            var docs = Path.Combine(checkout, "Docs");
+            var cache = new GitLastModifiedCache();
+            var first = cache.Read(docs);
+            File.AppendAllText(Path.Combine(docs, "README.md"), "\nUncommitted");
+            Assert.Same(first, cache.Read(docs));
+            Git(checkout, "2026-03-04T10:00:00Z", "commit", "--quiet", "-am", "chore: second");
+            Git(checkout, null, "pack-refs", "--all", "--prune");
+            var second = cache.Read(docs);
+            Assert.Equal(DateTimeOffset.Parse("2026-03-04T10:00:00Z"), second["README.md"]);
+            Assert.Same(second, cache.Read(docs));
+            File.AppendAllText(Path.Combine(docs, "README.md"), "\nThird");
+            Git(checkout, "2026-05-06T10:00:00Z", "commit", "--quiet", "-am", "chore: third");
+            Assert.Equal(DateTimeOffset.Parse("2026-05-06T10:00:00Z"), cache.Read(docs)["README.md"]);
+            Git(checkout, null, "checkout", "--quiet", "--detach", "HEAD~1");
+            Assert.Equal(second["README.md"], cache.Read(docs)["README.md"]);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void PreviewDatesRefreshWhenAShallowCloneBecomesComplete()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-git-shallow-{Guid.NewGuid():N}");
+        var source = Path.Combine(root, "source");
+        Directory.CreateDirectory(source);
+        try
+        {
+            Git(source, null, "init", "--quiet");
+            File.WriteAllText(Path.Combine(source, "README.md"), "# Home");
+            Git(source, null, "add", ".");
+            Git(source, "2026-01-02T10:00:00Z", "commit", "--quiet", "-m", "chore: first");
+            File.AppendAllText(Path.Combine(source, "README.md"), "\nSecond");
+            Git(source, "2026-03-04T10:00:00Z", "commit", "--quiet", "-am", "chore: second");
+            var clone = Path.Combine(root, "clone");
+            Git(root, null, "clone", "--quiet", "--depth=1", new Uri(source).AbsoluteUri, clone);
+            var cache = new GitLastModifiedCache();
+            Assert.Empty(cache.Read(clone));
+            Git(clone, null, "fetch", "--quiet", "--unshallow");
+            Assert.NotEmpty(cache.Read(clone));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
     [Fact]
     public void ReadsTheLastCommitDateOfEachFileBelowTheFolder()
     {

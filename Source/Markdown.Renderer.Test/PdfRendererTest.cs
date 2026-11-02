@@ -6,6 +6,44 @@ namespace Markdown.Renderer.Test;
 
 public class PdfRendererTest
 {
+    [Fact]
+    public void FailedSectionsCannotBeSkippedOrPublished()
+    {
+        var renderer = new PdfRenderer(new HtmlRenderer());
+        var session = renderer.CreateSession("Manual",
+        [
+            new("Home", "index.html", "# Home"),
+            new("Broken", "Broken.html", "# Broken\n\n<!-- pdf:hidden -->\nUnclosed region")
+        ]);
+        Assert.True(session.RenderNextSection());
+        using var output = new MemoryStream();
+        Assert.Throws<InvalidOperationException>(() => session.WritePdf(output));
+        Assert.Throws<PdfHiddenContentException>(() => session.RenderNextSection());
+        Assert.Throws<InvalidOperationException>(() => session.RenderNextSection());
+        Assert.Throws<InvalidOperationException>(() => session.WritePdf(output));
+        Assert.Equal(0, output.Length);
+    }
+
+    [Fact]
+    public void SteppedRenderingPreservesTheCompletePdfBytes()
+    {
+        var renderer = new PdfRenderer(new HtmlRenderer());
+        PdfSourceSection[] sections =
+        [
+            new("Home", "index.html", "# Home\n\n[Details](Details.md)\n\n:material-home:"),
+            new("Details", "Details.html", "# Details\n\n```csharp\nvar value = 42;\n```\n\n<!-- pdf:hidden -->\nSecret\n<!-- /pdf:hidden -->")
+        ];
+        using var normal = new MemoryStream();
+        renderer.WritePdf(normal, "Manual", sections);
+        var session = renderer.CreateSession("Manual", sections);
+        Assert.True(session.RenderNextSection());
+        Assert.True(session.RenderNextSection());
+        Assert.False(session.RenderNextSection());
+        using var stepped = new MemoryStream();
+        session.WritePdf(stepped);
+        Assert.Equal(normal.ToArray(), stepped.ToArray());
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

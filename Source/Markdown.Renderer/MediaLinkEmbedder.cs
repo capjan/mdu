@@ -4,14 +4,27 @@ using System.Text.RegularExpressions;
 
 namespace Markdown.Renderer;
 
-internal static class MediaLinkEmbedder
+internal static partial class MediaLinkEmbedder
 {
-    private static readonly Regex StandaloneLinkParagraphRegex = new(
-        "<p>\\s*<a href=\"(?<url>[^\"]+)\"[^>]*>(?<label>.*?)</a>\\s*</p>",
-        RegexOptions.Compiled | RegexOptions.Singleline);
+    internal static bool IsProviderLink(string? value) => value is not null &&
+        Uri.TryCreate(WebUtility.HtmlDecode(value), UriKind.Absolute, out var uri) &&
+        uri.Scheme is "http" or "https" && GetEmbed(uri).VideoId is not null;
 
-    private static readonly Regex YouTubeIdRegex = new("^[A-Za-z0-9_-]{11}$", RegexOptions.Compiled);
-    private static readonly Regex VimeoIdRegex = new("^[0-9]+$", RegexOptions.Compiled);
+    private static readonly Regex StandaloneLinkParagraphRegex = StandaloneLinkParagraphRegexPattern();
+
+    [GeneratedRegex(
+        "<p>\\s*<a href=\"(?<url>[^\"]+)\"[^>]*>(?<label>.*?)</a>\\s*</p>",
+        RegexOptions.Compiled | RegexOptions.Singleline)]
+    private static partial Regex StandaloneLinkParagraphRegexPattern();
+
+    private static readonly Regex YouTubeIdRegex = YouTubeIdRegexPattern();
+
+    [GeneratedRegex("^[A-Za-z0-9_-]{11}$", RegexOptions.Compiled)]
+    private static partial Regex YouTubeIdRegexPattern();
+    private static readonly Regex VimeoIdRegex = VimeoIdRegexPattern();
+
+    [GeneratedRegex("^[0-9]+$", RegexOptions.Compiled)]
+    private static partial Regex VimeoIdRegexPattern();
 
     public const string Script = """
         (() => {

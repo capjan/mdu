@@ -191,6 +191,28 @@ public class PageCommandTest : IDisposable
     }
 
     [Fact]
+    public void RepeatedMovesAndLinkReadsSeeNewContentWithinTheSameProcess()
+    {
+        var command = new PageCommand();
+        var source = Path.Combine(_root, "Setup.md");
+        var intermediate = Path.Combine(_root, "Start", "Setup.md");
+        var target = Path.Combine(_root, "Install.md");
+        using var output = new StringWriter();
+        Assert.Equal(0, command.Move(_root, source, intermediate, includeHidden: true, dryRun: false, output));
+        Assert.Equal(0, command.Links(_root, intermediate, includeHidden: true, output));
+        Assert.Contains("[Setup](Start/Setup.md#install)", output.ToString());
+
+        Write("README.md", Read("README.md") + "\n[Added after first move](Start/Setup.md)\n");
+        output.GetStringBuilder().Clear();
+        Assert.Equal(0, command.Move(_root, intermediate, target, includeHidden: true, dryRun: false, output));
+        Assert.Equal(0, command.Links(_root, target, includeHidden: true, output));
+        Assert.Contains("[Added after first move](Install.md)", output.ToString());
+        Assert.Contains("[Setup](Install.md#install)", output.ToString());
+        Assert.DoesNotContain("Start/Setup.md", Read("README.md"));
+        Assert.Contains("[Setup](../Install.md)", Read("Guide/README.md"));
+    }
+
+    [Fact]
     public void UpdatesOpenApiReferenceWhenPageMoves()
     {
         Write("api/orders.yaml", "openapi: 3.1.0\n");

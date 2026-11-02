@@ -5,6 +5,8 @@ using Markdown.Renderer.MarkdigExtension;
 using Markdown.Renderer.Res.Model;
 using Markdown.Search;
 using Mdu.Model;
+using Mdu.Service.PageTree;
+using Mdu.Service.PageTree.Extensions;
 
 namespace Mdu.Service.Visitors;
 
@@ -16,7 +18,9 @@ public class MarkdigVisitor : BaseVisitor
         HtmlRenderer htmlFoundation, 
         string editPageRoot,
         SearchIndexBuilder searchIndexBuilder,
-        MarkdownFile[]? navigationRoots = null) : base(rootPath, outPath, ".html")
+        MarkdownFile[]? navigationRoots = null,
+        IReadOnlyCollection<string>? siteMediaProviders = null,
+        IReadOnlyDictionary<string, DateTimeOffset>? lastModifiedDates = null) : base(rootPath, outPath, ".html")
     {
         _rootPath = rootPath;
         _outPath = outPath;
@@ -35,8 +39,9 @@ public class MarkdigVisitor : BaseVisitor
         {
             _topNavigationItems.Add(page, FindTopNavigationItem(page));
         }
-        _siteMediaProviders = FindSiteMediaProviders();
-        _lastModifiedDates = GitLastModified.Read(rootPath);
+        _navigationEntries = CreateNavigationEntries(_navigationRoots);
+        _siteMediaProviders = siteMediaProviders ?? FindSiteMediaProviders();
+        _lastModifiedDates = lastModifiedDates ?? GitLastModified.Read(rootPath);
     }
     
     private readonly HtmlRenderer _htmlFoundation;
@@ -45,15 +50,51 @@ public class MarkdigVisitor : BaseVisitor
     private readonly string _rootPath;
     private readonly string _outPath;
     private readonly MarkdownFile[] _navigationRoots;
+    private readonly IReadOnlyList<NavigationEntry> _navigationEntries;
     private readonly Dictionary<MarkdownFile, MarkdownFile?> _topNavigationItems;
     private readonly (MarkdownFile Page, string OutputPath)[] _pageOutputs;
     private readonly HashSet<string> _pageOutputPaths;
     private readonly IReadOnlyCollection<string> _siteMediaProviders;
     private readonly IReadOnlyDictionary<string, DateTimeOffset> _lastModifiedDates;
     private readonly Dictionary<MarkdownFile, IReadOnlyList<string>> _openApiSpecPagePaths = new();
+    private readonly Dictionary<MarkdownFile, PreparedPage> _preparedPages = new();
 
     public IReadOnlyCollection<string> SiteMediaProviders => _siteMediaProviders;
     public IReadOnlyDictionary<MarkdownFile, IReadOnlyList<string>> OpenApiSpecPagePaths => _openApiSpecPagePaths;
+
+    public void PrepareSearchIndex() => _navigationRoots.Visit(new SearchPreparationVisitor(this));
+
+    public void InvalidatePreparedPage(MarkdownFile page) => _preparedPages.Remove(page);
+
+    public IReadOnlyList<string> GetPreparedSpecificationPagePaths(MarkdownFile page) =>
+        _preparedPages.TryGetValue(page, out var prepared)
+            ? prepared.Specifications.Select(spec => Path.GetFullPath(Path.Combine(
+                Path.GetDirectoryName(GetOutputPagePath(GetRenderPath(page)))!, spec.FileName)))
+                .Where(path => !_pageOutputPaths.Contains(path)).ToArray()
+            : Array.Empty<string>();
+
+    private PreparedPage PreparePage(MarkdownFile page, string outputFileName)
+    {
+        var markdown = OpenApiMarkdownRenderer.ExpandCodeBlocks(
+            RemoveFrontMatter(page.ReadMarkdown(), page.FrontMatter), page.FileInfo.FullName,
+            out var specifications, page.SourceRootPath, Path.GetFileName(outputFileName),
+            GetOutputSiblings(_pageOutputs, Path.GetDirectoryName(outputFileName)!));
+        _searchIndexBuilder.AddPage(NavigationPage.GetTitle(page), GetSiteRelativeUrl(outputFileName), markdown);
+        return new PreparedPage(markdown, specifications);
+    }
+
+    private sealed record PreparedPage(string Markdown, IReadOnlyList<OpenApiSpecificationPage> Specifications);
+
+    private sealed class SearchPreparationVisitor(MarkdigVisitor owner) : IVisitor<MarkdownFile>
+    {
+        public TraversalAlgorithm Algorithm => TraversalAlgorithm.Default;
+
+        public bool Process(MarkdownFile page, int depth)
+        {
+            owner._preparedPages[page] = owner.PreparePage(page, GetOutputPagePath(owner.GetRenderPath(page)));
+            return true;
+        }
+    }
 
     private static readonly StringComparison PathComparison = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
         ? StringComparison.OrdinalIgnoreCase
@@ -94,19 +135,9 @@ public class MarkdigVisitor : BaseVisitor
         }
 
         var outputDirectory = Path.GetDirectoryName(Path.GetFullPath(outputFileName))!;
-        var outputSiblings = GetOutputSiblings(_pageOutputs, outputDirectory);
-        var markdown = OpenApiMarkdownRenderer.ExpandCodeBlocks(
-            RemoveFrontMatter(entity.ReadMarkdown(), entity.FrontMatter),
-            entity.FileInfo.FullName,
-            out var specificationPages,
-            entity.SourceRootPath,
-            Path.GetFileName(outputFileName),
-            outputSiblings);
-
-        _searchIndexBuilder.AddPage(
-            NavigationPage.GetTitle(entity),
-            GetSiteRelativeUrl(outputFileName),
-            markdown);
+        var prepared = _preparedPages.Remove(entity, out var pending) ? pending : PreparePage(entity, outputFileName);
+        var markdown = prepared.Markdown;
+        var specificationPages = prepared.Specifications;
 
         var navigation = BuildNavigation(entity, outputFileName);
         var breadcrumbs = BuildBreadcrumbs(entity, outputFileName);
@@ -334,7 +365,7 @@ public class MarkdigVisitor : BaseVisitor
     {
         var currentPath = Path.GetFullPath(currentOutputPath);
         var currentDirectorySegments = GetSiteRelativeSegments(Path.GetDirectoryName(currentPath)!);
-        var entries = CreateNavigationEntries(_navigationRoots);
+        var entries = _navigationEntries;
         var activeTopNavigationItem = _topNavigationItems.GetValueOrDefault(page);
         var activeTopNavigationDepth = activeTopNavigationItem is null
             ? -1

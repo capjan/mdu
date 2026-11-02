@@ -5,6 +5,7 @@ using System.Net;
 using System.Text.RegularExpressions;
 using Markdig;
 using Markdig.Extensions.Abbreviations;
+using Markdig.Extensions.Footnotes;
 using Markdig.Renderers.Html;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
@@ -15,46 +16,89 @@ using StaticCode.Icons;
 
 namespace Markdown.Renderer;
 
-public class HtmlRenderer
+public partial class HtmlRenderer
 {
-    private static readonly Regex TemplateTokenRegex = new(@"%%(?<name>[A-Z_]+)%%", RegexOptions.Compiled);
-    private static readonly Regex HeadingRegex = new(
+    private static readonly Regex TemplateTokenRegex = TemplateTokenRegexPattern();
+
+    [GeneratedRegex(@"%%(?<name>[A-Z_]+)%%", RegexOptions.Compiled)]
+    private static partial Regex TemplateTokenRegexPattern();
+    private static readonly Lazy<(string Text, string? Token)[]> TemplateParts = new(ReadTemplateParts);
+    private static readonly Regex HeadingRegex = HeadingRegexPattern();
+
+    [GeneratedRegex(
         @"<h(?<level>[1-6])(?<attributes>\s[^>]*)?>(?<content>.*?)</h\k<level>>",
-        RegexOptions.Compiled | RegexOptions.Singleline);
-    private static readonly Regex HeadingIdRegex = new(@"\bid=""(?<id>[^""]+)""", RegexOptions.Compiled);
-    private static readonly Regex ClassAttributeRegex = new(@"\bclass=""(?<class>[^""]*)""", RegexOptions.Compiled);
-    private static readonly Regex OpenApiResponseCodeRegex = new(
+        RegexOptions.Compiled | RegexOptions.Singleline)]
+    private static partial Regex HeadingRegexPattern();
+    private static readonly Regex HeadingIdRegex = HeadingIdRegexPattern();
+
+    [GeneratedRegex(@"\bid=""(?<id>[^""]+)""", RegexOptions.Compiled)]
+    private static partial Regex HeadingIdRegexPattern();
+    private static readonly Regex ClassAttributeRegex = ClassAttributeRegexPattern();
+
+    [GeneratedRegex(@"\bclass=""(?<class>[^""]*)""", RegexOptions.Compiled)]
+    private static partial Regex ClassAttributeRegexPattern();
+    private static readonly Regex OpenApiResponseCodeRegex = OpenApiResponseCodeRegexPattern();
+
+    [GeneratedRegex(
         @"^Response\s*<code>(?<status>[^<]+)</code>(?<suffix>.*?)$",
-        RegexOptions.Compiled | RegexOptions.Singleline);
-    private static readonly Regex OpenApiMediaTypeCodeRegex = new(
+        RegexOptions.Compiled | RegexOptions.Singleline)]
+    private static partial Regex OpenApiResponseCodeRegexPattern();
+    private static readonly Regex OpenApiMediaTypeCodeRegex = OpenApiMediaTypeCodeRegexPattern();
+
+    [GeneratedRegex(
         @"^Media type\s*<code>(?<mediaType>[^<]+)</code>",
-        RegexOptions.Compiled);
-    private static readonly Regex OpenApiTagEndpointRegex = new(
+        RegexOptions.Compiled)]
+    private static partial Regex OpenApiMediaTypeCodeRegexPattern();
+    private static readonly Regex OpenApiTagEndpointRegex = OpenApiTagEndpointRegexPattern();
+
+    [GeneratedRegex(
         "<details class=\"openapi-endpoint (?<method>openapi-method-[a-z]+)(?<deprecated> openapi-endpoint-deprecated)?\"",
-        RegexOptions.Compiled);
-    private static readonly Regex OpenApiOperationSummaryRegex = new(
+        RegexOptions.Compiled)]
+    private static partial Regex OpenApiTagEndpointRegexPattern();
+    private static readonly Regex OpenApiOperationSummaryRegex = OpenApiOperationSummaryRegexPattern();
+
+    [GeneratedRegex(
         @"\A\s*<p class=""openapi-operation-summary"">(?<summary>.*?)</p>\s*",
-        RegexOptions.Compiled | RegexOptions.Singleline);
+        RegexOptions.Compiled | RegexOptions.Singleline)]
+    private static partial Regex OpenApiOperationSummaryRegexPattern();
     private const string OpenApiSharedStart = "<!--openapi-shared-->";
     private const string OpenApiSharedEnd = "<!--/openapi-shared-->";
     private const string OpenApiSharedScopeToken = "openapi-shared-scope";
-    private static readonly Regex OpenApiSharedPanelRegex = new(
+    private static readonly Regex OpenApiSharedPanelRegex = OpenApiSharedPanelRegexPattern();
+
+    [GeneratedRegex(
         "<!--openapi-shared-->(?<content>.*?)<!--/openapi-shared-->",
-        RegexOptions.Compiled | RegexOptions.Singleline);
-    private static readonly Regex OpenApiSchemaAnchorPrefixRegex = new(
+        RegexOptions.Compiled | RegexOptions.Singleline)]
+    private static partial Regex OpenApiSharedPanelRegexPattern();
+    private static readonly Regex OpenApiSchemaAnchorPrefixRegex = OpenApiSchemaAnchorPrefixRegexPattern();
+
+    [GeneratedRegex(
         "openapi-response-schema-[0-9a-f]{10}",
-        RegexOptions.Compiled);
-    private static readonly Regex OpenApiTableHeaderRegex = new(@"<th>(?<label>.*?)</th>", RegexOptions.Compiled | RegexOptions.Singleline);
+        RegexOptions.Compiled)]
+    private static partial Regex OpenApiSchemaAnchorPrefixRegexPattern();
+    private static readonly Regex OpenApiTableHeaderRegex = OpenApiTableHeaderRegexPattern();
+
+    [GeneratedRegex(@"<th>(?<label>.*?)</th>", RegexOptions.Compiled | RegexOptions.Singleline)]
+    private static partial Regex OpenApiTableHeaderRegexPattern();
     private static readonly string[] OpenApiTagMethodOrder = ["GET", "POST", "PUT", "PATCH", "DELETE"];
-    private static readonly Regex OpenApiPermalinkRegex = new(
+    private static readonly Regex OpenApiPermalinkRegex = OpenApiPermalinkRegexPattern();
+
+    [GeneratedRegex(
         @"<a\b[^>]*\bclass=""headerlink""[^>]*>.*?</a>",
-        RegexOptions.Compiled | RegexOptions.Singleline);
-    private static readonly Regex OpenApiBadgeRegex = new(
+        RegexOptions.Compiled | RegexOptions.Singleline)]
+    private static partial Regex OpenApiPermalinkRegexPattern();
+    private static readonly Regex OpenApiBadgeRegex = OpenApiBadgeRegexPattern();
+
+    [GeneratedRegex(
         @"<span\b[^>]*\bclass=""openapi-badge\b[^""]*""[^>]*>.*?</span>",
-        RegexOptions.Compiled | RegexOptions.Singleline);
-    private static readonly Regex FootnoteReferenceRegex = new(
+        RegexOptions.Compiled | RegexOptions.Singleline)]
+    private static partial Regex OpenApiBadgeRegexPattern();
+    private static readonly Regex FootnoteReferenceRegex = FootnoteReferenceRegexPattern();
+
+    [GeneratedRegex(
         @"<a\b[^>]*\bclass=""footnote-ref""[^>]*>.*?</a>",
-        RegexOptions.Compiled | RegexOptions.Singleline);
+        RegexOptions.Compiled | RegexOptions.Singleline)]
+    private static partial Regex FootnoteReferenceRegexPattern();
     private readonly MarkdownPipeline _basePipeline;
     private MarkdownPipeline _pipeline;
     private Glossary? _glossary;
@@ -191,6 +235,13 @@ public class HtmlRenderer
     public IReadOnlyCollection<string> FindMediaProviders(string markdown)
     {
         var document = ParseMarkdown(markdown);
+        // Fenced code, diagrams and icons cannot produce a standalone media paragraph.
+        // Keep the rendered-HTML path for actual links and arbitrary HTML, including containers.
+        if (!document.Descendants<LinkInline>().Any(link => !link.IsImage && MediaLinkEmbedder.IsProviderLink(link.Url)) &&
+            !document.Descendants<AutolinkInline>().Any(link => !link.IsEmail && MediaLinkEmbedder.IsProviderLink(link.Url)) &&
+            !document.Descendants<HtmlBlock>().Any() && !document.Descendants<HtmlInline>().Any() &&
+            !document.Descendants<FootnoteLink>().Any())
+            return Array.Empty<string>();
         var html = document.ToHtml(_pipeline);
         MediaLinkEmbedder.ReplaceStandaloneLinks(html, out var providers);
         return providers;
@@ -375,10 +426,30 @@ public class HtmlRenderer
                 + (dashboard is null ? string.Empty : $"<script>{Dashboard.Script}</script>{Environment.NewLine}")
                 + (hasIsometricDiagram ? $"<script>{Resources.IsometricDiagramScriptContent()}</script>{Environment.NewLine}" : string.Empty)
         };
-        var renderedHtml = TemplateTokenRegex.Replace(Resources.HtmlTemplateContent(), match =>
-            values.TryGetValue(match.Groups["name"].Value, out var value) ? value : match.Value);
-        
-        await writer.WriteAsync(renderedHtml).ConfigureAwait(false);
+        await WriteTemplate(writer, values).ConfigureAwait(false);
+    }
+
+    private static (string Text, string? Token)[] ReadTemplateParts()
+    {
+        var template = Resources.HtmlTemplateContent();
+        var parts = new List<(string, string?)>();
+        var position = 0;
+        foreach (Match match in TemplateTokenRegex.Matches(template))
+        {
+            parts.Add((template[position..match.Index], null));
+            parts.Add((match.Value, match.Groups["name"].Value));
+            position = match.Index + match.Length;
+        }
+        parts.Add((template[position..], null));
+        return parts.ToArray();
+    }
+
+    private static async Task WriteTemplate(TextWriter writer, IReadOnlyDictionary<string, string> values)
+    {
+        // Reuse the immutable template and write its values directly, without another complete HTML string.
+        foreach (var (text, token) in TemplateParts.Value)
+            await writer.WriteAsync(token is not null && values.TryGetValue(token, out var value) ? value : text)
+                .ConfigureAwait(false);
     }
 
     private void EnsureIconSearchAssets()

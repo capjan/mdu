@@ -33,15 +33,28 @@ public sealed class PreviewServer : IDisposable
     private readonly HttpListener _listener = new();
     private readonly ConcurrentDictionary<Guid, EventClient> _eventClients = new();
     private long _revision;
+    private int _building;
+    private string _downloads = "none";
+    private HashSet<string> _pdfPaths = new(MarkdownLinks.PathComparer);
+    private readonly Func<string, CancellationToken, Task>? _prepareOutput;
 
-    public PreviewServer(string outputPath, int port)
+    public PreviewServer(string outputPath, int port, Func<string, CancellationToken, Task>? prepareOutput = null)
     {
         _outputPath = Path.GetFullPath(outputPath);
+        _prepareOutput = prepareOutput;
         BaseUrl = $"http://127.0.0.1:{port}/";
         _listener.Prefixes.Add(BaseUrl);
     }
 
     public string BaseUrl { get; }
+
+    public void SetBuilding(bool building) => Volatile.Write(ref _building, building ? 1 : 0);
+
+    public void SetDownloads(IEnumerable<string> paths, string status)
+    {
+        Volatile.Write(ref _pdfPaths, paths.Select(Path.GetFullPath).ToHashSet(MarkdownLinks.PathComparer));
+        if (Interlocked.Exchange(ref _downloads, status) != status) Publish();
+    }
 
     public void Start() => _listener.Start();
 
@@ -89,7 +102,7 @@ public sealed class PreviewServer : IDisposable
         var message = JsonSerializer.Serialize(new LiveReloadMessage(
             revision,
             reloadAll,
-            paths?.Distinct(StringComparer.Ordinal).ToArray() ?? Array.Empty<string>()),
+            paths?.Distinct(StringComparer.Ordinal).ToArray() ?? Array.Empty<string>(), Volatile.Read(ref _downloads)),
             PreviewServerJsonContext.Default.LiveReloadMessage);
 
         foreach (var client in _eventClients.Values)
@@ -106,6 +119,20 @@ public sealed class PreviewServer : IDisposable
 
     private async Task HandleRequestAsync(HttpListenerContext context, CancellationToken cancellationToken)
     {
+        if (context.Request.Url?.AbsolutePath == "/__mdu/status")
+        {
+            try
+            {
+                await WriteTextAsync(context.Response, HttpStatusCode.OK,
+                    JsonSerializer.Serialize(new PreviewStatus(Volatile.Read(ref _building) != 0, Volatile.Read(ref _downloads)),
+                        PreviewServerJsonContext.Default.PreviewStatus));
+            }
+            finally
+            {
+                context.Response.Close();
+            }
+            return;
+        }
         if (context.Request.Url?.AbsolutePath == LiveReloadEndpoint)
         {
             var revision = long.TryParse(context.Request.QueryString["revision"], out var parsedRevision)
@@ -125,6 +152,21 @@ public sealed class PreviewServer : IDisposable
                 return;
             }
 
+            if (_prepareOutput is not null)
+            {
+                await _prepareOutput(filePath, cancellationToken);
+                // Materializing a page can also create its directory alias.
+                filePath = ResolveFilePath(requestedPath)!;
+            }
+            var downloads = Volatile.Read(ref _downloads);
+            if (Volatile.Read(ref _pdfPaths).Contains(filePath) && downloads is "pending" or "failed")
+            {
+                context.Response.Headers[HttpResponseHeader.RetryAfter] = "1";
+                context.Response.Headers[HttpResponseHeader.CacheControl] = "no-store";
+                await WriteTextAsync(context.Response, HttpStatusCode.ServiceUnavailable,
+                    downloads == "pending" ? "PDF update in progress. Please retry shortly." : "PDF generation failed. Fix the source and save again.");
+                return;
+            }
             if (!File.Exists(filePath))
             {
                 await WriteTextAsync(context.Response, HttpStatusCode.NotFound, "Not found");
@@ -148,20 +190,27 @@ public sealed class PreviewServer : IDisposable
             }
             else
             {
-                var file = new FileInfo(filePath);
-                context.Response.ContentLength64 = file.Length;
-                await using var input = file.OpenRead();
+                await using var input = new FileStream(filePath, FileMode.Open, FileAccess.Read,
+                    FileShare.Read | FileShare.Delete, 4096, FileOptions.Asynchronous);
+                context.Response.ContentLength64 = input.Length;
                 await input.CopyToAsync(context.Response.OutputStream, cancellationToken);
             }
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or UriFormatException or HttpListenerException or SocketException or ObjectDisposedException or OperationCanceledException)
+        catch (Exception exception) when (exception is HttpListenerException or SocketException ||
+                                          exception is IOException { InnerException: HttpListenerException or SocketException })
         {
+            // Reloads can close the connection during delivery; there is no client left to receive an error response.
+        }
+        catch (Exception exception)
+        {
+            if (!cancellationToken.IsCancellationRequested)
+                Console.Error.WriteLine($"Could not serve {context.Request.Url?.AbsolutePath}: {exception.Message}");
             try
             {
                 if (!cancellationToken.IsCancellationRequested && context.Response.OutputStream.CanWrite)
                     await WriteTextAsync(context.Response, HttpStatusCode.InternalServerError, "Could not read the requested file");
             }
-            catch (Exception writeException) when (writeException is IOException or HttpListenerException or SocketException or ObjectDisposedException)
+            catch (Exception writeException) when (writeException is IOException or HttpListenerException or SocketException or ObjectDisposedException or InvalidOperationException)
             {
             }
         }
@@ -240,7 +289,7 @@ public sealed class PreviewServer : IDisposable
             var initialMessage = JsonSerializer.Serialize(new LiveReloadMessage(
                 revision,
                 clientRevision.HasValue && clientRevision.Value != revision,
-                Array.Empty<string>()),
+                Array.Empty<string>(), Volatile.Read(ref _downloads)),
                 PreviewServerJsonContext.Default.LiveReloadMessage);
             var initialEvent = Encoding.UTF8.GetBytes($"data: {initialMessage}\n\n");
             await client.Response.OutputStream.WriteAsync(initialEvent, cancellationToken);
@@ -286,6 +335,15 @@ public sealed class PreviewServer : IDisposable
               const currentPath = {{JsonSerializer.Serialize(servedPath, PreviewServerJsonContext.Default.String)}};
               let events;
               let revision;
+              const downloadStatus = document.createElement("div");
+              downloadStatus.id = "mdu-download-status";
+              downloadStatus.setAttribute("role", "status");
+              downloadStatus.style.cssText = "position:fixed;bottom:1rem;left:1rem;z-index:9999;max-width:calc(100vw - 2rem);box-sizing:border-box;padding:.75rem 1rem;border-radius:6px;background:var(--surface-current,#fff);color:var(--text-primary,#222);border:1px solid var(--border,currentColor)";
+              const updateDownloads = status => {
+                downloadStatus.textContent = status === "pending" ? "Updating PDF downloads…" : status === "failed" ? "PDF downloads unavailable: fix the source and save again." : "";
+                downloadStatus.hidden = !downloadStatus.textContent;
+                if (!downloadStatus.isConnected) document.body.append(downloadStatus);
+              };
               const disconnect = () => {
                 events?.close();
                 events = undefined;
@@ -298,6 +356,7 @@ public sealed class PreviewServer : IDisposable
                 events.onmessage = message => {
                   const change = JSON.parse(message.data);
                   revision = change.revision;
+                  updateDownloads(change.downloads);
                   if (change.reloadAll || change.paths.includes(currentPath)) location.reload();
                 };
               };
@@ -354,8 +413,10 @@ public sealed class PreviewServer : IDisposable
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(LiveReloadMessage))]
 [JsonSerializable(typeof(string))]
+[JsonSerializable(typeof(PreviewStatus))]
 internal partial class PreviewServerJsonContext : JsonSerializerContext
 {
 }
 
-internal sealed record LiveReloadMessage(long Revision, bool ReloadAll, string[] Paths);
+internal sealed record LiveReloadMessage(long Revision, bool ReloadAll, string[] Paths, string Downloads);
+internal sealed record PreviewStatus(bool Building, string Downloads);

@@ -19,28 +19,73 @@ public sealed class PdfRenderer(HtmlRenderer htmlRenderer)
 
     public void WritePdf(Stream output, string title, IReadOnlyList<PdfSourceSection> sections, bool includeFrontMatter = true)
     {
-        var coverTitle = PdfEncoding.PrintableEmojiText(sections.FirstOrDefault()?.Title ?? title);
-        var layout = new PdfLayout(htmlRenderer, coverTitle);
-        foreach (var section in sections)
-            layout.RenderSection(section);
-
-        var result = layout.Complete();
-        var description = sections.Count == 0 ? string.Empty : PdfEncoding.PrintableEmojiText(GetDescription(sections[0].Markdown));
-        var frontMatter = includeFrontMatter ? PdfFrontMatter.Create(coverTitle, description, sections, result) :
-            new PdfFrontMatterResult([]);
-        var pages = frontMatter.Pages.Concat(result.Pages).ToArray();
-        var destinations = result.Destinations.ToDictionary(
-            pair => pair.Key,
-            pair => pair.Value with { PageIndex = pair.Value.PageIndex + frontMatter.Pages.Count },
-            StringComparer.Ordinal);
-        PdfLayout.AddFooters(pages);
-        PdfFileWriter.Write(output, coverTitle, pages, destinations);
+        var session = CreateSession(title, sections, includeFrontMatter);
+        while (session.RenderNextSection()) { }
+        session.WritePdf(output);
     }
 
-    private string GetDescription(string markdown)
+    public RenderSession CreateSession(string title, IReadOnlyList<PdfSourceSection> sections, bool includeFrontMatter = true) =>
+        new(htmlRenderer, title, sections, includeFrontMatter);
+
+    public sealed class RenderSession
     {
-        var document = PdfHtmlDocument.Parse(htmlRenderer.RenderPdfMarkdownFragment(markdown));
-        return PdfLayout.CollapseWhitespace(document.SelectSingleNode("//p")?.InnerText ?? string.Empty);
+        private readonly HtmlRenderer _renderer;
+        private readonly IReadOnlyList<PdfSourceSection> _sections;
+        private readonly bool _includeFrontMatter;
+        private readonly string _coverTitle;
+        private readonly PdfLayout _layout;
+        private int _nextSection;
+        private bool _failed;
+
+        internal RenderSession(HtmlRenderer renderer, string title, IReadOnlyList<PdfSourceSection> sections, bool includeFrontMatter)
+        {
+            _renderer = renderer;
+            _sections = sections;
+            _includeFrontMatter = includeFrontMatter;
+            _coverTitle = PdfEncoding.PrintableEmojiText(sections.FirstOrDefault()?.Title ?? title);
+            _layout = new PdfLayout(renderer, _coverTitle);
+        }
+
+        public bool RenderNextSection()
+        {
+            if (_failed) throw new InvalidOperationException("The PDF session failed; create a new session to retry.");
+            if (_nextSection == _sections.Count) return false;
+            try
+            {
+                _layout.RenderSection(_sections[_nextSection]);
+                _nextSection++;
+            }
+            catch
+            {
+                // The layout may already contain part of this section; it cannot safely be retried or published.
+                _failed = true;
+                throw;
+            }
+            return true;
+        }
+
+        public void WritePdf(Stream output)
+        {
+            if (_failed || _nextSection != _sections.Count)
+                throw new InvalidOperationException("Cannot write an incomplete or failed PDF session.");
+            var result = _layout.Complete();
+            var description = _sections.Count == 0 ? string.Empty : PdfEncoding.PrintableEmojiText(GetDescription(_sections[0].Markdown));
+            var frontMatter = _includeFrontMatter ? PdfFrontMatter.Create(_coverTitle, description, _sections, result) :
+                new PdfFrontMatterResult([]);
+            var pages = frontMatter.Pages.Concat(result.Pages).ToArray();
+            var destinations = result.Destinations.ToDictionary(
+                pair => pair.Key,
+                pair => pair.Value with { PageIndex = pair.Value.PageIndex + frontMatter.Pages.Count },
+                StringComparer.Ordinal);
+            PdfLayout.AddFooters(pages);
+            PdfFileWriter.Write(output, _coverTitle, pages, destinations);
+        }
+
+        private string GetDescription(string markdown)
+        {
+            var document = PdfHtmlDocument.Parse(_renderer.RenderPdfMarkdownFragment(markdown));
+            return PdfLayout.CollapseWhitespace(document.SelectSingleNode("//p")?.InnerText ?? string.Empty);
+        }
     }
 }
 

@@ -7,38 +7,83 @@ namespace StaticCode.Diagrams.Component;
 /// containers with braces, links with PlantUML's length and direction rules, notes, and <c>left to right direction</c>.
 /// Styling such as <c>skinparam</c> and colors is ignored because the page theme defines the look.
 /// </summary>
-public sealed class ComponentParser
+public sealed partial class ComponentParser
 {
     private const RegexOptions Options = RegexOptions.Compiled | RegexOptions.CultureInvariant;
     private const string Name = @"[\p{L}\p{N}_.]+";
 
-    private static readonly Regex KindRegex = new(
+    private static readonly Regex KindRegex = KindRegexPattern();
+
+    [GeneratedRegex(
         @"^(?<kind>component|interface|actor|database|node|cloud|folder|frame|package|rectangle|card|artifact|file|queue|storage)\s+(?<rest>.+)$",
-        Options);
-    private static readonly Regex DeclarationRegex = new(
+        Options)]
+    private static partial Regex KindRegexPattern();
+    private static readonly Regex DeclarationRegex = DeclarationRegexPattern();
+
+    [GeneratedRegex(
         $@"^(?<name>""[^""]*""|\[[^\]]*\]|:[^:]+:|{Name})(?:\s+as\s+(?<alias>""[^""]*""|\[[^\]]*\]|{Name}))?" +
         @"(?:\s*(?<stereotype><<[^>]+>>))?(?:\s*#\S+)?\s*(?<brace>\{)?\s*$",
-        Options);
-    private static readonly Regex ReferenceRegex = new(
+        Options)]
+    private static partial Regex DeclarationRegexPattern();
+    private static readonly Regex ReferenceRegex = ReferenceRegexPattern();
+
+    [GeneratedRegex(
         $@"\G(?:\[(?<component>[^\]]+)\]|\(\)\s*""(?<quotedInterface>[^""]+)""|\(\)\s*(?<interface>{Name})|:(?<actor>[^:]+):|(?<id>{Name}))",
-        Options);
-    private static readonly Regex AliasRegex = new($@"\G\s+as\s+(?<alias>{Name})", Options);
-    private static readonly Regex StereotypeRegex = new(@"\G\s*(?<stereotype><<[^>]+>>)", Options);
-    private static readonly Regex LinkRegex = new(
+        Options)]
+    private static partial Regex ReferenceRegexPattern();
+    private static readonly Regex AliasRegex = AliasRegexPattern();
+
+    [GeneratedRegex($@"\G\s+as\s+(?<alias>{Name})", Options)]
+    private static partial Regex AliasRegexPattern();
+    private static readonly Regex StereotypeRegex = StereotypeRegexPattern();
+
+    [GeneratedRegex(@"\G\s*(?<stereotype><<[^>]+>>)", Options)]
+    private static partial Regex StereotypeRegexPattern();
+    private static readonly Regex LinkRegex = LinkRegexPattern();
+
+    [GeneratedRegex(
         @"\G\s*(?<from><\||<)?(?<a>[-.=]+)(?:\[(?<style>[^\]]*)\])?(?:(?<direction>up|down|left|right|do|le|ri|u|d|l|r)(?=[-.=]))?" +
         @"(?<b>[-.=]*)(?:\[(?<style2>[^\]]*)\])?(?<to>\|>|>)?\s*",
-        Options);
-    private static readonly Regex LabelRegex = new(@"\G\s*:\s*(?<label>.*)$", Options);
-    private static readonly Regex NoteRegex = new(
+        Options)]
+    private static partial Regex LinkRegexPattern();
+    private static readonly Regex LabelRegex = LabelRegexPattern();
+
+    [GeneratedRegex(@"\G\s*:\s*(?<label>.*)$", Options)]
+    private static partial Regex LabelRegexPattern();
+    private static readonly Regex NoteRegex = NoteRegexPattern();
+
+    [GeneratedRegex(
         $@"^note\s+(?<position>left|right|top|bottom)\s+of\s+(?<target>\[[^\]]+\]|{Name})\s*(?:#\S+)?\s*(?::\s*(?<text>.*))?$",
-        Options);
-    private static readonly Regex FloatingNoteRegex = new($@"^note\s+(?:""(?<text>[^""]*)""\s+)?as\s+(?<id>{Name})\s*(?:#\S+)?$", Options);
-    private static readonly Regex EndNoteRegex = new(@"^end\s?note$", Options);
-    private static readonly Regex TitleRegex = new(@"^title\s+(?<title>.+)$", Options);
-    private static readonly Regex TogetherRegex = new(@"^together\s*\{$", Options);
-    private static readonly Regex IgnoredRegex = new(@"^(?:skinparam|hide|show|scale|!theme|!pragma|allowmixing|allow_mixing)\b", Options);
-    private static readonly Regex DirectionRegex = new(@"^(?<direction>left to right|top to bottom) direction$", Options);
-    private static readonly Regex UrlRegex = new($@"^url\s+of\s+(?<id>{Name})\s+is\s+\[\[(?<url>[^\]]+)\]\]$", Options);
+        Options)]
+    private static partial Regex NoteRegexPattern();
+    private static readonly Regex FloatingNoteRegex = FloatingNoteRegexPattern();
+
+    [GeneratedRegex($@"^note\s+(?:""(?<text>[^""]*)""\s+)?as\s+(?<id>{Name})\s*(?:#\S+)?$", Options)]
+    private static partial Regex FloatingNoteRegexPattern();
+    private static readonly Regex EndNoteRegex = EndNoteRegexPattern();
+
+    [GeneratedRegex(@"^end\s?note$", Options)]
+    private static partial Regex EndNoteRegexPattern();
+    private static readonly Regex TitleRegex = TitleRegexPattern();
+
+    [GeneratedRegex(@"^title\s+(?<title>.+)$", Options)]
+    private static partial Regex TitleRegexPattern();
+    private static readonly Regex TogetherRegex = TogetherRegexPattern();
+
+    [GeneratedRegex(@"^together\s*\{$", Options)]
+    private static partial Regex TogetherRegexPattern();
+    private static readonly Regex IgnoredRegex = IgnoredRegexPattern();
+
+    [GeneratedRegex(@"^(?:skinparam|hide|show|scale|!theme|!pragma|allowmixing|allow_mixing)\b", Options)]
+    private static partial Regex IgnoredRegexPattern();
+    private static readonly Regex DirectionRegex = DirectionRegexPattern();
+
+    [GeneratedRegex(@"^(?<direction>left to right|top to bottom) direction$", Options)]
+    private static partial Regex DirectionRegexPattern();
+    private static readonly Regex UrlRegex = UrlRegexPattern();
+
+    [GeneratedRegex($@"^url\s+of\s+(?<id>{Name})\s+is\s+\[\[(?<url>[^\]]+)\]\]$", Options)]
+    private static partial Regex UrlRegexPattern();
 
     private readonly List<string> _lines;
     private readonly Dictionary<string, ComponentElement> _elements = new(StringComparer.Ordinal);

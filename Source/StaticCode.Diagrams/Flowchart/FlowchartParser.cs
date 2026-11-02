@@ -7,28 +7,64 @@ namespace StaticCode.Diagrams.Flowchart;
 /// Parses the flowchart subset of Mermaid syntax: nodes with basic shapes, links with labels,
 /// link chains, and <c>&amp;</c> groups. Styling statements are ignored because colors come from the page theme.
 /// </summary>
-public sealed class FlowchartParser
+public sealed partial class FlowchartParser
 {
-    private static readonly Regex HeaderRegex = new(
+    private static readonly Regex HeaderRegex = HeaderRegexPattern();
+
+    [GeneratedRegex(
         @"^(?:flowchart|graph)(?:[ \t]+(?<direction>TB|TD|BT|LR|RL))?[ \t]*(?:;(?<rest>.*))?$",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
-    private static readonly Regex KeywordRegex = new(@"\G(?<keyword>[A-Za-z]+)(?=[ \t:{]|$)", RegexOptions.Compiled);
-    private static readonly Regex IdRegex = new(@"\G(?:[\p{L}\p{N}_]+:)?[\p{L}\p{N}_]+", RegexOptions.Compiled);
-    private static readonly Regex SubgraphRegex = new(
+        RegexOptions.Compiled | RegexOptions.CultureInvariant)]
+    private static partial Regex HeaderRegexPattern();
+    private static readonly Regex KeywordRegex = KeywordRegexPattern();
+
+    [GeneratedRegex(@"\G(?<keyword>[A-Za-z]+)(?=[ \t:{]|$)", RegexOptions.Compiled)]
+    private static partial Regex KeywordRegexPattern();
+    private static readonly Regex IdRegex = IdRegexPattern();
+
+    [GeneratedRegex(@"\G(?:[\p{L}\p{N}_]+:)?[\p{L}\p{N}_]+", RegexOptions.Compiled)]
+    private static partial Regex IdRegexPattern();
+    private static readonly Regex SubgraphRegex = SubgraphRegexPattern();
+
+    [GeneratedRegex(
         "^subgraph[ \\t]+(?<id>[^ \\t\\[]+)[ \\t]*(?:\\[(?:\\\"(?<quoted>.*?)\\\"|(?<plain>.*?))\\])?[ \\t]*$",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
-    private static readonly Regex ActorRegex = new(@"^(?<id>[\p{L}\p{N}_]+)(?:[ \t]+as[ \t]+(?<label>.+))?$", RegexOptions.Compiled);
-    private static readonly Regex ClickRegex = new(
+        RegexOptions.Compiled | RegexOptions.CultureInvariant)]
+    private static partial Regex SubgraphRegexPattern();
+    private static readonly Regex ActorRegex = ActorRegexPattern();
+
+    [GeneratedRegex(@"^(?<id>[\p{L}\p{N}_]+)(?:[ \t]+as[ \t]+(?<label>.+))?$", RegexOptions.Compiled)]
+    private static partial Regex ActorRegexPattern();
+    private static readonly Regex ClickRegex = ClickRegexPattern();
+
+    [GeneratedRegex(
         "^(?<id>[\\p{L}\\p{N}_]+)[ \\t]+(?:href[ \\t]+)?(?:\"(?<doubleUrl>[^\"]*)\"|'(?<singleUrl>[^']*)'|(?<bareUrl>[^ \\t]+))(?:[ \\t]+\"[^\"]*\")?[ \\t]*;?$",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
-    private static readonly Regex ClassSuffixRegex = new(@"\G:::[\w-]+", RegexOptions.Compiled);
-    private static readonly Regex TextLinkOpenRegex = new(@"\G(?<start>[<ox])?(?<kind>--|==|-\.)(?=[ \t])", RegexOptions.Compiled);
-    private static readonly Regex SolidCloseRegex = new(@"(?<line>-{3,}|--(?=[>ox]))(?<end>[>ox])?", RegexOptions.Compiled);
-    private static readonly Regex ThickCloseRegex = new(@"(?<line>={3,}|==(?=[>ox]))(?<end>[>ox])?", RegexOptions.Compiled);
-    private static readonly Regex DottedCloseRegex = new(@"(?<line>\.+-)(?<end>[>ox])?", RegexOptions.Compiled);
-    private static readonly Regex SimpleLinkRegex = new(
+        RegexOptions.Compiled | RegexOptions.CultureInvariant)]
+    private static partial Regex ClickRegexPattern();
+    private static readonly Regex ClassSuffixRegex = ClassSuffixRegexPattern();
+
+    [GeneratedRegex(@"\G:::[\w-]+", RegexOptions.Compiled)]
+    private static partial Regex ClassSuffixRegexPattern();
+    private static readonly Regex TextLinkOpenRegex = TextLinkOpenRegexPattern();
+
+    [GeneratedRegex(@"\G(?<start>[<ox])?(?<kind>--|==|-\.)(?=[ \t])", RegexOptions.Compiled)]
+    private static partial Regex TextLinkOpenRegexPattern();
+    private static readonly Regex SolidCloseRegex = SolidCloseRegexPattern();
+
+    [GeneratedRegex(@"(?<line>-{3,}|--(?=[>ox]))(?<end>[>ox])?", RegexOptions.Compiled)]
+    private static partial Regex SolidCloseRegexPattern();
+    private static readonly Regex ThickCloseRegex = ThickCloseRegexPattern();
+
+    [GeneratedRegex(@"(?<line>={3,}|==(?=[>ox]))(?<end>[>ox])?", RegexOptions.Compiled)]
+    private static partial Regex ThickCloseRegexPattern();
+    private static readonly Regex DottedCloseRegex = DottedCloseRegexPattern();
+
+    [GeneratedRegex(@"(?<line>\.+-)(?<end>[>ox])?", RegexOptions.Compiled)]
+    private static partial Regex DottedCloseRegexPattern();
+    private static readonly Regex SimpleLinkRegex = SimpleLinkRegexPattern();
+
+    [GeneratedRegex(
         @"\G(?<start>[<ox])?(?:(?<solid>-{3,}|--(?=[>ox]))|(?<thick>={3,}|==(?=[>ox]))|-(?<dots>\.+)-)(?<end>[>ox])?",
-        RegexOptions.Compiled);
+        RegexOptions.Compiled)]
+    private static partial Regex SimpleLinkRegexPattern();
 
     private static readonly (string Open, string Close, NodeShape Shape)[] Shapes =
     {

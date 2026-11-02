@@ -26,7 +26,15 @@ public class MarkdownFile: INode<MarkdownFile>
     /// <summary>The glossary of the imported repository this page comes from; null for pages of the site itself.</summary>
     public Glossary? Glossary { get; set; }
 
-    public string ReadMarkdown() => MarkdownContent ?? File.ReadAllText(FileInfo.FullName);
+    private string? _markdownSnapshot;
+
+    /// <summary>Reads this node's source snapshot. Call InvalidateMarkdown before reusing the node after a source write.</summary>
+    public string ReadMarkdown()
+    {
+        return MarkdownContent ?? (_markdownSnapshot ??= File.ReadAllText(FileInfo.FullName));
+    }
+
+    public void InvalidateMarkdown() => _markdownSnapshot = null;
 
     public string Title { get; set; } = string.Empty;
     public string HeadingTitle { get; set; } = string.Empty;

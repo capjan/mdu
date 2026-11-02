@@ -12,6 +12,7 @@ namespace Mdu.Commands;
 public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRenderer)
 {
     private readonly Dictionary<string, PdfSourceSection[]> _sitePdfSections = new(MarkdownLinks.PathComparer);
+    private readonly Dictionary<MarkdownFile, (string Markdown, IReadOnlyList<string> Links)> _pagePdfLinks = new();
     public IReadOnlyCollection<string> GeneratedSitePdfPaths { get; private set; } = Array.Empty<string>();
 
     public int Execute(RenderCommandSettings settings)
@@ -90,9 +91,13 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         WritePdf(rootPath, outputPath, Flatten(rootPath, graph), includeFrontMatter: true);
 
     public int WriteSitePdfIfLinked(string rootPath, string outputPath, IEnumerable<MarkdownFile> graph,
-        bool reuseUnchanged = false)
+        bool reuseUnchanged = false, Action<string, PdfSourceSection[]>? defer = null)
     {
-        if (!reuseUnchanged) _sitePdfSections.Clear();
+        if (!reuseUnchanged)
+        {
+            _sitePdfSections.Clear();
+            _pagePdfLinks.Clear();
+        }
         outputPath = Path.GetFullPath(outputPath);
         var roots = graph.ToArray();
         var files = Flatten(rootPath, roots).ToArray();
@@ -100,12 +105,18 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         var failed = false;
         foreach (var (page, _) in files)
         {
-            var markdown = OpenApiMarkdownRenderer.ExpandCodeBlocks(
-                RemoveFrontMatter(page.ReadMarkdown(), page.FrontMatter), page.FileInfo.FullName,
-                out var specificationPages, page.SourceRootPath);
-            var links = pdfRenderer.FindPdfLinks(markdown).Concat(
-                specificationPages.SelectMany(specification => pdfRenderer.FindPdfLinks(specification.Markdown)));
-            foreach (var url in links.Distinct(StringComparer.Ordinal))
+            var source = page.ReadMarkdown();
+            if (!_pagePdfLinks.TryGetValue(page, out var cached) || !ReferenceEquals(source, cached.Markdown))
+            {
+                var markdown = OpenApiMarkdownRenderer.ExpandCodeBlocks(
+                    RemoveFrontMatter(source, page.FrontMatter), page.FileInfo.FullName,
+                    out var specificationPages, page.SourceRootPath);
+                var links = pdfRenderer.FindPdfLinks(markdown).Concat(
+                    specificationPages.SelectMany(specification => pdfRenderer.FindPdfLinks(specification.Markdown)))
+                    .Distinct(StringComparer.Ordinal).ToArray();
+                _pagePdfLinks[page] = cached = (source, links);
+            }
+            foreach (var url in cached.Links)
             {
                 MarkdownFile? selected;
                 try
@@ -130,7 +141,7 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
 
         foreach (var (destination, selected) in requests)
             if (WritePdf(rootPath, destination, selected is null ? files : Flatten(rootPath, [selected]),
-                    includeFrontMatter: true, reuseUnchanged: reuseUnchanged, trackSitePdf: true) != 0)
+                    includeFrontMatter: true, reuseUnchanged: reuseUnchanged, trackSitePdf: true, defer: defer) != 0)
                 failed = true;
 
         if (!requests.ContainsKey(outputPath) && File.Exists(outputPath)) File.Delete(outputPath);
@@ -152,7 +163,8 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         IEnumerable<(MarkdownFile File, int Depth)> files,
         bool includeFrontMatter,
         bool reuseUnchanged = false,
-        bool trackSitePdf = false)
+        bool trackSitePdf = false,
+        Action<string, PdfSourceSection[]>? defer = null)
     {
         PdfSourceSection[] sections;
         try
@@ -220,13 +232,24 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
             previousSections.SequenceEqual(sections))
             return 0;
 
+        if (defer is not null)
+        {
+            defer(outputPath, sections);
+            return 0;
+        }
+        return WritePreparedPdf(outputPath, sections, trackSitePdf,
+            stream => pdfRenderer.WritePdf(stream, Path.GetFileNameWithoutExtension(outputPath), sections, includeFrontMatter));
+    }
+
+    private int WritePreparedPdf(string outputPath, PdfSourceSection[] sections, bool trackSitePdf, Action<Stream> write)
+    {
         var outputDirectory = Path.GetDirectoryName(outputPath)!;
         Directory.CreateDirectory(outputDirectory);
         var temporaryPath = outputPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
             using (var stream = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write))
-                pdfRenderer.WritePdf(stream, Path.GetFileNameWithoutExtension(outputPath), sections, includeFrontMatter);
+                write(stream);
             File.Move(temporaryPath, outputPath, true);
             if (trackSitePdf) _sitePdfSections[outputPath] = sections;
         }
@@ -240,6 +263,38 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
 
         Console.WriteLine($"Wrote {sections.Length} Markdown files to {outputPath}");
         return 0;
+    }
+
+    public sealed class SitePdfJob(string outputPath, PdfSourceSection[] sections, PdfRenderer.RenderSession session)
+    {
+        public string OutputPath { get; } = outputPath;
+        public PdfSourceSection[] Sections { get; } = sections;
+        public PdfRenderer.RenderSession Session { get; } = session;
+        public bool Failed { get; internal set; }
+        internal bool Completed { get; set; }
+    }
+
+    public SitePdfJob CreateSitePdfJob(string outputPath, PdfSourceSection[] sections) =>
+        new(outputPath, sections, pdfRenderer.CreateSession(Path.GetFileNameWithoutExtension(outputPath), sections));
+
+    public bool AdvanceSitePdfJob(SitePdfJob job)
+    {
+        if (job.Completed) return true;
+        try
+        {
+            if (job.Session.RenderNextSection()) return false;
+            job.Failed = WritePreparedPdf(job.OutputPath, job.Sections, true, job.Session.WritePdf) != 0;
+        }
+        catch (Exception exception)
+        {
+            // A background PDF failure must terminate this job rather than retry a partially mutated session.
+            job.Failed = true;
+            job.Completed = true;
+            Console.Error.WriteLine($"Could not write PDF: {exception.Message}");
+            DiscardSitePdf(job.OutputPath);
+        }
+        job.Completed = true;
+        return true;
     }
 
     private string? FindMalformedPdfLink(IEnumerable<PdfSourceSection> sections)

@@ -142,7 +142,11 @@ internal static partial class SvgIconReader
             throw new InvalidOperationException($"The custom icon is not a valid SVG file: {path} ({exception.Message})", exception);
         }
 
-        var root = document.Root;
+        return ReadRoot(document.Root, path, idPrefix);
+    }
+
+    internal static IconData ReadRoot(XElement? root, string path, string idPrefix)
+    {
         if (root is null || root.Name != Svg + "svg")
             throw new InvalidOperationException($"The custom icon is not an SVG file: {path}");
 

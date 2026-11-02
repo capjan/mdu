@@ -122,7 +122,7 @@ When a source uses unsupported syntax, or a component diagram exceeds its size l
 
 ## StaticCode.Icons
 
-Embeds the icon sets behind the [icon shortcodes](../Features/Icons-and-Emojis.md) as gzip-compressed, reduced Iconify JSON. `IconCatalog` resolves a shortcode such as `:material-rocket:` to its SVG. The script `update-icon-sets.sh` regenerates the sets with npm, and `dashboard-icons.mjs` sanitizes the colored Dashboard Icons with SVGO.
+Embeds the icon sets behind the [icon shortcodes](../Features/Icons-and-Emojis.md) as gzip-compressed, reduced Iconify JSON. `IconCatalog` resolves a shortcode such as `:material-rocket:` to its SVG. The .NET tool in `Tools/IconSets` downloads pinned source data, reduces the Iconify JSON, and sanitizes the colored Dashboard Icons with the same SVG reader used for custom icons. It needs no npm or Node.js runtime; Git supplies the pinned Dashboard Icons checkout.
 
 ## Third-party libraries
 

@@ -6,6 +6,12 @@ navigation.order: 5
 
 `mdu serve` renders the site, starts a local preview server, and opens it in your browser. It generates `documentation.pdf` only if a page contains `[Download the PDF](mdu:pdf)`. While it runs, it watches the documentation folder and the folders containing referenced OpenAPI files: when you save a page, a linked image, or a referenced OpenAPI file, the affected output is refreshed and the browser reloads it. Markdown changes refresh the PDF when a PDF Link is present; adding the first link creates the PDF, and removing the last link removes it. Press ++ctrl+c++ to stop.
 
+The preview becomes available once the first page, navigation and search are ready. Other pages are completed in the background or when requested, followed by PDFs. A status message shows when downloads are being updated or have failed; those downloads return HTTP 503 until successfully regenerated, so an old PDF cannot be mistaken for the current version.
+
+A PDF generation error, including during the initial build, keeps the preview running so you can fix the source and save again. This changes the earlier behavior that exited with code 1 on an initial PDF error. Use [`mdu render`](render.md) or [`mdu pdf`](pdf.md) when you need a command that fails if required PDF output cannot be generated. Errors that prevent the initial HTML preview or server from starting still exit with code 1.
+
+If a page update fails, requests for that unfinished page return an error instead of an older successful version. Pending pages can be retried by requesting them again; after an interrupted change batch, fixing the source and saving triggers a fresh site rebuild. The server logs the error and continues serving other available pages.
+
 ## Usage
 
 ```bash

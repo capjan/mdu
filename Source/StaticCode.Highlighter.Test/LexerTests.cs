@@ -273,5 +273,9 @@ public class LexerTests
     public void LexerIsCachedPerLanguage()
     {
         Assert.Same(Lexer.ForLanguage("typescript"), Lexer.ForLanguage("typescript"));
+        Assert.Same(Lexer.ForLanguage("typescript"), Lexer.ForLanguage("ts"));
+        var plain = Lexer.ForLanguage("text");
+        for (var number = 0; number < 1000; number++)
+            Assert.Same(plain, Lexer.ForLanguage($"unknown{number}"));
     }
 }
