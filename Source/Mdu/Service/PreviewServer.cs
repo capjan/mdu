@@ -196,6 +196,11 @@ public sealed class PreviewServer : IDisposable
                 await input.CopyToAsync(context.Response.OutputStream, cancellationToken);
             }
         }
+        catch (Exception exception) when (exception is HttpListenerException or SocketException ||
+                                          exception is IOException { InnerException: HttpListenerException or SocketException })
+        {
+            // Reloads can close the connection during delivery; there is no client left to receive an error response.
+        }
         catch (Exception exception)
         {
             if (!cancellationToken.IsCancellationRequested)
@@ -205,7 +210,7 @@ public sealed class PreviewServer : IDisposable
                 if (!cancellationToken.IsCancellationRequested && context.Response.OutputStream.CanWrite)
                     await WriteTextAsync(context.Response, HttpStatusCode.InternalServerError, "Could not read the requested file");
             }
-            catch (Exception writeException) when (writeException is IOException or HttpListenerException or SocketException or ObjectDisposedException)
+            catch (Exception writeException) when (writeException is IOException or HttpListenerException or SocketException or ObjectDisposedException or InvalidOperationException)
             {
             }
         }
