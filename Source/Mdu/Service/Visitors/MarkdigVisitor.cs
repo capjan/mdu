@@ -64,6 +64,8 @@ public class MarkdigVisitor : BaseVisitor
 
     public void PrepareSearchIndex() => _navigationRoots.Visit(new SearchPreparationVisitor(this));
 
+    public void InvalidatePreparedPage(MarkdownFile page) => _preparedPages.Remove(page);
+
     public IReadOnlyList<string> GetPreparedSpecificationPagePaths(MarkdownFile page) =>
         _preparedPages.TryGetValue(page, out var prepared)
             ? prepared.Specifications.Select(spec => Path.GetFullPath(Path.Combine(

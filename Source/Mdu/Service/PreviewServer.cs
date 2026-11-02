@@ -196,8 +196,10 @@ public sealed class PreviewServer : IDisposable
                 await input.CopyToAsync(context.Response.OutputStream, cancellationToken);
             }
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or HttpListenerException or SocketException or InvalidOperationException or YamlDotNet.Core.YamlException or OperationCanceledException)
+        catch (Exception exception)
         {
+            if (!cancellationToken.IsCancellationRequested)
+                Console.Error.WriteLine($"Could not serve {context.Request.Url?.AbsolutePath}: {exception.Message}");
             try
             {
                 if (!cancellationToken.IsCancellationRequested && context.Response.OutputStream.CanWrite)

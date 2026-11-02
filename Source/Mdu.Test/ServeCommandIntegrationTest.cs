@@ -8,6 +8,49 @@ namespace Mdu.Test;
 public class ServeCommandIntegrationTest
 {
     [Fact]
+    public async Task RenameThenRecreateSavesDoNotRebuildTheSiteDuringTheShortMissingFileWindow()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-serve-delayed-save-{Guid.NewGuid():N}");
+        var docs = Path.Combine(root, "Docs");
+        var site = Path.Combine(root, "site");
+        Directory.CreateDirectory(docs);
+        var home = Path.Combine(docs, "README.md");
+        File.WriteAllText(home, "# Home\n\nBeforeSave");
+        File.WriteAllText(Path.Combine(docs, "Other.md"), "# Other\n\nUnchanged");
+        var (process, port) = await StartServerOnFreePortAsync(docs, site);
+        using var _ = process;
+        using var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/"), Timeout = TimeSpan.FromSeconds(5) };
+        try
+        {
+            await WaitUntilAsync(async () => (await client.GetStringAsync("__mdu/status")).Contains("\"building\":false"), process);
+            var otherTime = File.GetLastWriteTimeUtc(Path.Combine(site, "Other.html"));
+            using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            using var eventsClient = new HttpClient { BaseAddress = client.BaseAddress };
+            await using var events = await eventsClient.GetStreamAsync("__mdu/events", cancellation.Token);
+            using var reader = new StreamReader(events);
+            async Task<System.Text.Json.JsonDocument> NextEvent()
+            {
+                while (await reader.ReadLineAsync(cancellation.Token) is { } line)
+                    if (line.StartsWith("data: ", StringComparison.Ordinal)) return System.Text.Json.JsonDocument.Parse(line[6..]);
+                throw new InvalidOperationException("The reload stream ended.");
+            }
+            using var initial = await NextEvent();
+            File.Move(home, Path.Combine(root, "saved-original.md"));
+            await Task.Delay(50);
+            File.WriteAllText(home, "# Home\n\nAfterDelayedSave");
+            await WaitUntilAsync(async () => await PageContainsAsync(client, client.BaseAddress.ToString(), "AfterDelayedSave"), process);
+            using var update = await NextEvent();
+            Assert.False(update.RootElement.GetProperty("reloadAll").GetBoolean());
+            Assert.Equal(otherTime, File.GetLastWriteTimeUtc(Path.Combine(site, "Other.html")));
+        }
+        finally
+        {
+            StopServer(process);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task PendingPdfsNeverServeStaleBytesAndNewEditsReplaceUnfinishedWork()
     {
         var root = Path.Combine(Path.GetTempPath(), $"mdu-serve-pdf-pending-{Guid.NewGuid():N}");

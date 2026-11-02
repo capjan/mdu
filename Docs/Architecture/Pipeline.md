@@ -80,7 +80,7 @@ Assets are found through the links on each page. Only linked local files are cop
 
 The [quality requirements](README.md#quality-requirements) define the responsiveness, startup, memory, and correctness targets for future optimization. The flow below describes the current implementation.
 
-`mdu serve` prepares the complete navigation and search index, renders the entry page, and starts the local HTTP server. Other HTML pages are completed one at a time. A request for a pending page renders it before responding, so navigation and search results remain usable. The preview-only `/__mdu/status` endpoint distinguishes pending HTML work from complete-site readiness. Changes are collected for 20 ms and handled as one batch:
+`mdu serve` prepares the complete navigation and search index, renders the entry page, and starts the local HTTP server. Other HTML pages are completed one at a time. A request for a pending page renders it before responding, so navigation and search results remain usable. The preview-only `/__mdu/status` endpoint distinguishes pending HTML work from complete-site readiness. Changes are collected for 20 ms and handled as one batch. Batches containing deletions or renames get another 75 ms to collect a replacement file, avoiding a site rebuild during a short atomic-save gap:
 
 ```mermaid
 sequenceDiagram
@@ -102,6 +102,10 @@ sequenceDiagram
     Browser->>Browser: Reload if the open page changed
     Serve->>Serve: Complete remaining pages between change batches
 ```
+
+All affected source snapshots and prepared page expansions are invalidated before any batch parsing. If a batch fails, affected unfinished pages return an error rather than old HTML, and the next save rebuilds from current sources so later pages in the aborted batch are not lost. A failed pending page remains pending, is skipped by the background worker to avoid repeated failing work, and can be retried by a request or a new save. Render errors are logged and return HTTP 500; a failed page does not make the site ready. A replacement generation clears the old pending queue only after its new graph, search preparation and PDF planning succeed. Siblings rendered for new OpenAPI output names are removed from the old queue.
+
+Static assets and PDF availability responses bypass the HTML rendering lock. PDF readiness remains global: a pending or failed download generation temporarily makes all generated PDF paths unavailable. HTML rendering, PDF sections and the final PDF assembly/write remain serialized; a single expensive section or final write can delay a request. These limits are separate from the ordinary no-PDF editing budgets.
 
 `serve` remembers which assets and OpenAPI specifications each page references. When an image changes, it copies the new file and reloads only the pages that show it. Specification changes refresh their referencing pages, companion specification pages, search entries, and linked PDFs. Unrelated HTML stays untouched unless shared metadata changes. A changed import page triggers a rebuild and resolves its GitHub URL again; restarting `serve` picks up remote branch changes when no local import page changed. Files that disappear from the site are removed from the output folder.
 

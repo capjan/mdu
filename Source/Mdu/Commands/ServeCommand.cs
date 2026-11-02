@@ -29,6 +29,9 @@ public sealed class ServeCommand
     private FileWatcherSet? _watchers;
     private readonly SemaphoreSlim _renderLock = new(1, 1);
     private readonly Dictionary<string, MarkdownFile> _pendingPages = new(PathComparer);
+    private readonly HashSet<string> _failedPendingPages = new(PathComparer);
+    private readonly HashSet<string> _unfinishedPages = new(PathComparer);
+    private bool _rebuildAfterFailure;
     private readonly ConcurrentDictionary<string, MarkdownFile> _pendingOutputs = new(PathComparer);
     private MarkdigVisitor? _pendingVisitor;
     private PreviewServer? _server;
@@ -185,9 +188,6 @@ public sealed class ServeCommand
     private void RebuildSite()
     {
         _siteCompletionPending = true;
-        _pendingPages.Clear();
-        _pendingOutputs.Clear();
-        _pendingVisitor = null;
         InvalidatePdfs();
         _server?.SetBuilding(true);
         var previousFiles = new HashSet<string>(_generatedFiles, PathComparer);
@@ -218,7 +218,6 @@ public sealed class ServeCommand
         RebuildDependencyIndex(graph);
         _siteMediaProviders = GetSiteMediaProviders();
         graph.Visit(new LocalAssetsCopy(_rootPath, _outputPath));
-        SchedulePdfs(reuseUnchanged: false);
         var rendererVisitor = new MarkdigVisitor(
             _rootPath,
             _outputPath,
@@ -229,6 +228,13 @@ public sealed class ServeCommand
             _siteMediaProviders,
             _gitDates.Read(_rootPath));
         rendererVisitor.PrepareSearchIndex();
+        SchedulePdfs(reuseUnchanged: false);
+        // Keep the last usable generation available until the replacement is prepared successfully.
+        _pendingPages.Clear();
+        _failedPendingPages.Clear();
+        _pendingOutputs.Clear();
+        _unfinishedPages.Clear();
+        _rebuildAfterFailure = false;
         _pendingVisitor = rendererVisitor;
         foreach (var (pagePath, page) in _pages)
         {
@@ -259,6 +265,15 @@ public sealed class ServeCommand
         await _renderLock.WaitAsync(cancellationToken);
         try
         {
+            if (_unfinishedPages.Count > 0)
+            {
+                foreach (var (pagePath, candidate) in _pages)
+                    if (_unfinishedPages.Contains(pagePath) &&
+                        (PathComparer.Equals(path, GetPageOutputPath(candidate)) ||
+                         PathComparer.Equals(path, GetAliasOutputPath(candidate)) ||
+                         _openApiSpecPagesByPage.GetValueOrDefault(pagePath)?.Contains(path, PathComparer) == true))
+                        throw new InvalidOperationException("The page update failed. Fix the source and save again.");
+            }
             var page = _pendingOutputs.GetValueOrDefault(path) ??
                        _pendingOutputs.GetValueOrDefault(Path.Combine(path, "index.html"));
             if (page is not null) CompletePendingPage(page);
@@ -271,22 +286,29 @@ public sealed class ServeCommand
 
     private void CompletePendingPage(MarkdownFile page)
     {
-        if (!_pendingPages.Remove(GetPageKey(page))) return;
+        var pageKey = GetPageKey(page);
+        if (!_pendingPages.ContainsKey(pageKey)) return;
         var visitor = _pendingVisitor!;
         try
         {
             visitor.Process(page, page.CountDepth());
-            _openApiSpecPagesByPage[GetPageKey(page)] = visitor.OpenApiSpecPagePaths.GetValueOrDefault(page) ?? Array.Empty<string>();
+            _openApiSpecPagesByPage[pageKey] = visitor.OpenApiSpecPagePaths.GetValueOrDefault(page) ?? Array.Empty<string>();
+            if (_failedPendingPages.Contains(pageKey)) _searchIndexBuilder.WriteIndex(_outputPath);
+            _pendingPages.Remove(pageKey);
+            _failedPendingPages.Remove(pageKey);
         }
-        finally
+        catch
         {
-            FinishPendingSite();
+            _failedPendingPages.Add(pageKey);
+            visitor.InvalidatePreparedPage(page);
+            throw;
         }
+        FinishPendingSite();
     }
 
     private void FinishPendingSite()
     {
-        if (_pendingPages.Count != 0) return;
+        if (_pendingPages.Count != 0 || _rebuildAfterFailure) return;
         _pendingVisitor = null;
         _pendingOutputs.Clear();
         if (_pendingPdfs.Count != 0 || !_siteCompletionPending) return;
@@ -442,9 +464,9 @@ public sealed class ServeCommand
                 await _renderLock.WaitAsync(cancellationToken);
                 try
                 {
-                    if (_pendingPages.Count > 0)
+                    if (_pendingPages.FirstOrDefault(entry => !_failedPendingPages.Contains(entry.Key)).Value is { } pendingPage)
                     {
-                        CompletePendingPage(_pendingPages.Values.First());
+                        CompletePendingPage(pendingPage);
                         completedPage = true;
                     }
                     else if (_pendingPdfs.Count > 0)
@@ -461,7 +483,7 @@ public sealed class ServeCommand
                     }
                     else FinishPendingSite();
                 }
-                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or YamlDotNet.Core.YamlException)
+                catch (Exception exception)
                 {
                     Console.Error.WriteLine($"Could not update the site: {exception.Message}");
                     completedPage = true;
@@ -480,14 +502,25 @@ public sealed class ServeCommand
             await Task.Delay(TimeSpan.FromMilliseconds(20), cancellationToken);
             var batch = new List<FileChange>();
             while (changes.TryRead(out var change)) batch.Add(change);
+            // Structural saves often rename the old file before creating its replacement.
+            // Give those events more time to settle without delaying ordinary content edits.
+            if (batch.Any(change => change.Kind is FileChangeKind.Deleted or FileChangeKind.Renamed))
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(75), cancellationToken);
+                while (changes.TryRead(out var change)) batch.Add(change);
+            }
 
             await _renderLock.WaitAsync(cancellationToken);
             try
             {
                 ProcessChangeBatch(batch, server);
             }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or YamlDotNet.Core.YamlException)
+            catch (Exception exception)
             {
+                // A partial batch can leave metadata/dependencies unfinished. Rebuild from fresh sources on the next save.
+                _rebuildAfterFailure = true;
+                _siteCompletionPending = true;
+                server.SetBuilding(true);
                 Console.Error.WriteLine($"Could not update the site: {exception.Message}");
                 if (_pdfRefreshRequired)
                 {
@@ -512,8 +545,34 @@ public sealed class ServeCommand
             .ToArray();
         if (relevantChanges.Length == 0) return;
 
+        var changedPaths = relevantChanges
+            .SelectMany(change => change.OldPath is null ? new[] { change.Path } : new[] { change.Path, change.OldPath })
+            .ToHashSet(PathComparer);
+        var specificationPages = _openApiSpecsByPage
+            .Where(entry => entry.Value.Any(changedPaths.Contains))
+            .Select(entry => entry.Key);
+        var changedPages = relevantChanges
+            .Where(change => change.Kind is FileChangeKind.Changed or FileChangeKind.Created or FileChangeKind.Renamed &&
+                             _pages.ContainsKey(change.Path) && File.Exists(change.Path))
+            .Select(change => change.Path)
+            .Concat(specificationPages)
+            .Distinct(PathComparer)
+            .ToArray();
+
+        // Invalidate the complete batch before any parsing can fail, including configuration-triggered rebuilds.
+        foreach (var pagePath in changedPages)
+        {
+            var page = _pages[pagePath];
+            _unfinishedPages.Add(pagePath);
+            page.InvalidateMarkdown();
+            _pendingVisitor?.InvalidatePreparedPage(page);
+            _pendingPages.Remove(pagePath);
+            _failedPendingPages.Remove(pagePath);
+        }
+        if (changedPages.Length > 0) InvalidatePdfs();
+
         var siteConfigurationPath = Path.Combine(_rootPath, "mdu.yml");
-        if (relevantChanges.Any(change => PathComparer.Equals(change.Path, siteConfigurationPath) ||
+        if (_rebuildAfterFailure || relevantChanges.Any(change => PathComparer.Equals(change.Path, siteConfigurationPath) ||
                                           _configurationAssets.Contains(change.Path) ||
                                           change.OldPath is not null && _configurationAssets.Contains(change.OldPath)))
         {
@@ -570,28 +629,10 @@ public sealed class ServeCommand
             return;
         }
 
-        var changedPaths = relevantChanges
-            .SelectMany(change => change.OldPath is null ? new[] { change.Path } : new[] { change.Path, change.OldPath })
-            .ToHashSet(PathComparer);
-        var specificationPages = _openApiSpecsByPage
-            .Where(entry => entry.Value.Any(changedPaths.Contains))
-            .Select(entry => entry.Key);
-        var changedPages = relevantChanges
-            .Where(change => change.Kind is FileChangeKind.Changed or FileChangeKind.Created or FileChangeKind.Renamed &&
-                             _pages.ContainsKey(change.Path) && File.Exists(change.Path))
-            .Select(change => change.Path)
-            .Concat(specificationPages)
-            .Distinct(PathComparer)
-            .ToArray();
-
-        if (changedPages.Length > 0) InvalidatePdfs();
-
         var affectedPageUrls = new HashSet<string>(StringComparer.Ordinal);
         foreach (var pagePath in changedPages)
         {
             var page = _pages[pagePath];
-            _pendingPages.Remove(pagePath);
-            page.InvalidateMarkdown();
             var depth = page.CountDepth();
             var previousTitle = page.Title;
             var previousNavigationTitle = page.NavigationTitle;
@@ -663,18 +704,14 @@ public sealed class ServeCommand
                     var previousSiblingSpecPages = _openApiSpecPagesByPage.GetValueOrDefault(siblingKey) ?? Array.Empty<string>();
                     if (previousSiblingSpecPages.Count == 0) continue;
 
-                    try
-                    {
-                        rendererVisitor.Process(siblingPage, siblingPage.CountDepth());
-                        var siblingSpecPages = rendererVisitor.OpenApiSpecPagePaths.GetValueOrDefault(siblingPage) ?? Array.Empty<string>();
-                        _openApiSpecPagesByPage[siblingKey] = siblingSpecPages;
-                        if (!previousSiblingSpecPages.SequenceEqual(siblingSpecPages, PathComparer))
-                            affectedPageUrls.Add(PreviewServer.ToUrlPath(_outputPath, siblingOutputPath));
-                    }
-                    catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or YamlDotNet.Core.YamlException)
-                    {
-                        Console.Error.WriteLine($"Could not update the site: {exception.Message}");
-                    }
+                    _pendingVisitor?.InvalidatePreparedPage(siblingPage);
+                    rendererVisitor.Process(siblingPage, siblingPage.CountDepth());
+                    _pendingPages.Remove(siblingKey);
+                    _failedPendingPages.Remove(siblingKey);
+                    var siblingSpecPages = rendererVisitor.OpenApiSpecPagePaths.GetValueOrDefault(siblingPage) ?? Array.Empty<string>();
+                    _openApiSpecPagesByPage[siblingKey] = siblingSpecPages;
+                    if (!previousSiblingSpecPages.SequenceEqual(siblingSpecPages, PathComparer))
+                        affectedPageUrls.Add(PreviewServer.ToUrlPath(_outputPath, siblingOutputPath));
                 }
             }
         }
@@ -711,6 +748,8 @@ public sealed class ServeCommand
             Console.WriteLine($"Updated {affectedPageUrls.Count} page(s).");
             server.Publish(affectedPageUrls);
         }
+        _unfinishedPages.ExceptWith(changedPages);
+        FinishPendingSite();
     }
 
     // An invalid PDF root throws instead of returning an error code.
