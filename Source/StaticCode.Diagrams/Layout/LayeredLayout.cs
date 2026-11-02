@@ -115,7 +115,12 @@ internal sealed class LayeredLayout
                 var left = vertices[input.Source];
                 var right = vertices[input.Target];
                 _flatPairs.Add((left, right));
-                if (input.LabelWidth > 0) _flatGaps[(left, right)] = (horizontal ? input.LabelHeight : input.LabelWidth) + 16;
+                if (input.LabelWidth > 0)
+                {
+                    var gap = (horizontal ? input.LabelHeight : input.LabelWidth) + 16;
+                    _flatGaps[(left, right)] = CallerRoutesLinks ? _flatGaps.GetValueOrDefault((left, right)) + gap : gap;
+                }
+
                 continue;
             }
 
@@ -577,7 +582,9 @@ internal sealed class LayeredLayout
         var separation = left.IsThin && right.IsThin ? EdgeSeparation
             : left.IsThin || right.IsThin ? (NodeSeparation + EdgeSeparation) / 2
             : NodeSeparation;
-        return left.HalfBreadth + right.HalfBreadth + separation + _flatGaps.GetValueOrDefault((left, right));
+        var flatGap = _flatGaps.GetValueOrDefault((left, right));
+        if (CallerRoutesLinks) flatGap += _flatGaps.GetValueOrDefault((right, left));
+        return left.HalfBreadth + right.HalfBreadth + separation + flatGap;
     }
 
     /// <summary>Spreads the edge ends on each side of a node so that arrowheads do not overlap.</summary>
