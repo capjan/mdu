@@ -16,6 +16,53 @@ MDU is a single .NET tool. It reads a folder of ordinary Markdown files, builds 
 | **Built-in renderers** | One `dotnet tool` renders HTML, diagrams, math, syntax highlighting, and PDF files directly in .NET, without external language runtimes or a browser engine. |
 | **Scriptable CLI** | Commands print plain text and return exit codes; `mdu lint` also writes JSON and GitHub annotations. |
 
+## Quality requirements
+
+MDU should make documentation editing feel immediate: an open preview should show the latest saved content promptly, including while other pages are being rebuilt. Initial startup should quickly produce a usable page. Work for a local edit should depend mainly on the affected content and its dependencies, rather than the total number of pages.
+
+The following values are **development targets, not performance guarantees or claims about the current implementation**. They guide optimization and acceptance checks. The [baseline investigation in issue #188](https://github.com/capjan/mdu/issues/188) records the starting point; its report, raw observations, and reproduction instructions are in `Tools/Performance/` in the repository.
+
+### Performance targets
+
+The initial reference environment is an Apple M4 with 16 GiB RAM, macOS arm64, .NET SDK 10.0.403 / runtime 10.0.14, and a Release build using normal framework-dependent execution. Reference sites contain 6, 53, and 503 Markdown pages, with diagrams, OpenAPI, highlighted code, and icons. The large site repeats fixed content templates; it does not represent every possible 500-page site. Comparisons must record the source revision, corpus, runtime settings, output state, and filesystem-cache conditions.
+
+| Measurement | Development target |
+| --- | --- |
+| Ordinary text edit until updated HTML is available over HTTP | Median at most 50 ms; p95 at most 100 ms |
+| Ordinary text edit until the new content is displayed in the open browser | p95 at most 150 ms |
+| Ordinary diagram or OpenAPI edit until the new content is displayed | p95 at most 300 ms |
+| Fresh `serve` startup until the first usable preview page | Median at most 250 ms for the small reference site; at most 1 s for the large site |
+| Complete `render` of the large reference site | Median at most 2 s |
+| Cumulative managed allocations during an ordinary text edit | At most 10 MiB |
+| Memory during extended editing | Bounded retained state; no sustained growth after warm-up for a fixed workload |
+
+An ordinary edit changes one page without changing the shared navigation or site configuration. The initial expensive-content cases use a 12-component diagram or an eight-operation API specification affecting one page. Large specifications, more complex diagrams, shared dependencies with many consumers, PDF generation, remote imports, and slow storage require separately labelled workloads and budgets. A fast update of the open page does not imply that every affected output is already complete.
+
+The baseline for the large reference site was about 326 ms until a text edit became available over HTTP, 4.19 s until the initial HTTP response, 4.09 s for a complete render, and 1,120 MiB allocated per warm text edit. Browser display latency was not measured. These observations are distinct from the targets above and do not establish p95 performance.
+
+### Architectural constraints
+
+| Requirement | Consequence for optimization |
+| --- | --- |
+| **Local work for local edits** | Reuse valid per-page analysis and shared navigation preparation. Refresh the affected dependency set; avoid rendering unchanged pages solely to rediscover media providers or PDF links. |
+| **Latest saved content wins** | Coalesce repeated file events without delaying updates indefinitely. Older work must never overwrite a newer result. Temporary or invalid saves must recover on the next valid save without restarting `serve`. |
+| **Responsive scheduling** | Prioritize open preview pages during larger rebuilds. New edits must not wait behind an unbounded queue of obsolete work. |
+| **Honest readiness** | Listening on a port is not a usable preview. Report first usable page and complete-site readiness separately; navigation and search must remain correct as pages become available. `mdu render` succeeds only when all required outputs are complete. |
+| **Consistent output** | Preserve atomic page replacement, links, anchors, navigation, search results, media consent, and PDF behavior, including strict `pdf-hidden` validation. If expensive downloads are updated separately, their readiness and revision must be clear rather than silently serving stale content. |
+| **Bounded reuse** | Invalidate saved results when their inputs or dependencies change; release obsolete entries after changes and deletions. Large cached results need explicit memory limits. |
+
+These constraints describe the intended direction, not a claim that dependency-scoped rebuilding, prioritized scheduling, or early preview startup is already implemented. The [processing pipeline](Pipeline.md#live-preview) describes current behavior.
+
+### Verification and regression checks
+
+Measure the user-visible path from the on-disk save through file detection, processing, reload notification, browser reload, and display of the expected new content. Record HTTP availability and complete rebuild time separately. Preserve first-edit observations as well as steady-state results. A percentile target describes a distribution, not a maximum for every save; p95 means 95% of observations meet the stated limit.
+
+Use at least 300 edit observations across multiple server processes for p95 acceptance checks. Exercise direct writes and editor-style atomic saves, rapid consecutive edits, changes during a rebuild, additions and deletions, invalid intermediate content, shared configuration, external OpenAPI dependencies, Git metadata, imports, and projects with PDF links. Record fresh-process startup and repeated edits independently, with enough samples to show spread. Compare on the same environment and repeat suspected regressions.
+
+Measure allocation volume, peak process RSS, and retained managed memory separately. Normal timed runs must not force garbage collection or include diagnostic instrumentation. For retention checks, use separate runs with idle checkpoints and long mixed edit sequences. The initial baseline showed stabilization during repeated body edits, but did not establish a plateau for mixed changes; an RSS peak alone is not evidence of a leak.
+
+Every optimization must pass output and behavior checks as well as timing checks. Start with byte-identical output where applicable; when output organization changes, verify equivalent content and behavior explicitly. Browser checks must cover search, navigation, keyboard focus, and media consent acceptance and revocation. A faster internal stage is insufficient if end-to-end latency, memory use, or correctness regresses. The existing measurement harness supplies the baseline; browser timing and larger acceptance runs still need to be added.
+
 ## System context
 
 MDU sits between the documentation author and the published site. Click a node to read more.

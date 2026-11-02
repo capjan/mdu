@@ -78,6 +78,8 @@ Assets are found through the links on each page. Only linked local files are cop
 
 ## Live preview
 
+The [quality requirements](README.md#quality-requirements) define the responsiveness, startup, memory, and correctness targets for future optimization. The flow below describes the current implementation.
+
 `mdu serve` renders the site once, starts a local HTTP server, and watches the source folder. Changes are collected for a short moment and handled as one batch:
 
 ```mermaid
