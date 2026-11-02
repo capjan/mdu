@@ -43,6 +43,8 @@ An ordinary edit changes one page without changing the shared navigation or site
 
 The baseline for the large reference site was about 326 ms until a text edit became available over HTTP, 4.19 s until the initial HTTP response, 4.09 s for a complete render, and 1,120 MiB allocated per warm text edit. Browser display latency was not measured. These observations are distinct from the targets above and do not establish p95 performance.
 
+Reference acceptance on 2026-11-02 meets the native and separate portable budgets for the frozen 7/54/503-page corpora. The 503-page native run measured a 403 ms first usable preview, 1.31 s complete render, and 90 ms p95 text display latency (300 edits across three processes). A separate 600-edit native run observed 4.3 MiB median text-edit allocation and stabilized retained memory. The repository's `Tools/Performance/results/2026-11-02-acceptance.md` contains raw-data links, exact source/environment, outliers, PDF/Git checks and limits; these are measured reference results, not universal guarantees.
+
 ### Architectural constraints
 
 | Requirement | Consequence for optimization |

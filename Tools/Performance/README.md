@@ -6,6 +6,8 @@ The [optimization checkpoint](results/2026-11-02-optimization.md) records the im
 
 The subsequent user decision selects native release execution as the acceptance reference and gives portable startup/build its own budget. The [native tool package study](NativePackages.md) records local installation and fallback checks without changing publication.
 
+The [completed reference acceptance](results/2026-11-02-acceptance.md) includes native/portable p95 distributions, Git coverage, 600 native retention edits, PDF readiness and byte-identical output checks, with raw archives and explicit limitations.
+
 ## Reproduce
 
 Run from the repository root, sequentially without concurrent builds/tests/benchmarks:

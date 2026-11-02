@@ -7,7 +7,7 @@ internal static class Report
 {
     internal static void Print(string work)
     {
-        foreach (var file in new[] { "baseline.json", "browser.json", "browser-check.json" })
+        foreach (var file in new[] { "baseline.json", "browser.json", "browser-check.json", "complexity.json" })
         {
         if (!File.Exists(Path.Combine(work, file))) continue;
         Console.WriteLine(file);
@@ -33,6 +33,11 @@ internal static class Report
                 Console.WriteLine($"  {edits.Key} HTTP ms: " + Spread(edits.Select(e => e!["visibleMs"]!.GetValue<double>())));
                 var displayed = edits.Where(e => e!["browserDisplayMs"] is not null).Select(e => e!["browserDisplayMs"]!.GetValue<double>()).ToArray();
                 if (displayed.Length > 0) Console.WriteLine($"  {edits.Key} browser ms: " + Spread(displayed));
+                var first = servers.Select(server => server!["edits"]!.AsArray()
+                    .FirstOrDefault(edit => edit!["kind"]!.GetValue<string>() == edits.Key)).Where(edit => edit is not null).ToArray();
+                Console.WriteLine($"  first {edits.Key} HTTP ms: " + Spread(first.Select(edit => edit!["visibleMs"]!.GetValue<double>())));
+                if (first.All(edit => edit!["browserDisplayMs"] is not null))
+                    Console.WriteLine($"  first {edits.Key} browser ms: " + Spread(first.Select(edit => edit!["browserDisplayMs"]!.GetValue<double>())));
             }
         }
         }

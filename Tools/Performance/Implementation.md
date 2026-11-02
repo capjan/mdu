@@ -11,9 +11,9 @@ Approved scope: native .NET development tools, local static website assets, resp
 - [x] Coalesce changes, prioritize requested pending HTML, and prevent obsolete pending pages from winning.
 - [x] Make initial HTML preview usable early, with complete navigation/search and on-demand pending pages.
 - [x] Schedule PDF sections between updates, discard obsolete jobs, and expose pending/failed download readiness.
-- [ ] Verify bounded memory and all latency/allocation targets; document measurements and remaining limits.
+- [x] Verify reference latency/allocation targets and retention stabilization; document measurements and limits.
 
-Remaining work includes percentile acceptance across multiple processes, extended native memory acceptance, and final PDF/browser verification. The user selected native release execution as the acceptance reference, with separate portable startup/build budgets, and authorized evaluation of native .NET tool packages with a portable fallback.
+Completed acceptance is recorded in the [final report](results/2026-11-02-acceptance.md): 300 observations per ordinary edit kind across three processes for each native/portable corpus, a separate Git series, 600 native retention edits, PDF/browser readiness checks, and exact output comparison. All specified reference budgets pass. Native .NET tool packages and a portable fallback were evaluated locally; release migration was outside this packaging study and requires signing/platform/publication validation before adoption.
 
 Historical checkpoint: [measured implementation and execution-format review](results/2026-11-02-optimization.md). Its pause was resolved by the user's native-reference decision. The architecture now records that decision and the separate portable budgets; historical measurements remain unchanged.
 

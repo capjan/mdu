@@ -1,5 +1,7 @@
 # Optimization checkpoint — 2026-11-02
 
+Historical checkpoint: the user subsequently selected native release execution as the reference, retaining separate portable budgets. The [completed acceptance report](2026-11-02-acceptance.md) records the subsequent implementation and measurements. The checkpoint observations below retain their original scope and provenance.
+
 The approved follow-up to [#188](https://github.com/capjan/mdu/issues/188) includes implementation, native .NET tooling, and the [architecture quality requirements](../../../Docs/Architecture/README.md#quality-requirements). **Implementation and acceptance are not complete.** The normal framework-dependent reference still misses startup/full-render targets. Native release execution produces substantially different results, so it must not silently replace that reference.
 
 ## Revisions, environment and inputs
