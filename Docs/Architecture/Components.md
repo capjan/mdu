@@ -114,7 +114,7 @@ A small lexer with lightweight grammars for C#, JavaScript, Swift, TypeScript, P
 Parses diagram sources and writes SVG. `DiagramRenderer.TryRenderSvg` handles Mermaid flowcharts, sequence, state, and class diagrams, PlantUML component diagrams, and MDU's own context diagrams.
 
 - Flowcharts use their own layered (Sugiyama) layout in `Layout/LayeredLayout.cs`.
-- PlantUML containers are laid out from the inside out, so nested packages size to their content. Repeated passes line up linked elements across container borders, and each link then takes the shortest way around the elements and labels in its path. Very large diagrams use fewer layout iterations and a smaller search, so their run time stays bounded and the same source always gives the same SVG.
+- PlantUML containers are laid out from the inside out, so nested packages size to their content. Repeated passes line up linked elements across container borders, and each link then takes the shortest way around the elements and labels in its path. Very large diagrams use fewer layout iterations and a smaller search, so their run time grows moderately and the same source always gives the same SVG.
 - Context diagrams place the central system in the middle and its neighbors around it.
 - The SVG uses semantic CSS classes so the site stylesheet can theme it for light and dark mode.
 
