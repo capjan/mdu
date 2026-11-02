@@ -609,7 +609,20 @@ public sealed class SearchIndexBuilder
     {
         Directory.CreateDirectory(outputPath);
         var indexPath = Path.Combine(outputPath, "search-index.json");
-        File.WriteAllText(indexPath, JsonSerializer.Serialize(_entries, JsonContext.ListSearchIndexEntry), Encoding.UTF8);
+        var temporaryPath = indexPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            using (var stream = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write))
+            {
+                stream.Write(Encoding.UTF8.Preamble);
+                JsonSerializer.Serialize(stream, _entries, JsonContext.ListSearchIndexEntry);
+            }
+            File.Move(temporaryPath, indexPath, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
+        }
     }
 
     private void AddEntry(string title, string section, string url, string text, List<string>? code) =>

@@ -49,8 +49,22 @@ internal static class Report
                     Console.WriteLine($"    {stage.Key}: aggregate exclusive {stage.Sum(p => p.Value!["exclusiveMs"]!.GetValue<double>()) / profiles.Length:F2} ms; calls {stage.Sum(p => p.Value!["calls"]!.GetValue<double>()) / profiles.Length:F0}");
             }
             foreach (var server in result["runs"]!.AsArray().Where(r => r!["command"]!.GetValue<string>() == "serve"))
+            {
+                var log = Path.Combine(work, "logs", $"{mode}-{server!["workload"]}-serve-{server["sample"]}.jsonl");
+                foreach (var profile in File.ReadLines(log).Select(line => JsonNode.Parse(line)!)
+                             .Where(profile => profile["reason"]!.GetValue<string>() == "serve.edit"))
+                {
+                    var stages = profile["stages"]!.AsObject();
+                    if (!stages.TryGetPropertyValue("serve.edit", out var edit)) continue;
+                    Console.WriteLine($"  {mode} {server["workload"]} edit scope {profile["sequence"]}: {edit!["allocatedBytes"]!.GetValue<double>() / 1048576:F2} MiB");
+                    if (mode == "diagnostic")
+                        foreach (var stage in stages.Where(s => s.Key != "serve.edit")
+                                     .OrderByDescending(s => s.Value!["allocatedBytes"]!.GetValue<double>()).Take(4))
+                            Console.WriteLine($"    {stage.Key}: inclusive {stage.Value!["allocatedBytes"]!.GetValue<double>() / 1048576:F2} MiB");
+                }
                 foreach (var point in server!["memory"]!.AsArray())
                     Console.WriteLine($"  {server["workload"]} post-GC edit {point!["edit"]}: {point["managedBytes"]!.GetValue<double>() / 1048576:F2} MiB");
+            }
         }
     }
 

@@ -196,6 +196,7 @@ public sealed class ServeCommand
         _searchIndexBuilder.Clear();
         // Register external OpenAPI watchers before PDF generation and page rendering.
         RebuildDependencyIndex(graph);
+        _siteMediaProviders = GetSiteMediaProviders();
         graph.Visit(new LocalAssetsCopy(_rootPath, _outputPath));
         var pdfOutputPath = Path.Combine(_outputPath, "documentation.pdf");
         if (!TryWriteSitePdf(() => _pdfCommand.WriteSitePdfIfLinked(_rootPath, pdfOutputPath, graph)))
@@ -209,8 +210,8 @@ public sealed class ServeCommand
             _renderer,
             _settings.EditPageRoot,
             _searchIndexBuilder,
-            _navigationRoots);
-        _siteMediaProviders = rendererVisitor.SiteMediaProviders;
+            _navigationRoots,
+            _siteMediaProviders);
         try
         {
             graph.Visit(rendererVisitor);
@@ -288,7 +289,13 @@ public sealed class ServeCommand
             .ToArray();
 
         var pdfTitle = PdfSelection.GetPdfTitle(_rootPath, page, body, _renderer.ExcludesTitleHeadingFromPdf);
-        return new PageDependencies(pageAssets, referencedSpecs, pdfTitle);
+        return new PageDependencies(pageAssets, referencedSpecs, pdfTitle, _renderer.FindMediaProviders(body));
+    }
+
+    private IReadOnlyCollection<string> GetSiteMediaProviders()
+    {
+        var providers = _dependencyIndex.MediaProvidersByPage.Values.SelectMany(values => values).ToHashSet(StringComparer.Ordinal);
+        return new[] { "YouTube", "Vimeo" }.Where(providers.Contains).ToArray();
     }
 
     private static void AddPageDependencies(
@@ -310,6 +317,7 @@ public sealed class ServeCommand
 
         index.OpenApiSpecsByPage[pagePath] = dependencies.OpenApiSpecs;
         index.PdfTitlesByPage[pagePath] = dependencies.PdfTitle;
+        index.MediaProvidersByPage[pagePath] = dependencies.MediaProviders;
     }
 
     private void RemovePageAssets(string pagePath)
@@ -331,7 +339,7 @@ public sealed class ServeCommand
     {
         while (await changes.WaitToReadAsync(cancellationToken))
         {
-            await Task.Delay(TimeSpan.FromMilliseconds(75), cancellationToken);
+            await Task.Delay(TimeSpan.FromMilliseconds(20), cancellationToken);
             var batch = new List<FileChange>();
             while (changes.TryRead(out var change)) batch.Add(change);
 
@@ -394,13 +402,6 @@ public sealed class ServeCommand
             return;
         }
 
-        if (relevantChanges.Any(IsOpenApiSpecChange))
-        {
-            RebuildSite();
-            server.Publish(reloadAll: true);
-            return;
-        }
-
         // Editors that save through a temporary file report creations, renames, and deletions for a page whose
         // content only changed. Only the state after the batch decides whether pages were added or removed.
         var requiresRebuild = relevantChanges.Any(change =>
@@ -420,10 +421,17 @@ public sealed class ServeCommand
             return;
         }
 
+        var changedPaths = relevantChanges
+            .SelectMany(change => change.OldPath is null ? new[] { change.Path } : new[] { change.Path, change.OldPath })
+            .ToHashSet(PathComparer);
+        var specificationPages = _openApiSpecsByPage
+            .Where(entry => entry.Value.Any(changedPaths.Contains))
+            .Select(entry => entry.Key);
         var changedPages = relevantChanges
             .Where(change => change.Kind is FileChangeKind.Changed or FileChangeKind.Created or FileChangeKind.Renamed &&
                              _pages.ContainsKey(change.Path) && File.Exists(change.Path))
             .Select(change => change.Path)
+            .Concat(specificationPages)
             .Distinct(PathComparer)
             .ToArray();
 
@@ -431,6 +439,7 @@ public sealed class ServeCommand
         foreach (var pagePath in changedPages)
         {
             var page = _pages[pagePath];
+            page.InvalidateMarkdown();
             var depth = page.CountDepth();
             var previousTitle = page.Title;
             var previousNavigationTitle = page.NavigationTitle;
@@ -460,6 +469,13 @@ public sealed class ServeCommand
 
             var previousSpecPages = _openApiSpecPagesByPage.GetValueOrDefault(pagePath) ?? Array.Empty<string>();
             UpdatePageAssets(pagePath, dependencies);
+            var providers = GetSiteMediaProviders();
+            if (!new HashSet<string>(_siteMediaProviders, StringComparer.Ordinal).SetEquals(providers))
+            {
+                RebuildSite();
+                server.Publish(reloadAll: true);
+                return;
+            }
             _watchers?.UpdateExternalFiles(_openApiSpecsByPage.Values.SelectMany(paths => paths), _glossaryPath);
             new LocalAssetsCopy(_rootPath, _outputPath).Process(page, depth);
             var rendererVisitor = new MarkdigVisitor(
@@ -468,19 +484,16 @@ public sealed class ServeCommand
                 _renderer,
                 _settings.EditPageRoot,
                 _searchIndexBuilder,
-                _navigationRoots);
-            if (!new HashSet<string>(_siteMediaProviders, StringComparer.Ordinal).SetEquals(rendererVisitor.SiteMediaProviders))
-            {
-                RebuildSite();
-                server.Publish(reloadAll: true);
-                return;
-            }
+                _navigationRoots,
+                _siteMediaProviders);
 
             rendererVisitor.Process(page, depth);
             var specPages = rendererVisitor.OpenApiSpecPagePaths.GetValueOrDefault(page) ?? Array.Empty<string>();
             _openApiSpecPagesByPage[pagePath] = specPages;
             var specPagesChanged = !previousSpecPages.SequenceEqual(specPages, PathComparer);
             affectedPageUrls.Add(PreviewServer.ToUrlPath(_outputPath, GetPageOutputPath(page)));
+            foreach (var specPage in previousSpecPages.Concat(specPages).Distinct(PathComparer))
+                affectedPageUrls.Add(PreviewServer.ToUrlPath(_outputPath, specPage));
 
             if (specPagesChanged)
             {
@@ -569,19 +582,6 @@ public sealed class ServeCommand
 
     private bool ChangesPageSet(string path) =>
         _pages.ContainsKey(path) ? !File.Exists(path) : File.Exists(path) && IsMarkdownCandidate(path);
-
-    private bool IsOpenApiSpecChange(FileChange change)
-    {
-        foreach (var specPaths in _openApiSpecsByPage.Values)
-        {
-            foreach (var specPath in specPaths)
-            {
-                if (PathComparer.Equals(specPath, change.Path) ||
-                    change.OldPath is not null && PathComparer.Equals(specPath, change.OldPath)) return true;
-            }
-        }
-        return false;
-    }
 
     private bool IsMarkdownCandidate(string path)
     {
@@ -761,7 +761,8 @@ public sealed class ServeCommand
     private sealed record PageDependencies(
         HashSet<string> Assets,
         IReadOnlyList<string> OpenApiSpecs,
-        string PdfTitle);
+        string PdfTitle,
+        IReadOnlyCollection<string> MediaProviders);
 
     private sealed record DependencyIndex(
         Dictionary<string, MarkdownFile> Pages,
@@ -769,7 +770,8 @@ public sealed class ServeCommand
         Dictionary<string, HashSet<string>> PagesByAsset,
         Dictionary<string, IReadOnlyList<string>> OpenApiSpecsByPage,
         Dictionary<string, IReadOnlyList<string>> OpenApiSpecPagesByPage,
-        Dictionary<string, string> PdfTitlesByPage)
+        Dictionary<string, string> PdfTitlesByPage,
+        Dictionary<string, IReadOnlyCollection<string>> MediaProvidersByPage)
     {
         public static DependencyIndex CreateEmpty() => new(
             new Dictionary<string, MarkdownFile>(PathComparer),
@@ -777,7 +779,8 @@ public sealed class ServeCommand
             new Dictionary<string, HashSet<string>>(PathComparer),
             new Dictionary<string, IReadOnlyList<string>>(PathComparer),
             new Dictionary<string, IReadOnlyList<string>>(PathComparer),
-            new Dictionary<string, string>(PathComparer));
+            new Dictionary<string, string>(PathComparer),
+            new Dictionary<string, IReadOnlyCollection<string>>(PathComparer));
     }
 
     private sealed record FileChange(string Path, string? OldPath, FileChangeKind Kind);

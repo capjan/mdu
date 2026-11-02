@@ -44,7 +44,7 @@ internal static class Measurements
         var url = $"http://127.0.0.1:{port}/";
         var originals = new[] { "README.md", "mdu.yml", "diagram.md", "api.yaml" }
             .ToDictionary(file => Path.Combine(root, file), file => File.ReadAllText(Path.Combine(root, file)));
-        await using var browser = options.Mode == "browser" ? await Browser.Start() : null;
+        await using var browser = options.Mode is "browser" or "browser-check" ? await Browser.Start() : null;
         var probe = options.Diagnostic ? Log(options, $"{options.Mode}-{name}-serve-{sample}.jsonl") : null;
         await using var child = new ChildProcess(dll, ["serve", root, output, "--port", port.ToString(), "--no-browser"],
             Log(options, $"{options.Mode}-{name}-serve-{sample}.log"), probe);
@@ -68,6 +68,8 @@ internal static class Measurements
             }
             await child.WaitLine("Site updated.");
             Validate(output);
+            if (options.Mode == "browser-check")
+                await browser!.VerifyInteractions(url, Log(options, $"{name}-browser-check.png"));
             using var streamClient = new HttpClient(new SocketsHttpHandler { UseProxy = false }) { Timeout = Timeout.InfiniteTimeSpan };
             using var response = await streamClient.GetAsync(url + "__mdu/events", HttpCompletionOption.ResponseHeadersRead, cancellation.Token);
             response.EnsureSuccessStatusCode();
@@ -107,6 +109,9 @@ internal static class Measurements
                     await browser.Navigate(url + target);
                     await browser.WaitDisplayed(currentMarkers[target]);
                 }
+                // Repeated OS notifications can leave another completion event from the previous save.
+                // Only notifications observed after this edit belong to its measurement interval.
+                while (events.Reader.TryRead(out _)) { }
                 var started = Stopwatch.GetTimestamp();
                 await File.WriteAllTextAsync(path, text);
                 async Task<long> DisplayTime()
@@ -119,6 +124,7 @@ internal static class Measurements
                 while (!(await Fetch(url + target)).Contains(marker, StringComparison.Ordinal)) await Task.Delay(10, timeout.Token);
                 var visible = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
                 var completed = await NextEvent(events.Reader);
+                while (completed.Time < started) completed = await NextEvent(events.Reader);
                 double? displayed = null;
                 if (display is not null)
                 {
@@ -129,7 +135,7 @@ internal static class Measurements
                 Require(message["reloadAll"]!.GetValue<bool>() || message["paths"]!.AsArray().Any(p => p!.GetValue<string>() == "/" + target), "Reload event did not include the changed page.");
                 Require((await Fetch(url + target)).Contains(marker, StringComparison.Ordinal), "Reload event published stale content.");
                 if (kind is "content" or "spec")
-                    Require(File.ReadAllText(Path.Combine(output, "search-index.json")).Contains(marker, StringComparison.Ordinal), "Search index is stale.");
+                    Require(File.ReadAllText(Path.Combine(output, "search-index.json")).Contains(marker, StringComparison.Ordinal), $"Search index is stale after {name} edit {number} ({kind}).");
                 var changed = HtmlTimes(output).Where(p => !before.TryGetValue(p.Key, out var value) || value != p.Value).Select(p => p.Key).ToArray();
                 Require(changed.Contains(target, StringComparer.Ordinal), "Changed page was not rewritten.");
                 edits.Add(new JsonObject
@@ -151,6 +157,10 @@ internal static class Measurements
             usage["sample"] = sample;
             usage["startupMs"] = startup;
             usage["browserStartupMs"] = browserStartup;
+            if (options.Mode == "browser-check") usage["browserChecks"] = new JsonObject
+            {
+                ["consentAndRevocation"] = true, ["searchSection"] = true, ["keyboardFocus"] = true, ["anchorsAndNavigation"] = true
+            };
             usage["edits"] = edits;
             usage["memory"] = memory;
             usage["validation"] = validation;

@@ -16,7 +16,8 @@ public class MarkdigVisitor : BaseVisitor
         HtmlRenderer htmlFoundation, 
         string editPageRoot,
         SearchIndexBuilder searchIndexBuilder,
-        MarkdownFile[]? navigationRoots = null) : base(rootPath, outPath, ".html")
+        MarkdownFile[]? navigationRoots = null,
+        IReadOnlyCollection<string>? siteMediaProviders = null) : base(rootPath, outPath, ".html")
     {
         _rootPath = rootPath;
         _outPath = outPath;
@@ -35,7 +36,8 @@ public class MarkdigVisitor : BaseVisitor
         {
             _topNavigationItems.Add(page, FindTopNavigationItem(page));
         }
-        _siteMediaProviders = FindSiteMediaProviders();
+        _navigationEntries = CreateNavigationEntries(_navigationRoots);
+        _siteMediaProviders = siteMediaProviders ?? FindSiteMediaProviders();
         _lastModifiedDates = GitLastModified.Read(rootPath);
     }
     
@@ -45,6 +47,7 @@ public class MarkdigVisitor : BaseVisitor
     private readonly string _rootPath;
     private readonly string _outPath;
     private readonly MarkdownFile[] _navigationRoots;
+    private readonly IReadOnlyList<NavigationEntry> _navigationEntries;
     private readonly Dictionary<MarkdownFile, MarkdownFile?> _topNavigationItems;
     private readonly (MarkdownFile Page, string OutputPath)[] _pageOutputs;
     private readonly HashSet<string> _pageOutputPaths;
@@ -334,7 +337,7 @@ public class MarkdigVisitor : BaseVisitor
     {
         var currentPath = Path.GetFullPath(currentOutputPath);
         var currentDirectorySegments = GetSiteRelativeSegments(Path.GetDirectoryName(currentPath)!);
-        var entries = CreateNavigationEntries(_navigationRoots);
+        var entries = _navigationEntries;
         var activeTopNavigationItem = _topNavigationItems.GetValueOrDefault(page);
         var activeTopNavigationDepth = activeTopNavigationItem is null
             ? -1

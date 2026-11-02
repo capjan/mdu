@@ -109,6 +109,44 @@ internal sealed class Browser : IAsyncDisposable
         return result["result"]!["value"]!.AsObject().DeepClone().AsObject();
     }
 
+    internal async Task VerifyInteractions(string url, string screenshot)
+    {
+        await Navigate(url + "measure.html");
+        await WaitDisplayed("baseline-search-sentinel");
+        async Task Check(string expression, string description)
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            while (true)
+            {
+                var result = await Command("Runtime.evaluate", new JsonObject { ["expression"] = expression, ["returnByValue"] = true });
+                if (result["result"]?["value"]?.GetValue<bool>() == true) return;
+                try { await Task.Delay(20, timeout.Token); }
+                catch (OperationCanceledException) { throw new InvalidOperationException("Browser check failed: " + description); }
+            }
+        }
+        async Task Act(string expression) => await Command("Runtime.evaluate", new JsonObject { ["expression"] = expression, ["returnByValue"] = true });
+        await Check("document.querySelectorAll('.media-embed iframe').length===0", "consent before player load");
+        await Act("document.querySelector('[data-media-consent=once]').click()");
+        await Check("document.querySelectorAll('.media-embed iframe').length===1", "load once");
+        await Act("document.getElementById('media-settings-open').click();document.getElementById('media-settings-revoke').click();document.getElementById('media-settings-close').click()");
+        await Check("document.querySelectorAll('.media-embed iframe').length===0", "revoke unloads player");
+        await Act("document.querySelector('[data-media-consent=site]').click()");
+        await Check("document.querySelectorAll('.media-embed iframe').length===1", "allow provider");
+        await Navigate(url + "measure.html");
+        await Check("document.querySelectorAll('.media-embed iframe').length===1", "saved consent survives navigation");
+        await Act("document.getElementById('media-settings-open').click();document.querySelector('[data-media-provider=YouTube]').checked=false;document.getElementById('media-settings-save').click()");
+        await Check("document.querySelectorAll('.media-embed iframe').length===0", "save revocation unloads player");
+        await Act("document.getElementById('search-button').click();const input=document.getElementById('search-input');input.value='baseline-search-sentinel';input.dispatchEvent(new Event('input',{bubbles:true}))");
+        await Check("[...document.querySelectorAll('#search-results a')].some(a=>a.getAttribute('href').endsWith('measure.html#stable-anchor'))", "search section link");
+        await Act("document.getElementById('search-close').click();document.activeElement?.blur()");
+        await Command("Input.dispatchKeyEvent", new JsonObject { ["type"] = "keyDown", ["key"] = "Tab", ["code"] = "Tab", ["windowsVirtualKeyCode"] = 9 });
+        await Command("Input.dispatchKeyEvent", new JsonObject { ["type"] = "keyUp", ["key"] = "Tab", ["code"] = "Tab", ["windowsVirtualKeyCode"] = 9 });
+        await Check("document.activeElement.matches(':focus-visible')&&getComputedStyle(document.activeElement).outlineStyle!=='none'", "visible keyboard focus");
+        await Check("!!document.getElementById('stable-anchor')&&[...document.querySelectorAll('.markdown-content a')].some(a=>a.getAttribute('href')==='index.html')", "anchor and relative navigation");
+        var capture = await Command("Page.captureScreenshot", new JsonObject { ["format"] = "png" });
+        await File.WriteAllBytesAsync(screenshot, Convert.FromBase64String(capture["data"]!.GetValue<string>()));
+    }
+
     private async Task<JsonObject> Command(string method, JsonObject? parameters = null)
     {
         var id = Interlocked.Increment(ref _nextId);

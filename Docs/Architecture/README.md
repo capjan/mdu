@@ -52,7 +52,7 @@ The baseline for the large reference site was about 326 ms until a text edit bec
 | **Consistent output** | Preserve atomic page replacement, links, anchors, navigation, search results, media consent, and PDF behavior, including strict `pdf-hidden` validation. If expensive downloads are updated separately, their readiness and revision must be clear rather than silently serving stale content. |
 | **Bounded reuse** | Invalidate saved results when their inputs or dependencies change; release obsolete entries after changes and deletions. Large cached results need explicit memory limits. |
 
-These constraints describe the intended direction, not a claim that dependency-scoped rebuilding, prioritized scheduling, or early preview startup is already implemented. The [processing pipeline](Pipeline.md#live-preview) describes current behavior.
+Per-page snapshots, retained media/PDF analysis, and dependency-scoped asset and specification updates implement part of these constraints. Prioritized scheduling and early preview startup remain planned. The [processing pipeline](Pipeline.md#live-preview) describes current behavior.
 
 ### Verification and regression checks
 
@@ -62,7 +62,7 @@ Use at least 300 edit observations across multiple server processes for p95 acce
 
 Measure allocation volume, peak process RSS, and retained managed memory separately. Normal timed runs must not force garbage collection or include diagnostic instrumentation. For retention checks, use separate runs with idle checkpoints and long mixed edit sequences. The initial baseline showed stabilization during repeated body edits, but did not establish a plateau for mixed changes; an RSS peak alone is not evidence of a leak.
 
-Every optimization must pass output and behavior checks as well as timing checks. Start with byte-identical output where applicable; when output organization changes, verify equivalent content and behavior explicitly. Browser checks must cover search, navigation, keyboard focus, and media consent acceptance and revocation. A faster internal stage is insufficient if end-to-end latency, memory use, or correctness regresses. The existing measurement harness supplies the baseline; browser timing and larger acceptance runs still need to be added.
+Every optimization must pass output and behavior checks as well as timing checks. Start with byte-identical output where applicable; when output organization changes, verify equivalent content and behavior explicitly. Browser checks must cover search, navigation, keyboard focus, and media consent acceptance and revocation. A faster internal stage is insufficient if end-to-end latency, memory use, or correctness regresses. The native .NET harness measures browser timing and checks these interactions; larger acceptance runs remain necessary before claiming the targets.
 
 ## System context
 

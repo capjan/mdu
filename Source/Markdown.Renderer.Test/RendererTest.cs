@@ -242,11 +242,11 @@ public class RendererTest
     {
         private readonly TaskCompletionSource _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public string? Written { get; private set; }
+        public string Written => ToString();
 
         public override Task WriteAsync(string? value)
         {
-            Written = value;
+            Write(value);
             return _completion.Task;
         }
 

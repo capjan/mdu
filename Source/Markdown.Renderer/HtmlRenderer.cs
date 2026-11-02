@@ -5,6 +5,7 @@ using System.Net;
 using System.Text.RegularExpressions;
 using Markdig;
 using Markdig.Extensions.Abbreviations;
+using Markdig.Extensions.Footnotes;
 using Markdig.Renderers.Html;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
@@ -18,6 +19,7 @@ namespace Markdown.Renderer;
 public class HtmlRenderer
 {
     private static readonly Regex TemplateTokenRegex = new(@"%%(?<name>[A-Z_]+)%%", RegexOptions.Compiled);
+    private static readonly Lazy<(string Text, string? Token)[]> TemplateParts = new(ReadTemplateParts);
     private static readonly Regex HeadingRegex = new(
         @"<h(?<level>[1-6])(?<attributes>\s[^>]*)?>(?<content>.*?)</h\k<level>>",
         RegexOptions.Compiled | RegexOptions.Singleline);
@@ -191,6 +193,12 @@ public class HtmlRenderer
     public IReadOnlyCollection<string> FindMediaProviders(string markdown)
     {
         var document = ParseMarkdown(markdown);
+        // Fenced code, diagrams and icons cannot produce a standalone media paragraph.
+        // Keep the rendered-HTML path for actual links and arbitrary HTML, including containers.
+        if (!document.Descendants<LinkInline>().Any(link => !link.IsImage && MediaLinkEmbedder.IsProviderLink(link.Url)) &&
+            !document.Descendants<HtmlBlock>().Any() && !document.Descendants<HtmlInline>().Any() &&
+            !document.Descendants<FootnoteLink>().Any())
+            return Array.Empty<string>();
         var html = document.ToHtml(_pipeline);
         MediaLinkEmbedder.ReplaceStandaloneLinks(html, out var providers);
         return providers;
@@ -375,10 +383,30 @@ public class HtmlRenderer
                 + (dashboard is null ? string.Empty : $"<script>{Dashboard.Script}</script>{Environment.NewLine}")
                 + (hasIsometricDiagram ? $"<script>{Resources.IsometricDiagramScriptContent()}</script>{Environment.NewLine}" : string.Empty)
         };
-        var renderedHtml = TemplateTokenRegex.Replace(Resources.HtmlTemplateContent(), match =>
-            values.TryGetValue(match.Groups["name"].Value, out var value) ? value : match.Value);
-        
-        await writer.WriteAsync(renderedHtml).ConfigureAwait(false);
+        await WriteTemplate(writer, values).ConfigureAwait(false);
+    }
+
+    private static (string Text, string? Token)[] ReadTemplateParts()
+    {
+        var template = Resources.HtmlTemplateContent();
+        var parts = new List<(string, string?)>();
+        var position = 0;
+        foreach (Match match in TemplateTokenRegex.Matches(template))
+        {
+            parts.Add((template[position..match.Index], null));
+            parts.Add((match.Value, match.Groups["name"].Value));
+            position = match.Index + match.Length;
+        }
+        parts.Add((template[position..], null));
+        return parts.ToArray();
+    }
+
+    private static async Task WriteTemplate(TextWriter writer, IReadOnlyDictionary<string, string> values)
+    {
+        // Reuse the immutable template and write its values directly, without another complete HTML string.
+        foreach (var (text, token) in TemplateParts.Value)
+            await writer.WriteAsync(token is not null && values.TryGetValue(token, out var value) ? value : text)
+                .ConfigureAwait(false);
     }
 
     private void EnsureIconSearchAssets()

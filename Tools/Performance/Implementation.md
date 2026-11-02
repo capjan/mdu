@@ -3,11 +3,11 @@
 Approved scope: native .NET development tools, local static website assets, responsive preview, and measured acceptance against the architecture quality requirements. Git, OS APIs/utilities and browsers are permitted. Consent-gated external video players remain supported.
 
 - [x] Replace Python benchmark generation, process measurements, diagnostics, reporting and archiving with .NET tools.
-- [ ] Add .NET-driven browser measurements, correctness checks, and percentile workloads.
+- [x] Add .NET-driven browser measurements, correctness checks, and percentile workloads (acceptance runs remain below).
 - [x] Replace the Node/npm icon preparation workflow and its tests with .NET tools.
-- [ ] Remove site-wide media/PDF rediscovery from ordinary edits, preserving validation.
-- [ ] Reuse navigation preparation and reduce avoidable HTML allocations.
-- [ ] Restrict rebuilds to affected dependencies.
+- [x] Remove site-wide media/PDF rediscovery from ordinary edits, preserving validation.
+- [x] Reuse navigation preparation and reduce avoidable HTML allocations.
+- [x] Restrict specification and asset rebuilds to affected dependencies; shared metadata still rebuilds the site.
 - [ ] Coalesce changes, prioritize active previews, and prevent obsolete work from winning.
 - [ ] Make initial preview usable early, with correct navigation/search and clear download readiness.
 - [ ] Verify bounded memory and all latency/allocation targets; document measurements and remaining limits.

@@ -6,6 +6,10 @@ namespace Markdown.Renderer;
 
 internal static class MediaLinkEmbedder
 {
+    internal static bool IsProviderLink(string? value) => value is not null &&
+        Uri.TryCreate(WebUtility.HtmlDecode(value), UriKind.Absolute, out var uri) &&
+        uri.Scheme is "http" or "https" && GetEmbed(uri).VideoId is not null;
+
     private static readonly Regex StandaloneLinkParagraphRegex = new(
         "<p>\\s*<a href=\"(?<url>[^\"]+)\"[^>]*>(?<label>.*?)</a>\\s*</p>",
         RegexOptions.Compiled | RegexOptions.Singleline);

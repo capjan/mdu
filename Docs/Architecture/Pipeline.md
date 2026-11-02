@@ -102,7 +102,9 @@ sequenceDiagram
     Browser->>Browser: Reload if the open page changed
 ```
 
-`serve` remembers which assets each page links to. When an image changes, it copies the new file and reloads only the pages that show it. Changes to an OpenAPI specification rebuild the site so its generated reference stays current. A changed import page triggers a rebuild and resolves its GitHub URL again; restarting `serve` picks up remote branch changes when no local import page changed. Files that disappear from the site are removed from the output folder.
+`serve` remembers which assets and OpenAPI specifications each page references. When an image changes, it copies the new file and reloads only the pages that show it. Specification changes refresh their referencing pages, companion specification pages, search entries, and linked PDFs. Unrelated HTML stays untouched unless shared metadata changes. A changed import page triggers a rebuild and resolves its GitHub URL again; restarting `serve` picks up remote branch changes when no local import page changed. Files that disappear from the site are removed from the output folder.
+
+Markdown is held as a stable per-page snapshot for a build and invalidated when that page or its specification changes. Media-provider membership and PDF-link analysis are retained per page; ordinary edits do not render all other pages to rediscover them. Changing the site's provider membership still refreshes every page's shared consent dialog. Navigation entries are prepared once per rendering visitor, and immutable HTML template parts are reused and streamed to the output writer.
 
 When Markdown content changes, `serve` refreshes `documentation.pdf` if a PDF Link remains in the project. Adding the first link creates the file; removing the last link deletes it.
 

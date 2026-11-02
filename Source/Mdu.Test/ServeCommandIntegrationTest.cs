@@ -8,6 +8,136 @@ namespace Mdu.Test;
 public class ServeCommandIntegrationTest
 {
     [Fact]
+    public async Task AtomicSavesAndBurstsRecoverFromInvalidIntermediateContent()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-serve-saves-{Guid.NewGuid():N}");
+        var docs = Path.Combine(root, "Docs");
+        var site = Path.Combine(root, "site");
+        Directory.CreateDirectory(docs);
+        var page = Path.Combine(docs, "README.md");
+        File.WriteAllText(page, "# Home\n\nInitial");
+        var (process, port) = await StartServerOnFreePortAsync(docs, site);
+        using var _ = process;
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+        var url = $"http://127.0.0.1:{port}/";
+        try
+        {
+            await WaitUntilAsync(async () => await PageContainsAsync(client, url, "Initial"), process);
+            for (var save = 0; save < 3; save++)
+            {
+                var marker = $"AtomicSave{save}";
+                var temporary = page + ".saving";
+                File.WriteAllText(temporary, $"# Home\n\n{marker}");
+                File.Move(temporary, page, overwrite: true);
+                await WaitUntilAsync(async () => await PageContainsAsync(client, url, marker), process);
+            }
+            File.WriteAllText(page, "---\ntitle: [\n---\n# Home\n");
+            await Task.Delay(150);
+            for (var save = 0; save < 20; save++)
+                File.WriteAllText(page, $"# Home\n\nBurst{save}");
+            await WaitUntilAsync(async () => await PageContainsAsync(client, url, "Burst19"), process);
+            await WaitUntilAsync(async () => await PageContainsAsync(client, url + "search-index.json", "Burst19"), process);
+            await Task.Delay(200);
+            Assert.Contains("Burst19", await client.GetStringAsync(url));
+            Assert.DoesNotContain("Burst18", await client.GetStringAsync(url));
+        }
+        finally
+        {
+            StopServer(process);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task SpecificationEditsKeepUnrelatedHtmlUntouched()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-serve-scoped-api-{Guid.NewGuid():N}");
+        var docs = Path.Combine(root, "Docs");
+        var site = Path.Combine(root, "site");
+        Directory.CreateDirectory(docs);
+        File.WriteAllText(Path.Combine(docs, "README.md"), "# Home\n\nUnrelated");
+        File.WriteAllText(Path.Combine(docs, "Api.md"), "# Reference\n\n```openapi\n./api.json\n```\n");
+        var spec = Path.Combine(docs, "api.json");
+        File.WriteAllText(spec, OpenApiSpecification("InitialApi"));
+        var (process, port) = await StartServerOnFreePortAsync(docs, site);
+        using var _ = process;
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+        var url = $"http://127.0.0.1:{port}/";
+        try
+        {
+            await WaitUntilAsync(async () => await PageContainsAsync(client, url + "Api.html", "InitialApi"), process);
+            var apiHtml = await client.GetStringAsync(url + "Api.html");
+            var specificationUrl = System.Text.RegularExpressions.Regex.Match(apiHtml,
+                "class=\"openapi-spec-link\" href=\"(?<url>[^\"]+)\"").Groups["url"].Value;
+            Assert.NotEmpty(specificationUrl);
+            using var eventClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+            await using var events = await eventClient.GetStreamAsync(url + "__mdu/events");
+            using var reader = new StreamReader(events);
+            async Task<System.Text.Json.JsonDocument> NextEvent()
+            {
+                while (await reader.ReadLineAsync() is { } line)
+                    if (line.StartsWith("data: ", StringComparison.Ordinal)) return System.Text.Json.JsonDocument.Parse(line[6..]);
+                throw new InvalidOperationException("The reload stream ended.");
+            }
+            using var initial = await NextEvent();
+            var homeTime = File.GetLastWriteTimeUtc(Path.Combine(site, "index.html"));
+            File.WriteAllText(spec, OpenApiSpecification("ChangedApi"));
+            await WaitUntilAsync(async () => await PageContainsAsync(client, url + "Api.html", "ChangedApi"), process);
+            await WaitUntilAsync(async () => await PageContainsAsync(client, url + "search-index.json", "ChangedApi"), process);
+            using var updated = await NextEvent();
+            Assert.Contains("/" + specificationUrl, updated.RootElement.GetProperty("paths").EnumerateArray().Select(path => path.GetString()));
+            Assert.Equal(homeTime, File.GetLastWriteTimeUtc(Path.Combine(site, "index.html")));
+        }
+        finally
+        {
+            StopServer(process);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task UpdatesSharedMediaSettingsOnlyWhenProviderMembershipChanges()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-serve-media-{Guid.NewGuid():N}");
+        var docs = Path.Combine(root, "Docs");
+        var site = Path.Combine(root, "site");
+        Directory.CreateDirectory(docs);
+        File.WriteAllText(Path.Combine(docs, "README.md"), "# Home");
+        var first = Path.Combine(docs, "First.md");
+        var second = Path.Combine(docs, "Second.md");
+        File.WriteAllText(first, "# First\n\n[Watch](https://youtu.be/hyeCMRQhVOI)");
+        File.WriteAllText(second, "# Second\n\n[Watch](https://youtu.be/hyeCMRQhVOI)");
+        var (process, port) = await StartServerOnFreePortAsync(docs, site);
+        using var _ = process;
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+        var url = $"http://127.0.0.1:{port}/";
+        try
+        {
+            await WaitUntilAsync(async () => await PageContainsAsync(client, url, "data-media-provider=\"YouTube\""), process);
+            var homeTime = File.GetLastWriteTimeUtc(Path.Combine(site, "index.html"));
+            File.WriteAllText(first, "# First\n\nFirstChanged");
+            await WaitUntilAsync(async () => await PageContainsAsync(client, url + "First.html", "FirstChanged"), process);
+            Assert.Contains("data-media-provider=\"YouTube\"", await client.GetStringAsync(url));
+            Assert.Equal(homeTime, File.GetLastWriteTimeUtc(Path.Combine(site, "index.html")));
+
+            File.WriteAllText(second, "# Second\n\nLastVideoRemoved");
+            await WaitUntilAsync(async () => !(await client.GetStringAsync(url)).Contains("data-media-provider=\"YouTube\"", StringComparison.Ordinal), process);
+            Assert.Contains("LastVideoRemoved", await client.GetStringAsync(url + "Second.html"));
+
+            File.WriteAllText(first, "# First\n\n[Watch](https://vimeo.com/76979871)");
+            await WaitUntilAsync(async () => await PageContainsAsync(client, url, "data-media-provider=\"Vimeo\""), process);
+            Assert.DoesNotContain("<iframe", await client.GetStringAsync(url + "First.html"));
+            File.Delete(first);
+            await WaitUntilAsync(async () => !(await client.GetStringAsync(url)).Contains("data-media-provider=\"Vimeo\"", StringComparison.Ordinal), process);
+        }
+        finally
+        {
+            StopServer(process);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task UpdatesPdfDownloadNamesWhenTheTargetTitleIsHiddenOrShown()
     {
         var root = Path.Combine(Path.GetTempPath(), $"mdu-serve-pdf-title-{Guid.NewGuid():N}");

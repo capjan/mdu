@@ -12,6 +12,7 @@ namespace Mdu.Commands;
 public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRenderer)
 {
     private readonly Dictionary<string, PdfSourceSection[]> _sitePdfSections = new(MarkdownLinks.PathComparer);
+    private readonly Dictionary<MarkdownFile, (string Markdown, IReadOnlyList<string> Links)> _pagePdfLinks = new();
     public IReadOnlyCollection<string> GeneratedSitePdfPaths { get; private set; } = Array.Empty<string>();
 
     public int Execute(RenderCommandSettings settings)
@@ -92,7 +93,11 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
     public int WriteSitePdfIfLinked(string rootPath, string outputPath, IEnumerable<MarkdownFile> graph,
         bool reuseUnchanged = false)
     {
-        if (!reuseUnchanged) _sitePdfSections.Clear();
+        if (!reuseUnchanged)
+        {
+            _sitePdfSections.Clear();
+            _pagePdfLinks.Clear();
+        }
         outputPath = Path.GetFullPath(outputPath);
         var roots = graph.ToArray();
         var files = Flatten(rootPath, roots).ToArray();
@@ -100,12 +105,18 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         var failed = false;
         foreach (var (page, _) in files)
         {
-            var markdown = OpenApiMarkdownRenderer.ExpandCodeBlocks(
-                RemoveFrontMatter(page.ReadMarkdown(), page.FrontMatter), page.FileInfo.FullName,
-                out var specificationPages, page.SourceRootPath);
-            var links = pdfRenderer.FindPdfLinks(markdown).Concat(
-                specificationPages.SelectMany(specification => pdfRenderer.FindPdfLinks(specification.Markdown)));
-            foreach (var url in links.Distinct(StringComparer.Ordinal))
+            var source = page.ReadMarkdown();
+            if (!_pagePdfLinks.TryGetValue(page, out var cached) || !ReferenceEquals(source, cached.Markdown))
+            {
+                var markdown = OpenApiMarkdownRenderer.ExpandCodeBlocks(
+                    RemoveFrontMatter(source, page.FrontMatter), page.FileInfo.FullName,
+                    out var specificationPages, page.SourceRootPath);
+                var links = pdfRenderer.FindPdfLinks(markdown).Concat(
+                    specificationPages.SelectMany(specification => pdfRenderer.FindPdfLinks(specification.Markdown)))
+                    .Distinct(StringComparer.Ordinal).ToArray();
+                _pagePdfLinks[page] = cached = (source, links);
+            }
+            foreach (var url in cached.Links)
             {
                 MarkdownFile? selected;
                 try

@@ -35,6 +35,8 @@ API tag groups are consistently expanded after page load so the changed operatio
 
 The example collects 300 observations per edit kind across three servers. p95 is printed only for at least 300 observations; smaller samples report median, observed min/max and count. Record hardware, browser version and foreground/background behavior for comparisons.
 
+Run `--mode browser-check --samples 0 --servers 1 --rounds 0 --workloads small` for functional checks of exact search sections, navigation and anchors, keyboard focus, video consent, persisted consent, and revocation. It saves a browser screenshot under `logs/`. This functional check is independent of percentile acceptance.
+
 ## Inputs and validation
 
 `small` copies the checkout's `Docs/Architecture`; `docs` copies all `Docs`. Both add two feature pages exercising links, a stable heading anchor, an eight-operation API file, a 12-component diagram, highlighted C#, icons and a consent-gated video link. In `docs`, `mdu:pdf` becomes `https://example.invalid/pdf-disabled`, excluding PDF generation while keeping preflight cost. Counts depend on source revision; the historical investigation used 6/53 pages including fixtures.

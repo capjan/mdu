@@ -37,6 +37,14 @@ internal static class Instrumentation
                     return Markdig.Parsers.MarkdownParser.Parse(text, pipeline);
                 }
             }
+            public static class MarkdownFileRead
+            {
+                public static string Read(string path)
+                {
+                    using var scope = Probe.Begin("markdown.disk-read");
+                    return System.IO.File.ReadAllText(path);
+                }
+            }
             """);
         var project = new XElement("Project", new XElement("ItemGroup", new XElement("ProjectReference", new XAttribute("Include", Path.Combine(probe, "Probe.csproj")))));
         File.WriteAllText(Path.Combine(dest, "Directory.Build.targets"), project.ToString());
@@ -77,20 +85,17 @@ internal static class Instrumentation
         {
             Scope("StaticCode.Diagrams/DiagramRenderer.cs", "public static bool TryRenderHtml(", "\"diagram.\" + language.ToLowerInvariant()");
             Scope("StaticCode.Icons/IconSetData.cs", "public static IconSetData Load(", "\"icons.\" + resourceName");
-            Replace("Mdu/Model/MarkdownFile.cs", "public string ReadMarkdown() => MarkdownContent ?? File.ReadAllText(FileInfo.FullName);", """
+            if (File.ReadAllText(Path.Combine(dest, "Source/Mdu/Model/MarkdownFile.cs")).Contains("public string ReadMarkdown() =>", StringComparison.Ordinal))
+                Replace("Mdu/Model/MarkdownFile.cs", "public string ReadMarkdown() => MarkdownContent ?? File.ReadAllText(FileInfo.FullName);", """
                 public string ReadMarkdown()
                     {
                         using var scope = Mdu.Performance.Probe.Begin("markdown.read");
                         return MarkdownContent ?? File.ReadAllText(FileInfo.FullName);
                     }
                 """);
-            Replace("Markdown.Renderer/HtmlRenderer.cs", "var renderedHtml = TemplateTokenRegex.Replace(Resources.HtmlTemplateContent(), match =>\n            values.TryGetValue(match.Groups[\"name\"].Value, out var value) ? value : match.Value);", """
-                string renderedHtml;
-                        using (Mdu.Performance.Probe.Begin("html.template"))
-                            renderedHtml = TemplateTokenRegex.Replace(Resources.HtmlTemplateContent(), match =>
-                                values.TryGetValue(match.Groups["name"].Value, out var value) ? value : match.Value);
-                """);
-            Replace("Markdown.Renderer/HtmlRenderer.cs", "await writer.WriteAsync(renderedHtml).ConfigureAwait(false);", "using (Mdu.Performance.Probe.Begin(\"html.write\"))\n            await writer.WriteAsync(renderedHtml).ConfigureAwait(false);");
+            else Scope("Mdu/Model/MarkdownFile.cs", "public string ReadMarkdown()", "\"markdown.read\"");
+            Replace("Mdu/Model/MarkdownFile.cs", "File.ReadAllText(FileInfo.FullName)", "Mdu.Performance.MarkdownFileRead.Read(FileInfo.FullName)");
+            Scope("Markdown.Renderer/HtmlRenderer.cs", "private static async Task WriteTemplate(", "\"html.write\"");
         }
         Replace("Mdu/Program.cs", "var registrations = new ServiceCollection();", "Mdu.Performance.Probe.Initialize();\nvar registrations = new ServiceCollection();");
         Replace("Mdu/Commands/ServeCommand.cs", "var url = server.BaseUrl;", "Mdu.Performance.Probe.Snapshot(\"serve.initial\");\n        var url = server.BaseUrl;");
