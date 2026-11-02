@@ -1,73 +1,70 @@
-# Render and serve performance investigation (#188)
+# Native .NET performance measurements
 
-This directory contains a Python 3 standard-library harness, disposable C# diagnostic instrumentation, and the [measured baseline](results/2026-11-02.md). It does not change the shipped CLI or introduce a benchmark framework or production dependency.
+All active benchmark generation, process measurement, diagnostics, browser control, reporting and archiving use C#/.NET 10. There is no Python, Node.js or npm dependency. Git and the operating system provide repository metadata and process resource APIs. The [historical baseline](results/2026-11-02.md) and its raw archive retain the provenance of the original investigation; their recorded Python version describes that past run, not a current requirement.
 
 ## Reproduce
 
-Requirements: macOS or Linux, Python 3.9+, the repository's .NET 10 SDK and restored packages, Git, and an available IPv4 loopback port. The recorded run used macOS arm64. Windows is not supported by the `wait4` resource collection in this harness.
-
-From the repository root, use a dedicated disposable work directory outside the repository. Generation replaces its `corpora` directory; diagnostic builds replace only `diagnostic-source` or `memory-source`.
+Run from the repository root, sequentially without concurrent builds/tests/benchmarks:
 
 ```sh
-dotnet build Mdu.sln --configuration Release
-python3 Tools/Performance/baseline.py --work /tmp/mdu-perf-188 --mode generate
-python3 Tools/Performance/baseline.py --work /tmp/mdu-perf-188 --mode baseline
-python3 Tools/Performance/baseline.py --work /tmp/mdu-perf-188 --mode memory --samples 3
-python3 Tools/Performance/baseline.py --work /tmp/mdu-perf-188 --mode diagnostic --samples 3
-python3 Tools/Performance/baseline.py --work /tmp/mdu-perf-188 --mode complexity
-python3 Tools/Performance/baseline.py --work /tmp/mdu-perf-188 --mode startup
-python3 Tools/Performance/baseline.py --work /tmp/mdu-perf-188 --mode compare
-python3 Tools/Performance/summarize.py /tmp/mdu-perf-188
+dotnet build Mdu.sln -c Release
+dotnet run --project Tools/Performance -c Release --no-build -- --mode generate --work /tmp/mdu-performance
+dotnet run --project Tools/Performance -c Release --no-build -- --mode baseline --work /tmp/mdu-performance
+dotnet run --project Tools/Performance -c Release --no-build -- --mode diagnostic --samples 3 --work /tmp/mdu-performance
+dotnet run --project Tools/Performance -c Release --no-build -- --mode memory --samples 3 --work /tmp/mdu-performance
+dotnet run --project Tools/Performance -c Release --no-build -- --mode complexity --work /tmp/mdu-performance
+dotnet run --project Tools/Performance -c Release --no-build -- --mode startup --work /tmp/mdu-performance
+dotnet run --project Tools/Performance -c Release --no-build -- --mode compare --work /tmp/mdu-performance
+dotnet run --project Tools/Performance -c Release --no-build -- --mode summary --work /tmp/mdu-performance
+dotnet run --project Tools/Performance -c Release --no-build -- --mode archive --work /tmp/mdu-performance --archive /tmp/mdu-performance.json.gz
 ```
 
-Run these sequentially without other builds/tests/benchmarks. The default baseline has seven fresh render processes and three serve processes per workload, with three edits of each of four kinds per server (nine observations per kind). `--samples`, `--servers`, `--rounds`, and `--workloads small docs large` can shorten exploratory runs; record changed arguments. `--repo` selects an explicit source checkout when running the harness from elsewhere.
+Use a dedicated disposable work directory outside the repository. Generation replaces `corpora`; diagnostic builds replace only `diagnostic-source` or `memory-source`. Output uses fixed `output/<workload>` paths. Each render/initial serve removes previous output; edits overwrite in place. Results record source commit, environment, invocation and corpus manifest. Keep the harness revision with the production revision.
 
-`generate` records page counts, input bytes, and content hashes in `corpora.json`. Every measurement JSON records the source commit, invocation, .NET environment, Python version and runtime settings. The source commit identifies the production code under investigation; also retain this directory's harness revision for exact reproduction. Logs and individual profile snapshots are under `logs/`. Output always goes to `output/<workload>` in the work directory. Each render and initial serve starts with that directory absent; rebuilds overwrite the same directory in place.
+Defaults: seven fresh render processes, three server processes, three rounds per server of body/configuration/diagram/API edits (nine observations per kind). Change `--samples`, `--servers`, `--rounds`, `--workloads small docs large` or `--repo` for exploration and retain the invocation. Exact resource collection currently supports macOS and Linux.
 
-To retain the raw observations and profiles in one small artifact:
+## Browser observations
 
 ```sh
-python3 Tools/Performance/summarize.py /tmp/mdu-perf-188 \
-  --archive Tools/Performance/results/2026-11-02.json.gz
+dotnet run --project Tools/Performance -c Release --no-build -- --mode browser --samples 0 --servers 3 --rounds 100 --work /tmp/mdu-performance
 ```
 
-The gzip file contains JSON objects keyed by source filename and a `profiles` object containing JSONL snapshots as arrays. Use Python's `gzip`/`json` modules to inspect it; no previous chat's temporary files are required.
+The runner launches its own disposable Chromium profile and controls CDP through .NET `ClientWebSocket`; no Node driver or JavaScript automation framework is used. The macOS default is Google Chrome in `/Applications`; otherwise it is `chromium`. Set `MDU_BENCHMARK_BROWSER` to another installed compatible executable if needed. Browser startup is excluded from CLI startup timing.
 
-## Inputs
+API tag groups are consistently expanded after page load so the changed operation summary is visible. Browser readiness requires the expected text to survive two animation frames. This is a DOM/frame observation, not physical display-panel presentation. It includes normal preview reload and is separate from HTTP availability and the reload event. Initial pages are checked for local scripts and absence of eager video iframes. These observations do not substitute for functional search/navigation/consent tests.
 
-All fixtures come from this checkout or deterministic strings in `baseline.py`:
+The example collects 300 observations per edit kind across three servers. p95 is printed only for at least 300 observations; smaller samples report median, observed min/max and count. Record hardware, browser version and foreground/background behavior for comparisons.
 
-| Name | Input |
-| --- | --- |
-| `small` | Four real `Docs/Architecture` pages plus two exercised feature pages. |
-| `docs` | All 51 `Docs` Markdown pages plus the same two feature pages. All `mdu:pdf` strings become `https://example.invalid/pdf-disabled`. PDF generation is outside #188; detection still runs. |
-| `large` | 503 pages: a root, ten section roots, 490 template pages, and two feature pages. The templates repeat prose, 12-node PlantUML diagrams, eight-operation OpenAPI references, 80-line C# blocks, and icon/table content. There are 100 repeated diagram pages, 100 API pages, 100 code pages, 90 icon/table pages and 100 prose pages. |
-| `diagram-6/18/36` | One PlantUML page: three containers, a chain, and skip links across containers. Respectively 6/18/36 components and 6/22/46 links. |
+## Inputs and validation
 
-The two feature pages add an eight-operation local OpenAPI file, a 12-node PlantUML diagram, highlighted C#, icon shortcodes, links, an explicit heading anchor and a YouTube consent placeholder. They make the same correctness and dependency assertions possible on every workload. The larger corpus is **synthetic repetition with distinct URLs**, not evidence about 503 diverse real-world documents. Corpora live outside Git: repository import/network and full Git history traversal costs are not exercised. Architecture links to documentation outside the small extracted subset are not a whole-site link audit.
+`small` copies the checkout's `Docs/Architecture`; `docs` copies all `Docs`. Both add two feature pages exercising links, a stable heading anchor, an eight-operation API file, a 12-component diagram, highlighted C#, icons and a consent-gated video link. In `docs`, `mdu:pdf` becomes `https://example.invalid/pdf-disabled`, excluding PDF generation while keeping preflight cost. Counts depend on source revision; the historical investigation used 6/53 pages including fixtures.
 
-## Measurement boundaries
+`large` has 503 pages: root, ten sections, 490 repeated template pages and two fixtures. Templates include 100 diagram pages, 100 API references, 100 80-line C# pages, 90 icon/table pages and 100 prose pages. This is synthetic repetition with distinct URLs. `diagram-6/18/36` varies the fixed three-container chain/skip-link graph at one page. Their historical input hashes are checked in `Tools/Development.Test`.
 
-Normal runs execute `dotnet <Release mdu.dll> render <source> <output>` or `serve ... --port <ephemeral> --no-browser`, with inherited/default runtime settings. No `dotnet run`, compilation, packaging or instrumentation is inside their timing. This is framework-dependent JIT execution, not a Native AOT/publish comparison.
+`corpora.json` records counts, bytes and SHA-256 fingerprints. Corpora are outside Git: history traversal and repository imports need additional workloads. The small extracted subset retains links outside that subset; explicit fixture links are checked rather than claiming a complete link audit.
 
-One unreported fresh process per workload warms file/image caches before samples. Every measured render is another fresh process, with cold process-local JIT/static initialization but **no claim of cold filesystem caches**. Filesystem caches are not purged. All work uses fixed source/output paths; output removal, source enumeration by the observer, and validation are outside render timing. Render wall time starts before process creation and ends after process exit and log-reader completion. `os.wait4` supplies CPU use and peak process RSS; Darwin reports bytes, Linux KiB, both converted to MiB. The log pipe is drained to a file on a background observer thread.
+Each render/server series validates anchors, navigation, SVG, highlighting, API paths, one exact search section, consent markup and no accidental PDF. Unique edit markers must reach HTTP; body/API markers must reach search before completion. SSE must include the affected page or `reloadAll`. HTML modification times record rewrite scope without assuming full rebuilds remain necessary after optimization. `compare` requires SHA-256 equality of every output file between normal and detailed diagnostic builds.
 
-Serve startup ends after the first successful HTTP response containing the expected content. Edits begin immediately before a direct on-disk write. The observer polls the selected page over `127.0.0.1` every 10 ms until it contains a unique marker. This is HTTP availability, not browser display/reload latency; request duration and polling resolution are included. Completion is a separately timestamped live-reload SSE event, after HTML, specification pages, search, reconciliation and any required preflight work. The 75 ms watcher debounce belongs to measured latency. Early availability can precede site completion substantially; polling can also observe content slightly after completion.
+## Time and resource boundaries
 
-Each successful SSE event is checked for its intended page paths or `reloadAll`, followed by another HTTP marker check. HTML modification times establish the rewrite scope, including redirect aliases and generated specification pages. Content/OpenAPI changes must reach the search index. Each independent save has a 100 ms quiet interval outside timing. Saves use `write_text`, not an editor's atomic-save strategy. The four mutations are a body paragraph, `site_name` in `mdu.yml`, diagram edge labels, and an operation summary in the referenced `api.yaml`. Restoring originals happens only after stopping the server. Source and output trees remain separate.
+Normal runs execute the Release `mdu.dll` in fresh processes. Compilation is outside timing. One discarded process per workload warms file/image caches; samples retain fresh process-local JIT/static state. Filesystem caches are not purged. Inherited/default settings are retained; this is framework-dependent JIT execution, not AOT.
 
-Reported spreads are observed minimum–maximum, with medians and sample counts. These small samples do not support p95/p99 or significance claims about small differences. There is no CPU affinity, filesystem-cache purge or controlled power/thermal state. Rerun noisy comparisons on the same machine; do not interpret a single extreme as a regression.
+A fresh .NET helper starts exactly one CLI process and reads OS `getrusage(RUSAGE_CHILDREN)` after it exits. This supplies lifetime peak RSS and CPU use without the unsupported macOS `Process.PeakWorkingSet64`. Darwin bytes and Linux KiB become MiB. Helper CLR startup/memory/shutdown are excluded; its monotonic CLI-start timestamp is forwarded to the observer. CLI wall time includes process creation through exit. Logs drain concurrently. Resource use of descendants waited by the CLI is included by the OS.
 
-## Diagnostic profiles and memory
+Serve startup ends at the first expected HTTP response; complete initial output is checked separately. Edits start just before the on-disk write. HTTP is polled every 10 ms; completion is a separately timestamped SSE event. Watcher debounce is included. Browser readiness is another interval. Saves are direct writes with a 100 ms quiet interval outside timing; atomic saves/bursts need explicit acceptance scenarios. Originals are restored after stopping the server.
 
-`instrument.py` copies production sources, omitting build products and test projects, into the disposable directory. Guarded replacements insert scopes at actual method boundaries, with nested call paths. Moving boundaries fail assertions instead of silently misprofiling. A separate `Probe` project uses the same Markdig version as the profiled source. Its reference and all inserted code exist only in the generated tree. Diagnostic package auditing is disabled at build time (`-p:NuGetAudit=false`); dependency versions and runtime settings are preserved.
+## Diagnostics and memory
 
-`diagnostic` records inclusive/exclusive elapsed time, call counts and inclusive allocation estimates for discovery/metadata, reads, Markdown parsing, asset analysis/copying, OpenAPI expansion/loading/parsing, PDF-link preflight, media discovery, navigation, diagrams/layout, highlighting, HTML composition/output and search generation/serialization. Inclusive parents contain their children; never sum inclusive rows. Exclusive allocations are deliberately not calculated across mixed process/thread counters. The residual in `page` includes stream flushing, atomic moves, redirects and specification orchestration. `html.write` covers `WriteAsync`, not all filesystem work. Stage timings include JIT and naturally occurring GC.
+`Instrumentation` makes an isolated source copy and inserts guarded method scopes, failing when boundaries move. Its Probe project uses the source's Markdig version. References and instrumentation never enter the shipped CLI. Package auditing is disabled only for the disposable diagnostic build.
 
-Allocation snapshots use `GC.GetTotalAllocatedBytes(true)`. Scopes crossing async work or enclosing whole commands/pages use process totals; synchronous leaf scopes use `GC.GetAllocatedBytesForCurrentThread` to avoid querying all threads thousands of times. Markdig's public and lower-level parser APIs retain their original call paths through wrappers. Leaf attribution is approximate where library internals use worker threads; process totals remain the authoritative allocation volume. Serve process totals include the observer's HTTP requests, timer and snapshot writing. Stage scopes and snapshot serialization add overhead: use normal results for latency, and report the measured diagnostic overhead separately.
+Profiles record nested paths, counts, inclusive/exclusive times and inclusive allocation estimates. Parents include children; do not sum inclusive rows. Async/command/page scopes use process counters and synchronous leaves use thread counters. Exclusive allocations are not subtracted across different domains. Process totals are authoritative; leaf attribution is approximate for threaded libraries. Report profile overhead separately from normal timings.
 
-`memory` builds a lighter copy with just command/edit scopes and startup/exit snapshots. It records three fresh render processes and one long-lived server per workload. That server handles 60 body edits and 15 further edits cycling configuration, diagram and API changes. At startup, after every ten changes and at the end, the observer requests two full blocking collections with finalizer draining **while the server is idle, outside all timed changes**. Post-collection `GC.GetTotalMemory(false)` estimates retained managed bytes. `GC.GetGCMemoryInfo` adds heap/fragmentation information and `Environment.WorkingSet` supplies an idle RSS observation. These forced-collection runs assess stabilization; they are not natural-GC latency baselines or proofs of absence of leaks. No forced collection occurs in normal or detailed-profile runs.
+`memory` uses only command/edit scopes. Each server processes 60 body edits and 15 configuration/diagram/API edits. Startup, every tenth edit and the end have idle checkpoints with two full collections and finalizer draining. Post-GC `GC.GetTotalMemory(false)` estimates retention; heap/fragmentation, collection counts, cumulative allocations and working set are retained too. Forced collections never occur in normal runs. Serving allocations include observation requests and snapshots. These sequences assess stabilization, not multi-hour leak freedom.
 
-`compare` freshly renders every corpus with normal and detailed diagnostic binaries into the same fixed output path, then checks SHA-256 equality for **every output file**. It also checks anchors, navigation links, SVG content, highlighting, OpenAPI, search entries and consent markup. `validate` runs after every measured render/server series; it asserts no eager iframe and no accidental PDF generation. The report records additional test-suite and browser checks.
+Results are JSON/JSONL under `logs/`. `archive` writes gzip-compressed JSON containing results and profiles, compatible with the historical archive container. Do not overwrite historical source reports or data.
 
-`startup` measures `--help` in seven fresh processes after one discarded run. It is a command-startup reference, not a decomposition of render's JIT and cold feature initialization. `complexity` measures full processes on the fixed three-container topology; page count is constant while graph size changes. It is not a bound on arbitrary graphs or all diagram types.
+Inspect either a historical or new archive with the same .NET tool:
+
+```sh
+dotnet run --project Tools/Performance -c Release --no-build -- --mode inspect --archive /tmp/mdu-performance.json.gz
+```

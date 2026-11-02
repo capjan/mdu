@@ -168,6 +168,6 @@ The icon sets are published by their authors under these licenses:
 - Simple Icons: [CC0 1.0](https://github.com/simple-icons/simple-icons/blob/develop/LICENSE.md), by the Simple Icons contributors
 - Dashboard Icons: [Apache License 2.0](https://github.com/homarr-labs/dashboard-icons/blob/main/LICENSE), Copyright (c) 2024 Bjorn Lammers, Meier Lukas, Thomas Camlong and Homarr Labs
 
-MDU converts the icons for inline use: it reduces the Iconify packages to their SVG content and optimizes the Dashboard Icons with [SVGO](https://svgo.dev/). The `mdu` package contains the license texts and these notices in `THIRD-PARTY-NOTICES.md`.
+MDU converts the icons for inline use: its .NET preparation tool reduces the Iconify packages to their SVG content and sanitizes Dashboard Icons, isolating their identifiers and styles. The existing bundled Dashboard Icons were originally optimized with SVGO; updates use the native .NET tool. The `mdu` package contains the license texts and these notices in `THIRD-PARTY-NOTICES.md`.
 
 Simple Icons and Dashboard Icons contain logos of products and companies. The logos remain trademarks of their owners, and the icon licenses do not grant any trademark rights. Use a logo to refer to its product, as documentation usually does, and check the brand's guidelines for other uses.
