@@ -224,7 +224,7 @@ internal static class Measurements
 
     internal static async Task<JsonObject> Compare(Options options, string name)
     {
-        var normal = Path.Combine(options.Repo, "Source/Mdu/bin/Release/net10.0/mdu.dll");
+        var normal = options.Cli ?? Path.Combine(options.Repo, "Source/Mdu/bin/Release/net10.0/mdu.dll");
         var diagnostic = Path.Combine(options.Work, "diagnostic-source/Source/Mdu/bin/Release/net10.0/mdu.dll");
         Dictionary<string, string>? previous = null;
         foreach (var dll in new[] { normal, diagnostic })

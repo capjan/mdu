@@ -7,7 +7,7 @@ internal static class Report
 {
     internal static void Print(string work)
     {
-        foreach (var file in new[] { "baseline.json", "browser.json" })
+        foreach (var file in new[] { "baseline.json", "browser.json", "browser-check.json" })
         {
         if (!File.Exists(Path.Combine(work, file))) continue;
         Console.WriteLine(file);
@@ -54,8 +54,18 @@ internal static class Report
             foreach (var server in result["runs"]!.AsArray().Where(r => r!["command"]!.GetValue<string>() == "serve"))
             {
                 var log = Path.Combine(work, "logs", $"{mode}-{server!["workload"]}-serve-{server["sample"]}.jsonl");
-                foreach (var profile in File.ReadLines(log).Select(line => JsonNode.Parse(line)!)
-                             .Where(profile => profile["reason"]!.GetValue<string>() == "serve.edit"))
+                var edits = File.ReadLines(log).Select(line => JsonNode.Parse(line)!)
+                    .Where(profile => profile["reason"]!.GetValue<string>() == "serve.edit" &&
+                                      profile["stages"]?["serve.edit"] is not null).ToArray();
+                var observations = server["edits"]!.AsArray();
+                if (mode == "memory" && edits.Length == observations.Count)
+                {
+                    foreach (var group in observations.Select((edit, index) => (Kind: edit!["kind"]!.GetValue<string>(), Index: index))
+                                 .GroupBy(edit => edit.Kind))
+                        Console.WriteLine($"  memory {server["workload"]} {group.Key} scope MiB: " + Spread(group.Select(edit =>
+                            edits[edit.Index]["stages"]!["serve.edit"]!["allocatedBytes"]!.GetValue<double>() / 1048576)));
+                }
+                foreach (var profile in edits)
                 {
                     var stages = profile["stages"]!.AsObject();
                     if (!stages.TryGetPropertyValue("serve.edit", out var edit)) continue;
