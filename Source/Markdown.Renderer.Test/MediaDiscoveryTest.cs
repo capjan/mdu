@@ -8,6 +8,8 @@ public sealed class MediaDiscoveryTest
     [InlineData("[Watch][video]\n\n[video]: https://youtu.be/hyeCMRQhVOI", "YouTube")]
     [InlineData("<p><a href=\"https://vimeo.com/76979871\">Watch</a></p>", "Vimeo")]
     [InlineData("[Watch](https://you&#116;u.be/hyeCMRQhVOI)", "YouTube")]
+    [InlineData("<https://youtu.be/hyeCMRQhVOI>", "YouTube")]
+    [InlineData("<https://vimeo.com/76979871>", "Vimeo")]
     public void KeepsRenderedLinkSemantics(string markdown, string provider)
     {
         Assert.Equal(new[] { provider }, new HtmlRenderer().FindMediaProviders(markdown));
@@ -17,6 +19,7 @@ public sealed class MediaDiscoveryTest
     [InlineData("```csharp\n// https://youtu.be/hyeCMRQhVOI\n```")]
     [InlineData("```plantuml\n@startuml\n[One] --> [Two]\n@enduml\n```")]
     [InlineData("Inline [watch](https://youtu.be/hyeCMRQhVOI) in a sentence.")]
+    [InlineData("Inline <https://youtu.be/hyeCMRQhVOI> in a sentence.")]
     [InlineData("![Poster](https://youtu.be/hyeCMRQhVOI)")]
     [InlineData("`:material-home:` :material-home:")]
     public void ContentWithoutStandaloneMediaHasNoProviders(string markdown)

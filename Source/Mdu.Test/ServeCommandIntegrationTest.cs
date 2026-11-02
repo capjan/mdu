@@ -328,8 +328,10 @@ public class ServeCommandIntegrationTest
         }
     }
 
-    [Fact]
-    public async Task KeepsUpdatingPagesWhileAPdfExportFails()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task KeepsUpdatingPagesWhileAPdfExportFails(bool initiallyInvalid)
     {
         var root = Path.Combine(Path.GetTempPath(), $"mdu-serve-pdf-error-{Guid.NewGuid():N}");
         var docs = Path.Combine(root, "Docs");
@@ -338,6 +340,8 @@ public class ServeCommandIntegrationTest
         File.WriteAllText(Path.Combine(docs, "README.md"), "# Home\n\n[Topic](mdu:pdf?root=Topic/README.md)");
         File.WriteAllText(Path.Combine(docs, "Topic", "README.md"), "# Topic");
         var draft = Path.Combine(docs, "Topic", "Draft.md");
+        if (initiallyInvalid)
+            File.WriteAllText(draft, "# Draft\n\nDraftVisible\n\n<!-- pdf:hidden -->\nUnfinished");
         var (process, port) = await StartServerOnFreePortAsync(docs, site);
         using var _ = process;
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };

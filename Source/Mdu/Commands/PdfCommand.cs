@@ -271,6 +271,7 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         public PdfSourceSection[] Sections { get; } = sections;
         public PdfRenderer.RenderSession Session { get; } = session;
         public bool Failed { get; internal set; }
+        internal bool Completed { get; set; }
     }
 
     public SitePdfJob CreateSitePdfJob(string outputPath, PdfSourceSection[] sections) =>
@@ -278,17 +279,21 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
 
     public bool AdvanceSitePdfJob(SitePdfJob job)
     {
+        if (job.Completed) return true;
         try
         {
             if (job.Session.RenderNextSection()) return false;
             job.Failed = WritePreparedPdf(job.OutputPath, job.Sections, true, job.Session.WritePdf) != 0;
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or XmlException or PdfHiddenContentException)
+        catch (Exception exception)
         {
+            // A background PDF failure must terminate this job rather than retry a partially mutated session.
+            job.Failed = true;
+            job.Completed = true;
             Console.Error.WriteLine($"Could not write PDF: {exception.Message}");
             DiscardSitePdf(job.OutputPath);
-            job.Failed = true;
         }
+        job.Completed = true;
         return true;
     }
 

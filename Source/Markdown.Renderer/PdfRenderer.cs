@@ -35,6 +35,7 @@ public sealed class PdfRenderer(HtmlRenderer htmlRenderer)
         private readonly string _coverTitle;
         private readonly PdfLayout _layout;
         private int _nextSection;
+        private bool _failed;
 
         internal RenderSession(HtmlRenderer renderer, string title, IReadOnlyList<PdfSourceSection> sections, bool includeFrontMatter)
         {
@@ -47,13 +48,26 @@ public sealed class PdfRenderer(HtmlRenderer htmlRenderer)
 
         public bool RenderNextSection()
         {
+            if (_failed) throw new InvalidOperationException("The PDF session failed; create a new session to retry.");
             if (_nextSection == _sections.Count) return false;
-            _layout.RenderSection(_sections[_nextSection++]);
+            try
+            {
+                _layout.RenderSection(_sections[_nextSection]);
+                _nextSection++;
+            }
+            catch
+            {
+                // The layout may already contain part of this section; it cannot safely be retried or published.
+                _failed = true;
+                throw;
+            }
             return true;
         }
 
         public void WritePdf(Stream output)
         {
+            if (_failed || _nextSection != _sections.Count)
+                throw new InvalidOperationException("Cannot write an incomplete or failed PDF session.");
             var result = _layout.Complete();
             var description = _sections.Count == 0 ? string.Empty : PdfEncoding.PrintableEmojiText(GetDescription(_sections[0].Markdown));
             var frontMatter = _includeFrontMatter ? PdfFrontMatter.Create(_coverTitle, description, _sections, result) :

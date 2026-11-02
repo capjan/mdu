@@ -238,6 +238,7 @@ public partial class HtmlRenderer
         // Fenced code, diagrams and icons cannot produce a standalone media paragraph.
         // Keep the rendered-HTML path for actual links and arbitrary HTML, including containers.
         if (!document.Descendants<LinkInline>().Any(link => !link.IsImage && MediaLinkEmbedder.IsProviderLink(link.Url)) &&
+            !document.Descendants<AutolinkInline>().Any(link => !link.IsEmail && MediaLinkEmbedder.IsProviderLink(link.Url)) &&
             !document.Descendants<HtmlBlock>().Any() && !document.Descendants<HtmlInline>().Any() &&
             !document.Descendants<FootnoteLink>().Any())
             return Array.Empty<string>();

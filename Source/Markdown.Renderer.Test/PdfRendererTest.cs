@@ -7,6 +7,24 @@ namespace Markdown.Renderer.Test;
 public class PdfRendererTest
 {
     [Fact]
+    public void FailedSectionsCannotBeSkippedOrPublished()
+    {
+        var renderer = new PdfRenderer(new HtmlRenderer());
+        var session = renderer.CreateSession("Manual",
+        [
+            new("Home", "index.html", "# Home"),
+            new("Broken", "Broken.html", "# Broken\n\n<!-- pdf:hidden -->\nUnclosed region")
+        ]);
+        Assert.True(session.RenderNextSection());
+        using var output = new MemoryStream();
+        Assert.Throws<InvalidOperationException>(() => session.WritePdf(output));
+        Assert.Throws<PdfHiddenContentException>(() => session.RenderNextSection());
+        Assert.Throws<InvalidOperationException>(() => session.RenderNextSection());
+        Assert.Throws<InvalidOperationException>(() => session.WritePdf(output));
+        Assert.Equal(0, output.Length);
+    }
+
+    [Fact]
     public void SteppedRenderingPreservesTheCompletePdfBytes()
     {
         var renderer = new PdfRenderer(new HtmlRenderer());

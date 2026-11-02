@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
@@ -28,7 +29,7 @@ public sealed class ServeCommand
     private FileWatcherSet? _watchers;
     private readonly SemaphoreSlim _renderLock = new(1, 1);
     private readonly Dictionary<string, MarkdownFile> _pendingPages = new(PathComparer);
-    private readonly Dictionary<string, MarkdownFile> _pendingOutputs = new(PathComparer);
+    private readonly ConcurrentDictionary<string, MarkdownFile> _pendingOutputs = new(PathComparer);
     private MarkdigVisitor? _pendingVisitor;
     private PreviewServer? _server;
     private readonly Queue<PdfCommand.SitePdfJob> _pendingPdfs = new();
@@ -251,6 +252,10 @@ public sealed class ServeCommand
 
     private async Task PrepareOutputAsync(string path, CancellationToken cancellationToken)
     {
+        // Assets and unavailable PDFs need no rendering. Existing HTML still shares the lock with its writer.
+        if (!Path.GetExtension(path).Equals(".html", StringComparison.OrdinalIgnoreCase) &&
+            !_pendingOutputs.ContainsKey(path) && !_pendingOutputs.ContainsKey(Path.Combine(path, "index.html")))
+            return;
         await _renderLock.WaitAsync(cancellationToken);
         try
         {

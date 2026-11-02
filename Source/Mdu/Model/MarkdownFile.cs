@@ -28,6 +28,7 @@ public class MarkdownFile: INode<MarkdownFile>
 
     private string? _markdownSnapshot;
 
+    /// <summary>Reads this graph node's source snapshot; serve invalidates it before processing an observed edit.</summary>
     public string ReadMarkdown()
     {
         return MarkdownContent ?? (_markdownSnapshot ??= File.ReadAllText(FileInfo.FullName));
