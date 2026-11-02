@@ -65,7 +65,7 @@ internal sealed class LayeredLayout
     /// stay direct instead of getting a bend rank of their own, and connected nodes line up in preference to the
     /// dummies of long edges, which then only keep room free.
     /// </summary>
-    public bool DirectShortLinks { get; init; }
+    public bool CallerRoutesLinks { get; init; }
 
     // Flat edges that ended up in one rank: the left vertex must stay before the right one.
     private readonly List<(Vertex Left, Vertex Right)> _flatPairs = new();
@@ -97,7 +97,7 @@ internal sealed class LayeredLayout
                 item.Index,
                 reversed[item.Index] ? item.Edge.Target : item.Edge.Source,
                 reversed[item.Index] ? item.Edge.Source : item.Edge.Target,
-                item.Edge.MinLength <= 0 ? 0 : DirectShortLinks && item.Edge.LabelWidth == 0 ? item.Edge.MinLength : 2 * item.Edge.MinLength))
+                item.Edge.MinLength <= 0 ? 0 : CallerRoutesLinks && item.Edge.LabelWidth == 0 ? item.Edge.MinLength : 2 * item.Edge.MinLength))
             .ToList();
 
         AssignRanks(vertices, ranked, nodes.Select(node => node.Pin).ToArray());
@@ -540,7 +540,7 @@ internal sealed class LayeredLayout
         {
             var neighbor = neighbors[position];
             var segmentWeight = vertex.IsDummy && neighbor.IsDummy ? 8
-                : DirectShortLinks ? (vertex.IsDummy || neighbor.IsDummy ? 1 : 4)
+                : CallerRoutesLinks ? (vertex.IsDummy || neighbor.IsDummy ? 1 : 4)
                 : vertex.IsDummy || neighbor.IsDummy ? 2 : 1;
             sum += segmentWeight * (neighbor.X + offsets[position]);
             weight += segmentWeight;

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
@@ -345,6 +346,119 @@ public class ComponentRendererTest
     }
 
     [Fact]
+    public void AFlatInterfaceLinkStartsOnTheCircle()
+    {
+        var root = XElement.Parse(DiagramRenderer.RenderPlantUmlSvg("interface API\n[X]\nAPI -right-> X"));
+
+        var circle = root.Descendants(Svg + "circle").Single(shape => Class(shape) == "diagram-node-shape");
+        var bottom = double.Parse(circle.Attribute("cy")!.Value, CultureInfo.InvariantCulture) + double.Parse(circle.Attribute("r")!.Value, CultureInfo.InvariantCulture);
+        Assert.True(EdgeRoutes(root).Single()[0].Y <= bottom, $"{EdgeRoutes(root).Single()[0]} is below the circle, which ends at {bottom}");
+    }
+
+    [Fact]
+    public void LinksBelowAnInterfaceAttachApart()
+    {
+        var root = XElement.Parse(DiagramRenderer.RenderPlantUmlSvg("interface \"A rather long interface name\" as API\n[X]\n[Y]\nAPI --> X\nAPI --> Y"));
+
+        var starts = EdgeRoutes(root).Select(route => route[0]).ToList();
+        Assert.True(Math.Abs(starts[0].X - starts[1].X) > 5, $"{starts[0]} and {starts[1]}");
+    }
+
+    [Theory]
+    [InlineData("[A] -right-> [B]\n[A] -right-> [B]")]
+    [InlineData("[A] -right-> [B] : one\n[B] -left-> [A] : two")]
+    public void RepeatedFlatLinksDoNotCoincide(string source)
+    {
+        var root = XElement.Parse(DiagramRenderer.RenderPlantUmlSvg(source));
+
+        var routes = EdgeRoutes(root);
+        Assert.Equal(2, routes.Count);
+        var boxes = new[] { "A", "B" }.Select(name => Bounds(ElementShape(root, name))).ToList();
+        Assert.True(Math.Abs(routes[0][0].Y - routes[1][0].Y) > 5, $"{routes[0][0]} and {routes[1][0]}");
+        foreach (var point in routes.SelectMany(route => route))
+            Assert.InRange(point.Y, boxes.Min(box => box.Top), boxes.Max(box => box.Bottom));
+    }
+
+    [Fact]
+    public void AFlatLinksLabelStaysOffElementsAndTheTitle()
+    {
+        var root = XElement.Parse(DiagramRenderer.RenderPlantUmlSvg("title Some title\n" + FlatDetour));
+
+        var label = Bounds(root.Descendants(Svg + "rect").Single(rect => Class(rect) == "diagram-edge-label-background"));
+        var titleY = double.Parse(root.Descendants(Svg + "text").Single(text => Class(text) == "diagram-component-title").Attribute("y")!.Value, CultureInfo.InvariantCulture);
+        Assert.True(label.Top > titleY, $"{label} reaches the title at {titleY}");
+        foreach (var box in new[] { "A", "B", "C" }.Select(name => Bounds(ElementShape(root, name))))
+            Assert.True(label.Right <= box.Left || label.Left >= box.Right || label.Bottom <= box.Top || label.Top >= box.Bottom, $"{label} overlaps {box}");
+    }
+
+    [Fact]
+    public void LinksFindAWayAroundElementsBesideTheirDirectLine()
+    {
+        var root = XElement.Parse(DiagramRenderer.RenderPlantUmlSvg("""
+            left to right direction
+            rectangle "Container 0 with name" {
+            [N0]
+            [N1]
+            }
+            [N2]
+            [N0] -right-> [N2]
+            [N0] ---> [N2]
+            [N2] -left-> [N1] : label 5
+            [N2] --> [N1]
+            [N1] -up-> [N0]
+            [N2] ---> [N1] : label 9
+            [N1] -up-> [N2]
+            [N1] --> [N0]
+            [N0] -right-> [N2] : label 12
+            """));
+
+        var middle = Bounds(ElementShape(root, "N1"));
+        foreach (var point in PointsOf(EdgeRoutes(root)[1]))
+            Assert.False(point.X > middle.Left && point.X < middle.Right && point.Y > middle.Top && point.Y < middle.Bottom, $"{point} in {middle}");
+    }
+
+    [Fact]
+    public void RandomDiagramsKeepTheirLinksClear()
+    {
+        var crossedLabels = 0;
+        for (var seed = 0; seed < 400; seed++)
+        {
+            var (source, links) = RandomDiagram(seed);
+            var root = XElement.Parse(DiagramRenderer.RenderPlantUmlSvg(source));
+
+            var routes = EdgeRoutes(root);
+            Assert.Equal(links.Count, routes.Count);
+            var elements = root.Descendants(Svg + "g").Where(group => Class(group).Contains("diagram-component-component"))
+                .ToDictionary(group => group.Element(Svg + "text")!.Value, group => Bounds(group.Element(Svg + "rect")!));
+            var view = root.Attribute("viewBox")!.Value.Split(' ').Select(value => double.Parse(value, CultureInfo.InvariantCulture)).ToArray();
+            for (var index = 0; index < routes.Count; index++)
+            {
+                var route = routes[index];
+                for (var point = 2; point < route.Count; point++)
+                {
+                    var dot = (route[point].X - route[point - 1].X) * (route[point - 1].X - route[point - 2].X) + (route[point].Y - route[point - 1].Y) * (route[point - 1].Y - route[point - 2].Y);
+                    if (point == route.Count - 1 || point == 2) Assert.True(dot >= 0, $"seed {seed}: link {index} doubles back at {route[point - 1]}\n{source}");
+                }
+
+                foreach (var point in PointsOf(route))
+                {
+                    Assert.InRange(point.X, view[0], view[0] + view[2]);
+                    Assert.InRange(point.Y, view[1], view[1] + view[3]);
+                    foreach (var (name, box) in elements)
+                        if (name != links[index].From && name != links[index].To)
+                            Assert.False(point.X > box.Left + 1 && point.X < box.Right - 1 && point.Y > box.Top + 1 && point.Y < box.Bottom - 1, $"seed {seed}: link {index} runs through {name}\n{source}");
+                }
+            }
+
+            crossedLabels += root.Descendants(Svg + "rect").Where(rect => Class(rect) == "diagram-edge-label-background").Select(Bounds)
+                .Count(label => routes.Count(route => PointsOf(route).Any(point => point.X > label.Left && point.X < label.Right && point.Y > label.Top && point.Y < label.Bottom)) > 1);
+        }
+
+        // One flat label in these diagrams is wider than the gap the layout leaves for it.
+        Assert.True(crossedLabels <= 1, $"{crossedLabels} labels are crossed by a second link");
+    }
+
+    [Fact]
     public void KeepsContainerPaddingEvenAroundContent()
     {
         var root = XElement.Parse(DiagramRenderer.RenderPlantUmlSvg("rectangle P {\n[Alpha]\n[Beta]\n[Gamma]\n}\nrectangle Q {\n[One]\n[Two]\n}\nAlpha --> Two\nAlpha --> One\nGamma --> Two\nBeta --> One"));
@@ -353,6 +467,36 @@ public class ComponentRendererTest
         var container = root.Descendants(Svg + "g").Where(group => Class(group).Contains("diagram-container-rectangle")).Select(group => Bounds(group.Element(Svg + "rect")!))
             .First(box => box.Left <= content[0].Left && box.Right >= content[0].Right && box.Top <= content[0].Top && box.Bottom >= content[0].Bottom);
         Assert.Equal(content.Min(box => box.Left) - container.Left, container.Right - content.Max(box => box.Right), 0);
+    }
+
+    private static (string Source, List<(string From, string To)> Links) RandomDiagram(int seed)
+    {
+        var random = new Random(seed);
+        var source = new StringBuilder();
+        if (random.Next(3) == 0) source.AppendLine("left to right direction");
+        if (random.Next(2) == 0) source.AppendLine("title Random");
+        var elements = random.Next(3, 14);
+        var next = 0;
+        for (var container = random.Next(0, 5); container > 0; container--)
+        {
+            source.AppendLine($"{new[] { "package", "rectangle", "node", "frame", "cloud" }[random.Next(5)]} \"Container {container} with name\" {{");
+            for (var count = random.Next(1, 4); count > 0 && next < elements; count--) source.AppendLine($"[N{next++}]");
+            if (random.Next(3) == 0 && next < elements) source.AppendLine($"package \"Inner {container}\" {{\n[N{next++}]\n}}");
+            source.AppendLine("}");
+        }
+
+        while (next < elements) source.AppendLine($"[N{next++}]");
+        var links = new List<(string, string)>();
+        for (var link = random.Next(2, 20); link > 0; link--)
+        {
+            var (from, to) = ($"N{random.Next(elements)}", $"N{random.Next(elements)}");
+            if (from == to) continue;
+            var arrow = new[] { "-->", "-->", "-->", "..>", "-right->", "-left->", "-up->", "--->" }[random.Next(8)];
+            source.AppendLine($"[{from}] {arrow} [{to}]{(random.Next(4) == 0 ? $" : label {link}" : "")}");
+            links.Add((from, to));
+        }
+
+        return (source.ToString(), links);
     }
 
     private static IEnumerable<(double X, double Y)> PointsOf(List<(double X, double Y)> route)

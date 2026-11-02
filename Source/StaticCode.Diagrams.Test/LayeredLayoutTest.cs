@@ -131,11 +131,11 @@ public class LayeredLayoutTest
     }
 
     [Fact]
-    public void DirectShortLinksSkipTheBendRank()
+    public void CallerRoutedLinksSkipTheBendRank()
     {
         var edges = new[] { new LayoutEdge(0, 1) };
 
-        var direct = new LayeredLayout { DirectShortLinks = true }.Compute(new[] { Box, Box }, edges, LayoutDirection.TopToBottom);
+        var direct = new LayeredLayout { CallerRoutesLinks = true }.Compute(new[] { Box, Box }, edges, LayoutDirection.TopToBottom);
         var bent = new LayeredLayout().Compute(new[] { Box, Box }, edges, LayoutDirection.TopToBottom);
 
         Assert.Equal(2, direct.Edges[0].Points.Count);
