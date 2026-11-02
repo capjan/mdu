@@ -31,7 +31,7 @@ public class GitHubAlertExtension : IMarkdownExtension
     private static void RenderTitle(Markdig.Renderers.HtmlRenderer renderer, StringSlice kind) =>
         renderer.Write("<p class=\"markdown-alert-title\">").Write(GetTitle(kind.ToString())).WriteLine("</p>");
 
-    private static string? GetTitle(string kind) =>
+    internal static string? GetTitle(string kind) =>
         AlertKinds.FirstOrDefault(title => title.Equals(kind, StringComparison.OrdinalIgnoreCase));
 
     private static void ApplyGitHubRules(MarkdownDocument document)

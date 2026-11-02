@@ -8,6 +8,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <InternalsVisibleTo Include="Markdown.Search" />
         <InternalsVisibleTo Include="Markdown.Renderer.Test" />
     </ItemGroup>
 
