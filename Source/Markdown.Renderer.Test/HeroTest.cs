@@ -1,4 +1,6 @@
 using System.Text;
+using AngleSharp.Html.Dom;
+using AngleSharp.Html.Parser;
 
 namespace Markdown.Renderer.Test;
 
@@ -253,24 +255,23 @@ public class HeroTest
     public void PlaygroundOffersLiveControlsAndACollapsedExpertEditor()
     {
         var html = Hero.Render("title: Welcome\nplayground: true");
-        var document = new System.Xml.XmlDocument();
-        document.LoadXml(PdfLayout.NormalizeVoidElements(html));
-        var template = document.SelectSingleNode("//template[@class='hero-playground-template']")!;
+        var document = new HtmlParser().ParseDocument(html);
+        var template = ((IHtmlTemplateElement)document.QuerySelector("template.hero-playground-template")!).Content;
 
         foreach (var name in new[] { "title", "text", "effect", "width", "theme", "speed", "height", "align", "quality",
                      "time", "waves", "water", "shallow", "sand", "accent", "colorsReset", "shader", "reset", "pause", "preview", "yaml", "copy" })
-            Assert.NotNull(template.SelectSingleNode($".//*[@name='{name}']"));
-        var width = template.SelectSingleNode(".//select[@name='width']")!;
-        Assert.Equal(new[] { "full", "content" }, width.SelectNodes("option")!.Cast<System.Xml.XmlElement>().Select(option => option.GetAttribute("value")));
+            Assert.NotNull(template.QuerySelector($"[name='{name}']"));
+        var width = template.QuerySelector("select[name='width']")!;
+        Assert.Equal(new[] { "full", "content" }, width.QuerySelectorAll("option").Select(option => option.GetAttribute("value")));
         foreach (var name in new[] { "hero-layout-options", "hero-appearance-options", "hero-yaml-options" })
-            Assert.False(((System.Xml.XmlElement)template.SelectSingleNode($".//details[@class='{name}']")!).HasAttribute("open"));
-        Assert.NotNull(template.SelectSingleNode(".//details[@class='hero-layout-options']//*[@name='quality']"));
-        Assert.NotNull(template.SelectSingleNode(".//div[@class='hero-control-actions']//*[@name='copy']"));
-        var editor = (System.Xml.XmlElement)template.SelectSingleNode(".//details[@class='hero-shader-editor']")!;
+            Assert.False(template.QuerySelector($"details.{name}")!.HasAttribute("open"));
+        Assert.NotNull(template.QuerySelector("details.hero-layout-options [name='quality']"));
+        Assert.NotNull(template.QuerySelector("div.hero-control-actions [name='copy']"));
+        var editor = template.QuerySelector("details.hero-shader-editor")!;
         Assert.False(editor.HasAttribute("open"));
-        Assert.NotNull(editor.SelectSingleNode("summary"));
-        Assert.Null(template.SelectSingleNode(".//*[@name='apply']"));
-        Assert.Contains("preview automatically", template.InnerText);
+        Assert.NotNull(editor.QuerySelector("summary"));
+        Assert.Null(template.QuerySelector("[name='apply']"));
+        Assert.Contains("preview automatically", template.TextContent);
     }
 
     [Fact]

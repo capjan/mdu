@@ -612,14 +612,50 @@ public class PdfRendererTest
     }
 
     [Fact]
-    public void NamesThePageWhenItsHtmlCannotBeParsed()
+    public void RepairsUnclosedHtml()
     {
         var layout = new PdfLayout(new HtmlRenderer(), "");
 
-        var exception = Assert.Throws<System.Xml.XmlException>(() =>
-            layout.RenderSection(new PdfSourceSection("Broken HTML", "broken/index.html", "<div>\n\nOpen")));
+        layout.RenderSection(new PdfSourceSection("Broken HTML", "broken/index.html", "<div>\n\nOpen"));
 
-        Assert.Contains("Page \"Broken HTML\" (broken/index.html)", exception.Message);
+        Assert.Contains(layout.Complete().Pages.SelectMany(page => ReadTextOperations(page.Content.ToString())), operation => operation.Text.Contains("Open"));
+    }
+
+    [Theory]
+    [InlineData("<pre>if (a < b) m;</pre>", "if (a < b) m;")]
+    [InlineData("<textarea>Map<String, Integer> m;</textarea>", "Map<String, Integer> m;")]
+    [InlineData("<a href=/docs/>Docs</a>", "Docs")]
+    [InlineData("<ul><li>One<li>Two</ul>", "Two")]
+    [InlineData("<b><i>Text</b></i>", "Text")]
+    [InlineData("<p>&amp;lt; remains text</p>", "&lt; remains text")]
+    [InlineData("<script>if (a < b && c > d) { run(); }</script>\n\nVisible", "Visible")]
+    public void RendersBrowserParsedHtml(string markdown, string expected)
+    {
+        var layout = Layout(markdown);
+        var text = string.Concat(layout.Pages.SelectMany(page => ReadTextOperations(page.Content.ToString())).Select(operation => operation.Text));
+        Assert.Contains(expected, text);
+        using var output = new MemoryStream();
+        new PdfRenderer(new HtmlRenderer()).WritePdf(output, "Guide", [new PdfSourceSection("Guide", "index.html", markdown)]);
+        Assert.True(output.Length > 0);
+    }
+
+    [Fact]
+    public void UnclosedTemplateHidesFollowingContent()
+    {
+        var document = PdfHtmlDocument.Parse("<p>Before</p><template/>Hidden<p>Also hidden</p>");
+        Assert.Equal("Before", document.DocumentElement!.InnerText);
+    }
+
+    [Fact]
+    public void PreservesWhitespaceBetweenHighlightedCodeSpans()
+    {
+        var result = Layout("```json\n{\n  \"name\": \"value\"\n}\n```");
+        var text = result.Pages.SelectMany(page => ReadTextOperations(page.Content.ToString())).ToArray();
+        var open = Assert.Single(text, operation => operation.Text == "{");
+        var name = Assert.Single(text, operation => operation.Text == "\"name\"");
+        var close = Assert.Single(text, operation => operation.Text == "}");
+        Assert.True(open.Y > name.Y && name.Y > close.Y);
+        Assert.True(name.X > open.X);
     }
 
     [Theory]
@@ -863,8 +899,8 @@ public class PdfRendererTest
     [InlineData("<style-guide>\nVisibleGuide\n</style-guide>\n\nMiddleVisible\n\n<template-card>\nVisibleCard\n</template-card>\n\n<style>.x { color: red; }</style>")]
     [InlineData("<!-- Remember to remove the <script> tag later -->\n\nMiddleVisible\n\n<script>var x = 1;</script>")]
     [InlineData("<!-- <script> -->\n\nMiddleVisible\n\n<!-- </script> -->")]
-    [InlineData("<script src=\"analytics.js\" />\n\nMiddleVisible\n\n<script>var x = 1;</script>")]
-    [InlineData("<template />\n\nMiddleVisible\n\n<template>var x</template>")]
+    [InlineData("<script src=\"analytics.js\"></script>\n\nMiddleVisible\n\n<script>var x = 1;</script>")]
+    [InlineData("<template></template>\n\nMiddleVisible\n\n<template>var x</template>")]
     [InlineData("<![CDATA[ <script> ]]>\n\nMiddleVisible\n\n<script>var x = 1;</script>")]
     [InlineData("<textarea><script>MiddleVisible</script></textarea>")]
     public void RemovesOnlyRealScriptsStylesAndTemplates(string markdown)
