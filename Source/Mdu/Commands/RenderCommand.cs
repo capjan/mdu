@@ -74,6 +74,7 @@ public class RenderCommand
         try
         {
             SiteConfigurationReader.UseCustomIcons(rootPath, siteConfiguration);
+            SiteConfigurationReader.UseDiagramLimits(siteConfiguration);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
         {

@@ -118,7 +118,7 @@ Parses diagram sources and writes SVG. `DiagramRenderer.TryRenderSvg` handles Me
 - Context diagrams place the central system in the middle and its neighbors around it.
 - The SVG uses semantic CSS classes so the site stylesheet can theme it for light and dark mode.
 
-When a source uses unsupported syntax, or a component diagram has more than 1000 elements or 2000 links, `TryRenderSvg` returns `false` and the block stays a code block.
+When a source uses unsupported syntax, or a component diagram exceeds its size limits, `TryRenderSvg` returns `false` and the block stays a code block.
 
 ## StaticCode.Icons
 

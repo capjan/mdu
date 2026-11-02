@@ -76,7 +76,7 @@ public class LinterVisitorTest
     [Fact]
     public void TooLargeDiagramWarnsAtItsCodeBlock()
     {
-        var links = string.Join('\n', Enumerable.Range(0, 2001).Select(_ => "[A] --> [B]"));
+        var links = string.Join('\n', Enumerable.Repeat("[A] --> [B]", 2001));
         WithPage("Overview.md", $"# Overview\n\n```plantuml\n{links}\n```", "Overview", 0,
             errors => Assert.Empty(errors),
             assertWarnings: warnings =>
@@ -84,6 +84,7 @@ public class LinterVisitorTest
                 var warning = Assert.Single(warnings);
                 Assert.Equal(3, warning.LineNumber);
                 Assert.Equal(RuleCodes.DiagramTooLarge, CodeOf(warning));
+                Assert.Contains("2001 links, over the limit of 2000 (diagrams.maxLinks)", warning.Message);
             });
     }
 

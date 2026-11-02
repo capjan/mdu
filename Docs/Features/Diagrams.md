@@ -358,6 +358,16 @@ note right of DB : PostgreSQL
 
 `hide`, `show`, `scale`, `!theme`, `!pragma`, `allowmixing`, and `allow_mixing` are ignored. Other PlantUML diagram types, including sequence and class diagrams, remain code blocks.
 
+### Size limits
+
+A component diagram with more than 1000 elements or 2000 links stays a code block, and `mdu lint` warns about it with `MDU023`. Such a diagram is hard to read and can take a long time and a lot of memory to draw. You can change the limits in `mdu.yml`, or set them to `0` for no limit:
+
+```yaml
+diagrams:
+  maxElements: 3000
+  maxLinks: 6000
+```
+
 ## Context diagrams
 
 Use an MDU `context` code block to show a system and the people and systems connected to it.

@@ -73,8 +73,25 @@ public class ComponentPerformanceTest
     {
         var source = string.Join('\n', Enumerable.Range(0, elements).Select(element => $"[N{element}]").Concat(Enumerable.Repeat("[N0] --> [N1]", links)));
 
-        Assert.Equal(tooLarge, DiagramRenderer.IsPlantUmlTooLarge(source));
+        Assert.Equal(tooLarge, DiagramRenderer.DescribePlantUmlOverLimit(source) != null);
         if (tooLarge) Assert.False(DiagramRenderer.TryRenderSvg("plantuml", source, out _));
+    }
+
+    [Fact]
+    public void RaisedLimitsLetLargerDiagramsThrough()
+    {
+        var source = string.Join('\n', Enumerable.Repeat("[A] --> [B]", 2001));
+        try
+        {
+            DiagramRenderer.UseComponentDiagramLimits(maxLinks: 0);
+            Assert.Null(DiagramRenderer.DescribePlantUmlOverLimit(source));
+            DiagramRenderer.UseComponentDiagramLimits(maxLinks: 2001);
+            Assert.Null(DiagramRenderer.DescribePlantUmlOverLimit(source));
+        }
+        finally
+        {
+            DiagramRenderer.UseComponentDiagramLimits();
+        }
     }
 
     [Fact]

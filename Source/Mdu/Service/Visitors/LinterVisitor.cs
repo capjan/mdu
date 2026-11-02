@@ -9,7 +9,6 @@ using Mdu.Model;
 using YamlDotNet.Core;
 using YamlDotNet.RepresentationModel;
 using StaticCode.Diagrams;
-using StaticCode.Diagrams.Component;
 
 namespace Mdu.Service.Visitors;
 
@@ -286,9 +285,10 @@ public class LinterVisitor: IVisitor<MarkdownFile>
 
     private void ReportLargeDiagrams(string filePath, MarkdownDocumentAnalysis analysis)
     {
-        foreach (var block in analysis.PlantUmlBlocks.Where(block => DiagramRenderer.IsPlantUmlTooLarge(block.Source)))
-            ErrorReceiver.AddWarning(filePath, block.LineNumber,
-                $"{RuleCodes.DiagramTooLarge}: The component diagram has more than {ComponentDiagram.MaxElements} elements or {ComponentDiagram.MaxLinks} links and stays a code block.");
+        foreach (var block in analysis.PlantUmlBlocks)
+            if (DiagramRenderer.DescribePlantUmlOverLimit(block.Source) is { } problem)
+                ErrorReceiver.AddWarning(filePath, block.LineNumber,
+                    $"{RuleCodes.DiagramTooLarge}: The component diagram has {problem} and stays a code block. Split it or raise the limit in mdu.yml.");
     }
 
     private void ReportLegacySidebarMetadata(MarkdownFile page)

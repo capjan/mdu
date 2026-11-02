@@ -13,6 +13,9 @@ namespace StaticCode.Diagrams;
 /// </summary>
 public static class DiagramRenderer
 {
+    private static int _maxElements = ComponentDiagram.DefaultMaxElements;
+    private static int _maxLinks = ComponentDiagram.DefaultMaxLinks;
+
     public const string IsometricLanguage = "isometric";
 
     /// <summary>Appears in rendered HTML exactly when an isometric diagram has phase controls.</summary>
@@ -35,22 +38,38 @@ public static class DiagramRenderer
     public static string RenderPlantUmlSvg(string source)
     {
         var diagram = ComponentParser.Parse(source);
-        if (diagram.IsTooLarge)
-            throw new DiagramSyntaxException($"A component diagram can have at most {ComponentDiagram.MaxElements} elements and {ComponentDiagram.MaxLinks} links.", 1);
+        if (OverLimit(diagram) is { } problem) throw new DiagramSyntaxException($"The component diagram has {problem}.", 1);
         return ComponentSvgWriter.Write(diagram);
     }
 
-    /// <summary>Whether a valid PlantUML component diagram is too large to draw, so that its block stays a code block.</summary>
-    public static bool IsPlantUmlTooLarge(string source)
+    /// <summary>
+    /// Sets the largest component diagrams to draw, for the whole process; larger ones stay code blocks. 0 means no limit.
+    /// The site's <c>mdu.yml</c> applies to every page, and the renderer has no way to pass it down to a code block.
+    /// </summary>
+    public static void UseComponentDiagramLimits(int maxElements = ComponentDiagram.DefaultMaxElements, int maxLinks = ComponentDiagram.DefaultMaxLinks)
+    {
+        _maxElements = maxElements;
+        _maxLinks = maxLinks;
+    }
+
+    /// <summary>Says how a valid PlantUML component diagram exceeds the limits, or <c>null</c> if it can be drawn.</summary>
+    public static string? DescribePlantUmlOverLimit(string source)
     {
         try
         {
-            return ComponentParser.Parse(source).IsTooLarge;
+            return OverLimit(ComponentParser.Parse(source));
         }
         catch (DiagramSyntaxException)
         {
-            return false;
+            return null;
         }
+    }
+
+    private static string? OverLimit(ComponentDiagram diagram)
+    {
+        if (_maxElements > 0 && diagram.Elements.Count > _maxElements) return $"{diagram.Elements.Count} elements, over the limit of {_maxElements} (diagrams.maxElements)";
+        if (_maxLinks > 0 && diagram.Links.Count > _maxLinks) return $"{diagram.Links.Count} links, over the limit of {_maxLinks} (diagrams.maxLinks)";
+        return null;
     }
 
     /// <summary>
