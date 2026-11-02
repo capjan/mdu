@@ -10,6 +10,8 @@ The [completed reference acceptance](results/2026-11-02-acceptance.md) includes 
 
 The [PR review follow-up](results/2026-11-02-review.md) records confirmed autolink/PDF/request-lock defects, their regression tests, the remaining concerns and a separate short native regression series.
 
+The [second review follow-up](results/2026-11-02-review2.md) reproduces failed-batch/pending-page recovery, unexpected exceptions, OpenAPI queue conflicts, failed shared rebuilds and delayed saves, with fixes, native regression observations and explicit remaining PDF limitations.
+
 ## Reproduce
 
 Run from the repository root, sequentially without concurrent builds/tests/benchmarks:
