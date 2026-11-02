@@ -111,9 +111,13 @@ Requests, changed pages, and background HTML work share a serialized renderer. A
 
 The OpenAPI parse cache retains at most 128 documents and 8,388,608 UTF-16 source characters (16 MiB of source text); larger individual inputs are parsed without retention. Parsed object graphs add memory beyond the source-text budget. Eviction affects reuse, not correctness: each hit still requires the current content hash. Syntax-highlighter cache keys are the finite built-in grammar factories, so arbitrary unknown language names cannot accumulate entries. Fixed regex patterns in the main HTML and diagram paths use .NET source generation to avoid runtime regex compilation.
 
+One preview also retains its Git commit-date map. Uncommitted body edits reuse it; HEAD, loose/packed refs, shallow state and repository/worktree configuration invalidate it. Linked worktrees and detached HEADs are supported. History/path/configuration overrides, replacement/grafted histories, reftable storage and metadata files larger than 64 KiB use the original Git query instead. The map is scoped to one preview and checked again after a query to avoid retaining a result across a concurrent commit.
+
 When Markdown content changes, `serve` refreshes `documentation.pdf` if a PDF Link remains in the project. Adding the first link creates the file; removing the last link deletes it.
 
-PDF work remains synchronous before the relevant completion notification; the preview does not advertise unfinished downloads as ready. Expensive PDF workloads still delay initial readiness and change processing and require further scheduling work if their separate responsiveness budget demands it. `mdu render` still completes every HTML, search, asset, and required PDF output before succeeding.
+PDF layout runs one source section at a time after pending HTML, yielding to requests and changed inputs between sections. Source validation and expansion prepare the job; final serialization and atomic replacement finish it. A new content generation discards the old rendering sessions, including when the new source is invalid. Rendering stays serialized with HTML, so shared icons, glossaries and diagram limits cannot change in the middle of an active section.
+
+The preview's status message and reload stream expose PDF states (`pending`, `ready`, `failed`, `none`). While the download batch is pending or failed, generated PDF requests return HTTP 503 with a clear message and retry information instead of stale bytes. Removing links removes obsolete files. Large individual sections and final PDF serialization remain indivisible work and belong to separately labelled PDF budgets. `mdu render` still completes every HTML, search, asset, and required PDF output before succeeding.
 
 ## PDF export
 

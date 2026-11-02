@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Mdu.Performance;
 
@@ -36,23 +37,19 @@ public static class Probe
         lock (Gate)
         {
             var gc = GC.GetGCMemoryInfo();
-            var record = new
+            var record = new ProbeSnapshot
             {
-                reason, sequence = _sequence++,
-                allocatedBytes = GC.GetTotalAllocatedBytes(precise: true),
-                managedBytes = GC.GetTotalMemory(forceFullCollection: false),
-                gcHeapBytes = gc.HeapSizeBytes, gcFragmentedBytes = gc.FragmentedBytes,
-                gen0 = GC.CollectionCount(0), gen1 = GC.CollectionCount(1), gen2 = GC.CollectionCount(2),
-                workingSetBytes = Environment.WorkingSet,
-                stages = Stats.ToDictionary(p => p.Key, p => new
-                {
-                    calls = p.Value.Calls,
-                    inclusiveMs = p.Value.Ticks * 1000d / Stopwatch.Frequency,
-                    exclusiveMs = p.Value.ExclusiveTicks * 1000d / Stopwatch.Frequency,
-                    allocatedBytes = p.Value.Bytes
-                })
+                Reason = reason, Sequence = _sequence++,
+                AllocatedBytes = GC.GetTotalAllocatedBytes(precise: true),
+                ManagedBytes = GC.GetTotalMemory(forceFullCollection: false),
+                GcHeapBytes = gc.HeapSizeBytes, GcFragmentedBytes = gc.FragmentedBytes,
+                Gen0 = GC.CollectionCount(0), Gen1 = GC.CollectionCount(1), Gen2 = GC.CollectionCount(2),
+                WorkingSetBytes = Environment.WorkingSet,
+                Stages = Stats.ToDictionary(p => p.Key, p => new StageSnapshot(p.Value.Calls,
+                    p.Value.Ticks * 1000d / Stopwatch.Frequency,
+                    p.Value.ExclusiveTicks * 1000d / Stopwatch.Frequency, p.Value.Bytes))
             };
-            File.AppendAllText(Output, JsonSerializer.Serialize(record) + "\n");
+            File.AppendAllText(Output, JsonSerializer.Serialize(record, ProbeJsonContext.Default.ProbeSnapshot) + "\n");
             Stats.Clear();
         }
     }
@@ -106,3 +103,24 @@ public static class Probe
         public long Calls, Ticks, ExclusiveTicks, Bytes;
     }
 }
+
+internal sealed class ProbeSnapshot
+{
+    public string Reason { get; init; } = "";
+    public int Sequence { get; init; }
+    public long AllocatedBytes { get; init; }
+    public long ManagedBytes { get; init; }
+    public long GcHeapBytes { get; init; }
+    public long GcFragmentedBytes { get; init; }
+    public int Gen0 { get; init; }
+    public int Gen1 { get; init; }
+    public int Gen2 { get; init; }
+    public long WorkingSetBytes { get; init; }
+    public Dictionary<string, StageSnapshot> Stages { get; init; } = new();
+}
+
+internal sealed record StageSnapshot(long Calls, double InclusiveMs, double ExclusiveMs, long AllocatedBytes);
+
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
+[JsonSerializable(typeof(ProbeSnapshot))]
+internal partial class ProbeJsonContext : JsonSerializerContext;

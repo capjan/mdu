@@ -25,7 +25,7 @@ The following values are **development targets, not performance guarantees or cl
 
 ### Performance targets
 
-The initial reference environment is an Apple M4 with 16 GiB RAM, macOS arm64, .NET SDK 10.0.403 / runtime 10.0.14, and a Release build using normal framework-dependent execution. The original baseline sites contain 6, 53, and 503 Markdown pages, with diagrams, OpenAPI, highlighted code, and icons. Documentation growth changes the small/documentation counts; comparisons must freeze and identify their inputs. The large site repeats fixed content templates; it does not represent every possible 500-page site. Comparisons must record the source revision, corpus, runtime settings, output state, and filesystem-cache conditions.
+The reference environment is an Apple M4 with 16 GiB RAM, macOS arm64, .NET SDK 10.0.403 / runtime 10.0.14. Following the execution-format review, acceptance uses the shipped native .NET release build. Framework-dependent portable execution is measured separately. The original baseline sites contain 6, 53, and 503 Markdown pages, with diagrams, OpenAPI, highlighted code, and icons. Documentation growth changes the small/documentation counts; comparisons must freeze and identify their inputs. The large site repeats fixed content templates; it does not represent every possible 500-page site. Comparisons must record the source revision, corpus, runtime settings, output state, and filesystem-cache conditions.
 
 | Measurement | Development target |
 | --- | --- |
@@ -36,6 +36,8 @@ The initial reference environment is an Apple M4 with 16 GiB RAM, macOS arm64, .
 | Complete `render` of the large reference site | Median at most 2 s |
 | Cumulative managed allocations during an ordinary text edit | At most 10 MiB |
 | Memory during extended editing | Bounded retained state; no sustained growth after warm-up for a fixed workload |
+
+The portable framework-dependent build has separate startup/build budgets on the same machine: median first usable preview at most 750 ms for the small site and 1.5 s for the large site; complete large render at most 5 s. The ordinary edit, display, allocation and retention targets remain the same. These budgets provide explicit headroom over the measured portable checkpoint; they do not replace the native acceptance values or imply identical startup behavior across formats.
 
 An ordinary edit changes one page without changing the shared navigation or site configuration. The initial expensive-content cases use a 12-component diagram or an eight-operation API specification affecting one page. Large specifications, more complex diagrams, shared dependencies with many consumers, PDF generation, remote imports, and slow storage require separately labelled workloads and budgets. A fast update of the open page does not imply that every affected output is already complete.
 
@@ -52,7 +54,7 @@ The baseline for the large reference site was about 326 ms until a text edit bec
 | **Consistent output** | Preserve atomic page replacement, links, anchors, navigation, search results, media consent, and PDF behavior, including strict `pdf-hidden` validation. If expensive downloads are updated separately, their readiness and revision must be clear rather than silently serving stale content. |
 | **Bounded reuse** | Invalidate saved results when their inputs or dependencies change; release obsolete entries after changes and deletions. Large cached results need explicit memory limits. |
 
-Per-page snapshots, retained media/PDF analysis, dependency-scoped updates, early HTML preview, and prioritized pending pages implement part of these constraints. Expensive PDF work remains synchronous. The [processing pipeline](Pipeline.md#live-preview) describes current behavior and limits.
+Per-page snapshots, retained media/PDF analysis, dependency-scoped updates, early HTML preview, prioritized pending pages and cooperative PDF layout implement these constraints. The [processing pipeline](Pipeline.md#live-preview) describes current behavior and limits.
 
 ### Verification and regression checks
 

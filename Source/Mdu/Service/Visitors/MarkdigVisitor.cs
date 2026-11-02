@@ -19,7 +19,8 @@ public class MarkdigVisitor : BaseVisitor
         string editPageRoot,
         SearchIndexBuilder searchIndexBuilder,
         MarkdownFile[]? navigationRoots = null,
-        IReadOnlyCollection<string>? siteMediaProviders = null) : base(rootPath, outPath, ".html")
+        IReadOnlyCollection<string>? siteMediaProviders = null,
+        IReadOnlyDictionary<string, DateTimeOffset>? lastModifiedDates = null) : base(rootPath, outPath, ".html")
     {
         _rootPath = rootPath;
         _outPath = outPath;
@@ -40,7 +41,7 @@ public class MarkdigVisitor : BaseVisitor
         }
         _navigationEntries = CreateNavigationEntries(_navigationRoots);
         _siteMediaProviders = siteMediaProviders ?? FindSiteMediaProviders();
-        _lastModifiedDates = GitLastModified.Read(rootPath);
+        _lastModifiedDates = lastModifiedDates ?? GitLastModified.Read(rootPath);
     }
     
     private readonly HtmlRenderer _htmlFoundation;

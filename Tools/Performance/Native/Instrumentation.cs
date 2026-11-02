@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using System.Runtime.InteropServices;
 
 namespace Mdu.Performance;
 
@@ -7,8 +8,8 @@ internal static class Instrumentation
 {
     internal static async Task<string> Build(Options options)
     {
-        var light = options.Mode == "memory";
-        var dest = Path.Combine(options.Work, light ? "memory-source" : "diagnostic-source");
+        var light = options.Memory;
+        var dest = Path.Combine(options.Work, light ? options.Mode + "-source" : "diagnostic-source");
         if (Directory.Exists(dest)) Directory.Delete(dest, recursive: true);
         Corpora.Copy(Path.Combine(options.Repo, "Source"), Path.Combine(dest, "Source"));
         var probe = Path.Combine(options.Work, "Probe");
@@ -104,6 +105,14 @@ internal static class Instrumentation
             foreach (var path in Directory.EnumerateFiles(Path.Combine(dest, "Source"), "*.cs", SearchOption.AllDirectories))
                 File.WriteAllText(path, File.ReadAllText(path).Replace("Markdig.Markdown.Parse(", "Mdu.Performance.MarkdownParse.Parse(", StringComparison.Ordinal)
                     .Replace("Markdig.Parsers.MarkdownParser.Parse(", "Mdu.Performance.MarkdownParse.ParseRaw(", StringComparison.Ordinal));
+        if (options.Mode == "memory-native")
+        {
+            var output = Path.Combine(dest, "native");
+            Console.WriteLine(await Program.Command("dotnet", ["publish", Path.Combine(dest, "Source/Mdu/Mdu.csproj"),
+                "-c", "Release", "-r", RuntimeInformation.RuntimeIdentifier, "--self-contained", "true", "-p:PublishAot=true",
+                "-p:NuGetAudit=false", "-warnaserror:IL2026,IL2104,IL3050,IL3053", "--output", output]));
+            return Path.Combine(output, OperatingSystem.IsWindows() ? "mdu.exe" : "mdu");
+        }
         Console.WriteLine(await Program.Command("dotnet", ["build", Path.Combine(dest, "Source/Mdu/Mdu.csproj"), "-c", "Release", "-p:NuGetAudit=false"]));
         return Path.Combine(dest, "Source/Mdu/bin/Release/net10.0/mdu.dll");
 

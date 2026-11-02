@@ -36,7 +36,7 @@ internal static class Report
             }
         }
         }
-        foreach (var mode in new[] { "diagnostic", "memory" })
+        foreach (var mode in new[] { "diagnostic", "memory", "memory-native" })
         {
             var path = Path.Combine(work, mode + ".json");
             if (!File.Exists(path)) continue;
@@ -58,11 +58,11 @@ internal static class Report
                     .Where(profile => profile["reason"]!.GetValue<string>() == "serve.edit" &&
                                       profile["stages"]?["serve.edit"] is not null).ToArray();
                 var observations = server["edits"]!.AsArray();
-                if (mode == "memory" && edits.Length == observations.Count)
+                if (mode.StartsWith("memory", StringComparison.Ordinal) && edits.Length == observations.Count)
                 {
                     foreach (var group in observations.Select((edit, index) => (Kind: edit!["kind"]!.GetValue<string>(), Index: index))
                                  .GroupBy(edit => edit.Kind))
-                        Console.WriteLine($"  memory {server["workload"]} {group.Key} scope MiB: " + Spread(group.Select(edit =>
+                        Console.WriteLine($"  {mode} {server["workload"]} {group.Key} scope MiB: " + Spread(group.Select(edit =>
                             edits[edit.Index]["stages"]!["serve.edit"]!["allocatedBytes"]!.GetValue<double>() / 1048576)));
                 }
                 foreach (var profile in edits)

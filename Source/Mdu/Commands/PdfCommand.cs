@@ -91,7 +91,7 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         WritePdf(rootPath, outputPath, Flatten(rootPath, graph), includeFrontMatter: true);
 
     public int WriteSitePdfIfLinked(string rootPath, string outputPath, IEnumerable<MarkdownFile> graph,
-        bool reuseUnchanged = false)
+        bool reuseUnchanged = false, Action<string, PdfSourceSection[]>? defer = null)
     {
         if (!reuseUnchanged)
         {
@@ -141,7 +141,7 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
 
         foreach (var (destination, selected) in requests)
             if (WritePdf(rootPath, destination, selected is null ? files : Flatten(rootPath, [selected]),
-                    includeFrontMatter: true, reuseUnchanged: reuseUnchanged, trackSitePdf: true) != 0)
+                    includeFrontMatter: true, reuseUnchanged: reuseUnchanged, trackSitePdf: true, defer: defer) != 0)
                 failed = true;
 
         if (!requests.ContainsKey(outputPath) && File.Exists(outputPath)) File.Delete(outputPath);
@@ -163,7 +163,8 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         IEnumerable<(MarkdownFile File, int Depth)> files,
         bool includeFrontMatter,
         bool reuseUnchanged = false,
-        bool trackSitePdf = false)
+        bool trackSitePdf = false,
+        Action<string, PdfSourceSection[]>? defer = null)
     {
         PdfSourceSection[] sections;
         try
@@ -231,13 +232,24 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
             previousSections.SequenceEqual(sections))
             return 0;
 
+        if (defer is not null)
+        {
+            defer(outputPath, sections);
+            return 0;
+        }
+        return WritePreparedPdf(outputPath, sections, trackSitePdf,
+            stream => pdfRenderer.WritePdf(stream, Path.GetFileNameWithoutExtension(outputPath), sections, includeFrontMatter));
+    }
+
+    private int WritePreparedPdf(string outputPath, PdfSourceSection[] sections, bool trackSitePdf, Action<Stream> write)
+    {
         var outputDirectory = Path.GetDirectoryName(outputPath)!;
         Directory.CreateDirectory(outputDirectory);
         var temporaryPath = outputPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
             using (var stream = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write))
-                pdfRenderer.WritePdf(stream, Path.GetFileNameWithoutExtension(outputPath), sections, includeFrontMatter);
+                write(stream);
             File.Move(temporaryPath, outputPath, true);
             if (trackSitePdf) _sitePdfSections[outputPath] = sections;
         }
@@ -251,6 +263,33 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
 
         Console.WriteLine($"Wrote {sections.Length} Markdown files to {outputPath}");
         return 0;
+    }
+
+    public sealed class SitePdfJob(string outputPath, PdfSourceSection[] sections, PdfRenderer.RenderSession session)
+    {
+        public string OutputPath { get; } = outputPath;
+        public PdfSourceSection[] Sections { get; } = sections;
+        public PdfRenderer.RenderSession Session { get; } = session;
+        public bool Failed { get; internal set; }
+    }
+
+    public SitePdfJob CreateSitePdfJob(string outputPath, PdfSourceSection[] sections) =>
+        new(outputPath, sections, pdfRenderer.CreateSession(Path.GetFileNameWithoutExtension(outputPath), sections));
+
+    public bool AdvanceSitePdfJob(SitePdfJob job)
+    {
+        try
+        {
+            if (job.Session.RenderNextSection()) return false;
+            job.Failed = WritePreparedPdf(job.OutputPath, job.Sections, true, job.Session.WritePdf) != 0;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or XmlException or PdfHiddenContentException)
+        {
+            Console.Error.WriteLine($"Could not write PDF: {exception.Message}");
+            DiscardSitePdf(job.OutputPath);
+            job.Failed = true;
+        }
+        return true;
     }
 
     private string? FindMalformedPdfLink(IEnumerable<PdfSourceSection> sections)

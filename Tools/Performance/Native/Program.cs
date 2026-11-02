@@ -36,7 +36,7 @@ internal static class Program
                 return 0;
             }
             var dll = options.Cli ?? Path.Combine(options.Repo, "Source/Mdu/bin/Release/net10.0/mdu.dll");
-            if (options.Mode is "diagnostic" or "memory")
+            if (options.Diagnostic)
             {
                 if (options.Cli is not null) throw new ArgumentException("Diagnostic modes instrument their own source build; omit --cli.");
                 dll = await Instrumentation.Build(options);
@@ -49,6 +49,12 @@ internal static class Program
                 ["runs"] = new JsonArray()
             };
             var runs = results["runs"]!.AsArray();
+            if (options.Mode == "pdf-check")
+            {
+                runs.Add(await PdfChecks.Run(options, dll));
+                Save(options, results);
+                return 0;
+            }
             if (options.Mode == "startup")
             {
                 for (var sample = 0; sample <= options.Samples; sample++)
@@ -102,7 +108,7 @@ internal static class Program
     {
         ["commit"] = (await Command("git", ["-C", options.Repo, "rev-parse", "HEAD"])).Trim(),
         ["workingTreeStatus"] = await Command("git", ["-C", options.Repo, "status", "--porcelain"]),
-        ["cli"] = options.Cli ?? "framework-dependent Release mdu.dll",
+        ["cli"] = options.Cli ?? (options.Mode == "memory-native" ? "instrumented Native AOT" : "framework-dependent Release mdu.dll"),
         ["cliSha256"] = options.Cli is null ? null : Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(await File.ReadAllBytesAsync(options.Cli))).ToLowerInvariant(),
         ["platform"] = RuntimeInformation.OSDescription,
         ["machine"] = RuntimeInformation.ProcessArchitecture.ToString(),
@@ -130,9 +136,10 @@ internal static class Program
     }
 }
 
-internal sealed record Options(string Repo, string Work, string Mode, int Samples, int Servers, int Rounds, string[] Workloads, string? Archive, string? Cli = null)
+internal sealed record Options(string Repo, string Work, string Mode, int Samples, int Servers, int Rounds, string[] Workloads, string? Archive, string? Cli = null, int BodyEdits = 60, int MixedRounds = 5, string[]? EditKinds = null)
 {
-    public bool Diagnostic => Mode is "diagnostic" or "memory";
+    public bool Memory => Mode is "memory" or "memory-native";
+    public bool Diagnostic => Mode == "diagnostic" || Memory;
 
     public static Options Read(string[] args)
     {
@@ -146,6 +153,9 @@ internal sealed record Options(string Repo, string Work, string Mode, int Sample
             values.Add(key, items);
         }
         string Value(string key, string fallback) => values.TryGetValue(key, out var list) ? list.Single() : fallback;
+        var editKinds = values.TryGetValue("--edit-kinds", out var kinds) ? kinds.ToArray() : null;
+        if (editKinds is not null && (editKinds.Length == 0 || editKinds.Any(kind => kind is not ("content" or "config" or "diagram" or "spec"))))
+            throw new ArgumentException("--edit-kinds accepts content, config, diagram, spec.");
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "Mdu.sln"))) root = root.Parent;
         return new Options(Canonical(Value("--repo", root?.FullName ?? Directory.GetCurrentDirectory())),
@@ -153,7 +163,8 @@ internal sealed record Options(string Repo, string Work, string Mode, int Sample
             Value("--mode", "baseline"), int.Parse(Value("--samples", "7")), int.Parse(Value("--servers", "3")),
             int.Parse(Value("--rounds", "3")), values.TryGetValue("--workloads", out var names) ? names.ToArray() : ["small", "docs", "large"],
             values.TryGetValue("--archive", out var archive) ? Path.GetFullPath(archive.Single()) : null,
-            values.TryGetValue("--cli", out var cli) ? Path.GetFullPath(cli.Single()) : null);
+            values.TryGetValue("--cli", out var cli) ? Path.GetFullPath(cli.Single()) : null,
+            int.Parse(Value("--body-edits", "60")), int.Parse(Value("--mixed-rounds", "5")), editKinds);
     }
 
     private static string Canonical(string path)

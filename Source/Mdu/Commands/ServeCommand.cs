@@ -31,6 +31,11 @@ public sealed class ServeCommand
     private readonly Dictionary<string, MarkdownFile> _pendingOutputs = new(PathComparer);
     private MarkdigVisitor? _pendingVisitor;
     private PreviewServer? _server;
+    private readonly Queue<PdfCommand.SitePdfJob> _pendingPdfs = new();
+    private bool _pdfFailed;
+    private bool _siteCompletionPending;
+    private bool _pdfRefreshRequired;
+    private readonly GitLastModifiedCache _gitDates = new();
 
     private MarkdownFile[] _navigationRoots = Array.Empty<MarkdownFile>();
     private IReadOnlyCollection<string> _siteMediaProviders = Array.Empty<string>();
@@ -108,7 +113,7 @@ public sealed class ServeCommand
         _watchers = watcher;
         try
         {
-            RebuildSite(failOnPdfError: true);
+            RebuildSite();
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or YamlDotNet.Core.YamlException)
         {
@@ -119,7 +124,8 @@ public sealed class ServeCommand
 
         using var server = new PreviewServer(_outputPath, port, PrepareOutputAsync);
         _server = server;
-        server.SetBuilding(_pendingPages.Count > 0);
+        server.SetBuilding(_pendingPages.Count > 0 || _pendingPdfs.Count > 0);
+        UpdatePdfStatus();
         try
         {
             server.Start();
@@ -175,8 +181,13 @@ public sealed class ServeCommand
         return 0;
     }
 
-    private void RebuildSite(bool failOnPdfError = false)
+    private void RebuildSite()
     {
+        _siteCompletionPending = true;
+        _pendingPages.Clear();
+        _pendingOutputs.Clear();
+        _pendingVisitor = null;
+        InvalidatePdfs();
         _server?.SetBuilding(true);
         var previousFiles = new HashSet<string>(_generatedFiles, PathComparer);
         var siteConfiguration = SiteConfigurationReader.Read(_rootPath);
@@ -206,12 +217,7 @@ public sealed class ServeCommand
         RebuildDependencyIndex(graph);
         _siteMediaProviders = GetSiteMediaProviders();
         graph.Visit(new LocalAssetsCopy(_rootPath, _outputPath));
-        var pdfOutputPath = Path.Combine(_outputPath, "documentation.pdf");
-        if (!TryWriteSitePdf(() => _pdfCommand.WriteSitePdfIfLinked(_rootPath, pdfOutputPath, graph)))
-        {
-            if (failOnPdfError) throw new InvalidOperationException("Could not render the documentation PDF.");
-            ReportPdfFailure();
-        }
+        SchedulePdfs(reuseUnchanged: false);
         var rendererVisitor = new MarkdigVisitor(
             _rootPath,
             _outputPath,
@@ -219,10 +225,9 @@ public sealed class ServeCommand
             _settings.EditPageRoot,
             _searchIndexBuilder,
             _navigationRoots,
-            _siteMediaProviders);
+            _siteMediaProviders,
+            _gitDates.Read(_rootPath));
         rendererVisitor.PrepareSearchIndex();
-        _pendingPages.Clear();
-        _pendingOutputs.Clear();
         _pendingVisitor = rendererVisitor;
         foreach (var (pagePath, page) in _pages)
         {
@@ -276,12 +281,43 @@ public sealed class ServeCommand
 
     private void FinishPendingSite()
     {
-        if (_pendingPages.Count != 0 || _pendingVisitor is null) return;
+        if (_pendingPages.Count != 0) return;
         _pendingVisitor = null;
         _pendingOutputs.Clear();
+        if (_pendingPdfs.Count != 0 || !_siteCompletionPending) return;
+        _siteCompletionPending = false;
         _server?.SetBuilding(false);
         Console.WriteLine("Site updated.");
     }
+
+    private void SchedulePdfs(bool reuseUnchanged)
+    {
+        // All rendering is serialized. Dropping these sessions prevents an older save from publishing a PDF.
+        _pendingPdfs.Clear();
+        _pdfFailed = !TryWriteSitePdf(() => _pdfCommand.WriteSitePdfIfLinked(
+            _rootPath, Path.Combine(_outputPath, "documentation.pdf"), _navigationRoots, reuseUnchanged,
+            (path, sections) => _pendingPdfs.Enqueue(_pdfCommand.CreateSitePdfJob(path, sections))));
+        _pdfRefreshRequired = false;
+        if (_pdfFailed) ReportPdfFailure();
+        if (_pendingPdfs.Count > 0)
+        {
+            _siteCompletionPending = true;
+            _server?.SetBuilding(true);
+        }
+        UpdatePdfStatus();
+    }
+
+    private void InvalidatePdfs()
+    {
+        _pendingPdfs.Clear();
+        _pdfRefreshRequired = _pdfCommand.GeneratedSitePdfPaths.Count > 0;
+        if (_pdfCommand.GeneratedSitePdfPaths.Count > 0)
+            _server?.SetDownloads(_pdfCommand.GeneratedSitePdfPaths, "pending");
+    }
+
+    private void UpdatePdfStatus() => _server?.SetDownloads(_pdfCommand.GeneratedSitePdfPaths,
+        _pendingPdfs.Count > 0 ? "pending" : _pdfFailed ? "failed" :
+        _pdfCommand.GeneratedSitePdfPaths.Count > 0 ? "ready" : "none");
 
     private void RebuildDependencyIndex(IEnumerable<MarkdownFile> graph)
     {
@@ -406,6 +442,18 @@ public sealed class ServeCommand
                         CompletePendingPage(_pendingPages.Values.First());
                         completedPage = true;
                     }
+                    else if (_pendingPdfs.Count > 0)
+                    {
+                        var job = _pendingPdfs.Peek();
+                        if (_pdfCommand.AdvanceSitePdfJob(job))
+                        {
+                            _pendingPdfs.Dequeue();
+                            _pdfFailed |= job.Failed;
+                            UpdatePdfStatus();
+                            FinishPendingSite();
+                        }
+                        completedPage = true;
+                    }
                     else FinishPendingSite();
                 }
                 catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or YamlDotNet.Core.YamlException)
@@ -436,6 +484,12 @@ public sealed class ServeCommand
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or YamlDotNet.Core.YamlException)
             {
                 Console.Error.WriteLine($"Could not update the site: {exception.Message}");
+                if (_pdfRefreshRequired)
+                {
+                    _pdfFailed = true;
+                    UpdatePdfStatus();
+                    FinishPendingSite();
+                }
             }
             finally
             {
@@ -525,6 +579,8 @@ public sealed class ServeCommand
             .Distinct(PathComparer)
             .ToArray();
 
+        if (changedPages.Length > 0) InvalidatePdfs();
+
         var affectedPageUrls = new HashSet<string>(StringComparer.Ordinal);
         foreach (var pagePath in changedPages)
         {
@@ -576,7 +632,8 @@ public sealed class ServeCommand
                 _settings.EditPageRoot,
                 _searchIndexBuilder,
                 _navigationRoots,
-                _siteMediaProviders);
+                _siteMediaProviders,
+                _gitDates.Read(_rootPath));
 
             rendererVisitor.Process(page, depth);
             var specPages = rendererVisitor.OpenApiSpecPagePaths.GetValueOrDefault(page) ?? Array.Empty<string>();
@@ -620,9 +677,7 @@ public sealed class ServeCommand
         if (changedPages.Length > 0)
         {
             _searchIndexBuilder.WriteIndex(_outputPath);
-            var pdfOutputPath = Path.Combine(_outputPath, "documentation.pdf");
-            if (!TryWriteSitePdf(() => _pdfCommand.WriteSitePdfIfLinked(_rootPath, pdfOutputPath, _navigationRoots, reuseUnchanged: true)))
-                ReportPdfFailure();
+            SchedulePdfs(reuseUnchanged: true);
         }
 
         var assetChanges = relevantChanges

@@ -8,6 +8,56 @@ namespace Mdu.Test;
 public class ServeCommandIntegrationTest
 {
     [Fact]
+    public async Task PendingPdfsNeverServeStaleBytesAndNewEditsReplaceUnfinishedWork()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-serve-pdf-pending-{Guid.NewGuid():N}");
+        var docs = Path.Combine(root, "Docs");
+        var site = Path.Combine(root, "site");
+        Directory.CreateDirectory(docs);
+        Directory.CreateDirectory(site);
+        var home = Path.Combine(docs, "README.md");
+        const string link = "\n\n[PDF](mdu:pdf)\n";
+        File.WriteAllText(home, "# Home\n\nOldGeneration" + link);
+        File.WriteAllText(Path.Combine(site, "documentation.pdf"), "stale-old-download");
+        for (var number = 0; number < 180; number++)
+            File.WriteAllText(Path.Combine(docs, $"Page{number:000}.md"),
+                $"# Page {number}\n\n```mermaid\nflowchart LR\nA --> B --> C --> D\n```\n\n" +
+                string.Concat(Enumerable.Repeat("Paragraph for PDF pagination.\n\n", 10)));
+        var (process, port) = await StartServerOnFreePortAsync(docs, site);
+        using var _ = process;
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+        var url = $"http://127.0.0.1:{port}/";
+        try
+        {
+            using (var pending = await client.GetAsync(url + "documentation.pdf"))
+            {
+                Assert.Equal(HttpStatusCode.ServiceUnavailable, pending.StatusCode);
+                Assert.Equal(TimeSpan.FromSeconds(1), pending.Headers.RetryAfter?.Delta);
+                Assert.DoesNotContain("stale-old-download", await pending.Content.ReadAsStringAsync());
+            }
+            Assert.Contains("\"downloads\":\"pending\"", await client.GetStringAsync(url + "__mdu/status"));
+            File.WriteAllText(home, "# Home\n\n```openapi\nmissing.json\n```" + link);
+            await WaitUntilAsync(async () => (await client.GetStringAsync(url + "__mdu/status")).Contains("\"downloads\":\"failed\""), process);
+            using (var failed = await client.GetAsync(url + "documentation.pdf"))
+                Assert.Equal(HttpStatusCode.ServiceUnavailable, failed.StatusCode);
+            for (var save = 0; save < 10; save++)
+                File.WriteAllText(home, $"# Home\n\nIntermediate{save}" + link);
+            File.WriteAllText(home, "# Home\n\nFinalVersion" + link);
+            await WaitUntilAsync(async () => await PageContainsAsync(client, url, "FinalVersion"), process);
+            await WaitUntilAsync(async () => (await client.GetStringAsync(url + "__mdu/status")).Contains("\"downloads\":\"ready\""), process);
+            var pdf = System.Text.Encoding.Latin1.GetString(await client.GetByteArrayAsync(url + "documentation.pdf"));
+            Assert.Contains(Convert.ToHexString(System.Text.Encoding.ASCII.GetBytes("FinalVersion")), pdf);
+            Assert.DoesNotContain(Convert.ToHexString(System.Text.Encoding.ASCII.GetBytes("OldGeneration")), pdf);
+            Assert.Contains("FinalVersion", await client.GetStringAsync(url + "search-index.json"));
+        }
+        finally
+        {
+            StopServer(process);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task RequestedPagesAndNewEditsStayCurrentWhileCompletingTheSite()
     {
         var root = Path.Combine(Path.GetTempPath(), $"mdu-serve-early-{Guid.NewGuid():N}");
@@ -229,6 +279,11 @@ public class ServeCommandIntegrationTest
             var pdfUrl = System.Text.RegularExpressions.Regex.Match(html,
                 "href=\"(?<url>_mdu-pdf/[a-f0-9]+\\.pdf)\"").Groups["url"].Value;
             Assert.NotEmpty(pdfUrl);
+            await WaitUntilAsync(async () =>
+            {
+                using var response = await client.GetAsync(baseUrl + pdfUrl);
+                return response.IsSuccessStatusCode;
+            }, process);
             using (var response = await client.GetAsync(baseUrl + pdfUrl))
             {
                 Assert.True(response.IsSuccessStatusCode);
@@ -300,7 +355,8 @@ public class ServeCommandIntegrationTest
             await WaitUntilAsync(async () =>
             {
                 using var response = await client.GetAsync(baseUrl + pdfUrl);
-                return response.StatusCode == HttpStatusCode.NotFound;
+                return response.StatusCode == HttpStatusCode.ServiceUnavailable &&
+                       (await response.Content.ReadAsStringAsync()).Contains("failed", StringComparison.Ordinal);
             }, process);
 
             File.WriteAllText(draft, "# Draft\n\nDraftFixed\n\n<!-- pdf:hidden -->\nUnfinished\n<!-- /pdf:hidden -->\n");

@@ -78,10 +78,11 @@ internal static class Measurements
             var stream = await response.Content.ReadAsStreamAsync(cancellation.Token);
             var readerTask = ReadEvents(stream, events.Writer, cancellation.Token);
             await NextEvent(events.Reader);
-            if (options.Mode == "memory") memory.Add(await Collect(probe!, 0));
-            var kinds = options.Mode == "memory"
-                ? Enumerable.Repeat("content", 60).Concat(Enumerable.Range(0, 5).SelectMany(_ => new[] { "config", "diagram", "spec" })).ToArray()
-                : Enumerable.Range(0, options.Rounds).SelectMany(_ => new[] { "content", "config", "diagram", "spec" }).ToArray();
+            if (options.Memory) memory.Add(await Collect(probe!, 0));
+            var editKinds = options.EditKinds ?? ["content", "config", "diagram", "spec"];
+            var kinds = options.Memory
+                ? Enumerable.Repeat("content", options.BodyEdits).Concat(Enumerable.Range(0, options.MixedRounds).SelectMany(_ => new[] { "config", "diagram", "spec" })).ToArray()
+                : Enumerable.Range(0, options.Rounds).SelectMany(_ => editKinds).ToArray();
             var currentMarkers = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["index.html"] = "baseline-content-sentinel", ["diagram.html"] = "Diagram fixture", ["measure.html"] = "Measurement fixture"
@@ -151,7 +152,9 @@ internal static class Measurements
                     ["reloadMs"] = reloadMs, ["completeMs"] = completeMs,
                     ["rewrittenHtml"] = changed.Length
                 });
-                if (options.Mode == "memory" && (number % 10 == 0 || number == kinds.Length)) memory.Add(await Collect(probe!, number));
+                if (number % 100 == 0)
+                    Console.WriteLine($"{name} server {sample}: {number}/{kinds.Length} edits verified");
+                if (options.Memory && (number % 10 == 0 || number == kinds.Length)) memory.Add(await Collect(probe!, number));
                 await Task.Delay(100);
             }
             var validation = Validate(output);

@@ -6,6 +6,26 @@ namespace Markdown.Renderer.Test;
 
 public class PdfRendererTest
 {
+    [Fact]
+    public void SteppedRenderingPreservesTheCompletePdfBytes()
+    {
+        var renderer = new PdfRenderer(new HtmlRenderer());
+        PdfSourceSection[] sections =
+        [
+            new("Home", "index.html", "# Home\n\n[Details](Details.md)\n\n:material-home:"),
+            new("Details", "Details.html", "# Details\n\n```csharp\nvar value = 42;\n```\n\n<!-- pdf:hidden -->\nSecret\n<!-- /pdf:hidden -->")
+        ];
+        using var normal = new MemoryStream();
+        renderer.WritePdf(normal, "Manual", sections);
+        var session = renderer.CreateSession("Manual", sections);
+        Assert.True(session.RenderNextSection());
+        Assert.True(session.RenderNextSection());
+        Assert.False(session.RenderNextSection());
+        using var stepped = new MemoryStream();
+        session.WritePdf(stepped);
+        Assert.Equal(normal.ToArray(), stepped.ToArray());
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

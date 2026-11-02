@@ -9,12 +9,13 @@ Approved scope: native .NET development tools, local static website assets, resp
 - [x] Reuse navigation preparation and reduce avoidable HTML allocations.
 - [x] Restrict specification and asset rebuilds to affected dependencies; shared metadata still rebuilds the site.
 - [x] Coalesce changes, prioritize requested pending HTML, and prevent obsolete pending pages from winning.
-- [x] Make initial HTML preview usable early, with complete navigation/search and on-demand pending pages. Required PDFs currently finish synchronously.
+- [x] Make initial HTML preview usable early, with complete navigation/search and on-demand pending pages.
+- [x] Schedule PDF sections between updates, discard obsolete jobs, and expose pending/failed download readiness.
 - [ ] Verify bounded memory and all latency/allocation targets; document measurements and remaining limits.
 
-Remaining work includes percentile acceptance across multiple processes, extended memory acceptance, PDF scheduling for expensive download workloads, and the startup/full-render targets of the normal framework-dependent .NET tool. The existing native release format must be reported separately; it does not silently replace the agreed reference execution mode.
+Remaining work includes percentile acceptance across multiple processes, extended native memory acceptance, and final PDF/browser verification. The user selected native release execution as the acceptance reference, with separate portable startup/build budgets, and authorized evaluation of native .NET tool packages with a portable fallback.
 
-Checkpoint: [measured implementation and unresolved execution-format decision](results/2026-11-02-optimization.md). Production revision `d955cf8` passes 1,483 Release tests (6 platform skips). The portable reference still takes 3.80 s for the large render versus the 2 s goal; native release execution takes 1.35 s. Work pauses for the user's decision on delivery/acceptance before changing the documented reference or proceeding with the remaining acceptance work.
+Historical checkpoint: [measured implementation and execution-format review](results/2026-11-02-optimization.md). Its pause was resolved by the user's native-reference decision. The architecture now records that decision and the separate portable budgets; historical measurements remain unchanged.
 
 Preserve the historical baseline and its provenance. Each implementation step requires focused correctness checks and measured end-to-end comparisons. Pause for the user's decision if a target proves incompatible with correctness or the approved architecture.
 

@@ -26,4 +26,6 @@ The local `mdu serve` development server may provide preview-only endpoints, rel
 
 ## Acceptance scope
 
+Native .NET release execution is the accepted reference for startup and complete-render goals. Portable framework-dependent execution retains its own documented startup/build budget; both formats retain the editing, correctness and memory requirements. Results always identify the format. Platform-specific native .NET tool packages are being evaluated as a delivery option; this does not authorize silently dropping portable platform coverage or bypassing signing/notarization.
+
 The [quality requirements](README.md#quality-requirements) are initially evaluated on the documented reference machine and workloads. Additional platforms must preserve correctness and record their own performance results; identical absolute timings are not assumed. If measurement shows that an agreed goal cannot be met safely, implementation pauses for review of the evidence and alternatives rather than silently relaxing the requirement.

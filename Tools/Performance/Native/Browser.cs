@@ -111,6 +111,23 @@ internal sealed class Browser : IAsyncDisposable
         return result["result"]!["value"]!.AsObject().DeepClone().AsObject();
     }
 
+    internal async Task CheckPdfMessage(bool hidden, string screenshot)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        while (true)
+        {
+            var result = await Command("Runtime.evaluate", new JsonObject
+            {
+                ["expression"] = $"document.getElementById('mdu-download-status')?.hidden === {(hidden ? "true" : "false")}",
+                ["returnByValue"] = true
+            });
+            if (result["result"]?["value"]?.GetValue<bool>() == true) break;
+            await Task.Delay(10, timeout.Token);
+        }
+        var capture = await Command("Page.captureScreenshot", new JsonObject { ["format"] = "png" });
+        await File.WriteAllBytesAsync(screenshot, Convert.FromBase64String(capture["data"]!.GetValue<string>()));
+    }
+
     internal async Task VerifyInteractions(string url, string screenshot)
     {
         await Navigate(url + "measure.html");

@@ -4,6 +4,8 @@ All active benchmark generation, process measurement, diagnostics, browser contr
 
 The [optimization checkpoint](results/2026-11-02-optimization.md) records the implemented changes, separate portable/native measurements, frozen-input reproduction, and the still-open acceptance decision.
 
+The subsequent user decision selects native release execution as the acceptance reference and gives portable startup/build its own budget. The [native tool package study](NativePackages.md) records local installation and fallback checks without changing publication.
+
 ## Reproduce
 
 Run from the repository root, sequentially without concurrent builds/tests/benchmarks:
@@ -14,6 +16,7 @@ dotnet run --project Tools/Performance -c Release --no-build -- --mode generate 
 dotnet run --project Tools/Performance -c Release --no-build -- --mode baseline --work /tmp/mdu-performance
 dotnet run --project Tools/Performance -c Release --no-build -- --mode diagnostic --samples 3 --work /tmp/mdu-performance
 dotnet run --project Tools/Performance -c Release --no-build -- --mode memory --samples 3 --work /tmp/mdu-performance
+dotnet run --project Tools/Performance -c Release --no-build -- --mode memory-native --samples 1 --body-edits 300 --mixed-rounds 100 --workloads large --work /tmp/mdu-performance
 dotnet run --project Tools/Performance -c Release --no-build -- --mode complexity --work /tmp/mdu-performance
 dotnet run --project Tools/Performance -c Release --no-build -- --mode startup --work /tmp/mdu-performance
 dotnet run --project Tools/Performance -c Release --no-build -- --mode compare --work /tmp/mdu-performance
@@ -39,7 +42,11 @@ API tag groups are consistently expanded after page load so the changed operatio
 
 The example collects 300 observations per edit kind across three servers. p95 is printed only for at least 300 observations; smaller samples report median, observed min/max and count. Record hardware, browser version and foreground/background behavior for comparisons.
 
+Use `--edit-kinds content diagram spec` for the ordinary-edit percentile series without intervening shared configuration rebuilds. The default still includes all four kinds. Keep the chosen sequence in the recorded invocation; shared changes have separate baseline and mixed-retention measurements.
+
 Run `--mode browser-check --samples 0 --servers 1 --rounds 0 --workloads small` for functional checks of exact search sections, navigation and anchors, keyboard focus, video consent, persisted consent, and revocation. It saves a browser screenshot under `logs/`. This functional check is independent of percentile acceptance.
+
+Run `--mode pdf-check` with the chosen `--cli` for a separate generated 181-page PDF workload. It checks the visible pending/failed/ready status, unavailable downloads during work/failure, recovery, and the newest PDF content; pending and ready screenshots are saved. Initial HTML, updated browser content, and complete PDF times are recorded separately. This is a separately labelled functional/performance observation, not the ordinary no-PDF percentile corpus.
 
 ## Inputs and validation
 
@@ -70,6 +77,8 @@ Profiles record nested paths, counts, inclusive/exclusive times and inclusive al
 Streamed template output now appears under `html.write`, including token lookup; the historical separate `html.template` stage no longer applies. `serve.first-ready` precedes background HTML work and `serve.complete` records its completion. `markdown.read` counts snapshot access, while `markdown.disk-read` distinguishes physical reads.
 
 `memory` uses only command/edit scopes. Each server processes 60 body edits and 15 configuration/diagram/API edits. Startup, every tenth edit and the end have idle checkpoints with two full collections and finalizer draining. Post-GC `GC.GetTotalMemory(false)` estimates retention; heap/fragmentation, collection counts, cumulative allocations and working set are retained too. Forced collections never occur in normal runs. Serving allocations include observation requests and snapshots. These sequences assess stabilization, not multi-hour leak freedom.
+
+`memory-native` publishes the isolated lightweight instrumented source with Native AOT for the host RID and runs the same checkpoints. Probe JSON uses .NET source generation and remains absent from production builds. `--body-edits` and `--mixed-rounds` change the separate retention workload (defaults 60 and 5); each mixed round contains configuration, diagram and API changes. This permits extended native retention checks without treating portable GC behavior as native evidence.
 
 Results are JSON/JSONL under `logs/`. `archive` writes gzip-compressed JSON containing results and profiles, compatible with the historical archive container. Do not overwrite historical source reports or data.
 
