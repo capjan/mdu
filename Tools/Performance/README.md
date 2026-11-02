@@ -8,6 +8,8 @@ The subsequent user decision selects native release execution as the acceptance 
 
 The [completed reference acceptance](results/2026-11-02-acceptance.md) includes native/portable p95 distributions, Git coverage, 600 native retention edits, PDF readiness and byte-identical output checks, with raw archives and explicit limitations.
 
+The [PR review follow-up](results/2026-11-02-review.md) records confirmed autolink/PDF/request-lock defects, their regression tests, the remaining concerns and a separate short native regression series.
+
 ## Reproduce
 
 Run from the repository root, sequentially without concurrent builds/tests/benchmarks:
