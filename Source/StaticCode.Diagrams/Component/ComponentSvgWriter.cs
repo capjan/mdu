@@ -481,37 +481,44 @@ internal sealed class ComponentSvgWriter
             var (first, last) = (Rounded(route.Value.Points[0]), Rounded(route.Value.Points[^1]));
             return first.CompareTo(last) <= 0 ? (first, last) : (last, first);
         });
-        foreach (var group in doubles.Where(group => group.Count() > 1).ToList())
+        foreach (var keys in doubles.Where(group => group.Count() > 1).Select(group => group.Select(route => route.Key).ToList()).ToList())
         {
-            var points = group.First().Value.Points;
+            var points = routes[keys[0]].Points;
             var (start, chord) = (points[0], points[^1] - points[0]);
             var normal = chord.Normalized.Perpendicular;
             double Breadth(string id) => Math.Abs(normal.X) * SizeOf(_elements[id]).Width + Math.Abs(normal.Y) * SizeOf(_elements[id]).Height;
 
-            var link = _links[group.First().Key];
-            var spacing = EndSpacing(Math.Min(Breadth(link.From), Breadth(link.To)), group.Count());
-            double Extent(RoutedLink labeled)
+            var link = _links[keys[0]];
+            var spacing = EndSpacing(Math.Min(Breadth(link.From), Breadth(link.To)), keys.Count);
+            var offsets = keys.Select((_, position) => normal * ((position - (keys.Count - 1) / 2.0) * spacing)).ToList();
+            for (var position = 0; position < keys.Count; position++)
             {
-                var label = NodeShapes.CreateLabel(labeled.Link.Label!);
-                return Math.Abs(normal.Y) * label.Width + Math.Abs(normal.X) * label.Height;
+                routes[keys[position]].Points[0] += offsets[position];
+                routes[keys[position]].Points[^1] += offsets[position];
             }
 
-            bool IsFreeLabel(int index) => routes[index].Label is { } center && LabelStop(routes[index].Points, center) < 0;
-            var labeled = group.Where(route => IsFreeLabel(route.Key)).ToList();
-            var gap = Math.Max(0, (chord.Length - labeled.Sum(route => Extent(_links[route.Key]))) / (labeled.Count + 1));
-            var along = gap;
-            foreach (var (route, position) in group.Select((route, position) => (route, position)))
-            {
-                var offset = normal * ((position - (group.Count() - 1) / 2.0) * spacing);
-                var free = IsFreeLabel(route.Key);
-                route.Value.Points[0] += offset;
-                route.Value.Points[^1] += offset;
-                if (!free) continue;
+            LineUpLabels(routes, keys, offsets, start, chord);
+        }
+    }
 
-                var extent = Extent(_links[route.Key]);
-                routes[route.Key] = (route.Value.Points, start + chord.Normalized * (along + extent / 2) + offset);
-                along += extent + gap;
-            }
+    /// <summary>Spreads the labels between the points of their routes evenly along the line between the ends of the links.</summary>
+    private void LineUpLabels(Dictionary<int, (List<Point> Points, Point? Label)> routes, List<int> keys, List<Point> offsets, Point start, Point chord)
+    {
+        var direction = chord.Normalized;
+        double Extent(int key)
+        {
+            var label = NodeShapes.CreateLabel(_links[key].Link.Label!);
+            return Math.Abs(direction.X) * label.Width + Math.Abs(direction.Y) * label.Height;
+        }
+
+        var free = Enumerable.Range(0, keys.Count).Where(position => routes[keys[position]].Label is { } center && LabelStop(routes[keys[position]].Points, center) < 0).ToList();
+        var gap = Math.Max(0, (chord.Length - free.Sum(position => Extent(keys[position]))) / (free.Count + 1));
+        var along = gap;
+        foreach (var position in free)
+        {
+            var extent = Extent(keys[position]);
+            routes[keys[position]] = (routes[keys[position]].Points, start + direction * (along + extent / 2) + offsets[position]);
+            along += extent + gap;
         }
     }
 
