@@ -175,6 +175,7 @@ internal static class Measurements
             usage["edits"] = edits;
             usage["memory"] = memory;
             usage["validation"] = validation;
+            await File.WriteAllTextAsync(Log(options, $"{options.Mode}-{name}-serve-{sample}.result.json"), usage.ToJsonString(Program.Json));
             return usage;
         }
         finally

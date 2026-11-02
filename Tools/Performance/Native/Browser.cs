@@ -29,8 +29,8 @@ internal sealed class Browser : IAsyncDisposable
         foreach (var arg in new[] { "--headless=new", "--no-first-run", "--no-default-browser-check", "--disable-background-networking", "--remote-debugging-port=0", "--user-data-dir=" + _profile, "about:blank" })
             start.ArgumentList.Add(arg);
         _process = Process.Start(start) ?? throw new InvalidOperationException("Could not start benchmark browser.");
-        _stdout = _process.StandardOutput.ReadToEndAsync();
-        _stderr = _process.StandardError.ReadToEndAsync();
+        _stdout = _process.StandardOutput.ReadToEndAsync(_stop.Token);
+        _stderr = _process.StandardError.ReadToEndAsync(_stop.Token);
     }
 
     internal static async Task<Browser> Start()
@@ -216,7 +216,8 @@ internal sealed class Browser : IAsyncDisposable
         _socket.Dispose();
         if (!_process.HasExited) _process.Kill(entireProcessTree: true);
         await _process.WaitForExitAsync();
-        await Task.WhenAll(_stdout, _stderr);
+        try { await Task.WhenAll(_stdout, _stderr); }
+        catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
         _process.Dispose();
         _send.Dispose();
         _stop.Dispose();
