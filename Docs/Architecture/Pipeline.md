@@ -106,7 +106,7 @@ When Markdown content changes, `serve` refreshes `documentation.pdf` if a PDF Li
 
 ## PDF export
 
-`mdu pdf` builds the same page tree and orders it like the navigation. `PdfRenderer` renders every page with the HTML pipeline, lays out the resulting elements on A4 pages, and writes the PDF file itself. A folder export adds a title page and a linked table of contents. See [Rendering](Rendering.md#pdf-output) for the details.
+`mdu pdf` builds the same page tree and orders it like the navigation. PDF-hidden content is removed before the HTML pipeline renders each page as a fragment. AngleSharp parses that fragment using HTML rules; `PdfHtmlDocument` copies the resulting nodes into the XML representation used by `PdfRenderer`, omitting scripts, styles, and templates. The renderer lays out those elements on A4 pages and writes the PDF file itself. A folder export adds a title page and a linked table of contents. See [Rendering](Rendering.md#pdf-output) for the details.
 
 ## Linting and fixing
 
