@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace Markdown.Confluence;
@@ -9,7 +10,12 @@ public sealed class ConfluenceClient : IDisposable
 {
     public const string OwnerKey = "mdu-export";
     private const string Expansion = "space,ancestors,version,body.storage,metadata.properties.mdu-export";
+    private const int MaxReadAttempts = 3;
+    private const int MaxErrorBytes = 64 * 1024;
+    private const int MaxErrorMessageLength = 500;
+    private static readonly TimeSpan MaxRetryDelay = TimeSpan.FromSeconds(30);
     private readonly HttpClient _http;
+    private readonly Func<TimeSpan, CancellationToken, Task> _delay;
     private readonly string _pat;
     private readonly HashSet<string> _created = new(StringComparer.Ordinal);
     private string? _rootId;
@@ -21,12 +27,14 @@ public sealed class ConfluenceClient : IDisposable
     }
 
     // The injected handler is for offline contract tests; production never follows redirects.
-    public ConfluenceClient(ConfluenceTarget target, string pat, HttpMessageHandler handler)
+    public ConfluenceClient(ConfluenceTarget target, string pat, HttpMessageHandler handler,
+        Func<TimeSpan, CancellationToken, Task>? delay = null)
     {
         if (string.IsNullOrWhiteSpace(pat) || pat.Any(character => char.IsControl(character) || char.IsWhiteSpace(character)))
             throw new ArgumentException("Set MDU_CONFLUENCE_PAT or CONFLUENCE_PERSONAL_TOKEN to a valid personal access token.");
         Target = target;
         _pat = pat;
+        _delay = delay ?? Task.Delay;
         _http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(100) };
     }
 
@@ -191,11 +199,12 @@ public sealed class ConfluenceClient : IDisposable
         await AssertManaged(id, path, cancellationToken);
         var restricted = await AssertRestrictions(id, requirePrivate: false, cancellationToken);
         if (!restricted) return;
+        // The PUT may replace all restrictions, so it always restates the edit protection.
         await Send(HttpMethod.Put, $"content/{id}/restriction", new JsonArray(new JsonObject
         {
             ["operation"] = "read",
             ["restrictions"] = new JsonObject { ["user"] = new JsonArray(), ["group"] = new JsonArray() }
-        }), cancellationToken);
+        }, Restriction("update")), cancellationToken);
         await AssertManaged(id, path, cancellationToken);
         if (await AssertRestrictions(id, requirePrivate: false, cancellationToken))
             throw new InvalidOperationException($"Confluence page {id} is still restricted to the publisher for reading.");
@@ -389,18 +398,64 @@ public sealed class ConfluenceClient : IDisposable
         if (uri.GetLeftPart(UriPartial.Authority) != Target.BaseUri.GetLeftPart(UriPartial.Authority) ||
             !uri.AbsolutePath.StartsWith(Target.BaseUri.AbsolutePath + "rest/api/", StringComparison.Ordinal))
             throw new InvalidOperationException("Confluence request escaped the configured base URL.");
-        using var request = new HttpRequestMessage(method, uri) { Content = content };
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _pat);
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        if (attachment) request.Headers.Add("X-Atlassian-Token", "nocheck");
-        using var response = await _http.SendAsync(request, cancellationToken);
-        if (allowNotFound && response.StatusCode == HttpStatusCode.NotFound) return null;
-        if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException($"Confluence {method.Method} failed (HTTP {(int)response.StatusCode}). Redirects are not followed; response bodies and credentials are not logged.");
-        if (response.StatusCode == HttpStatusCode.NoContent) return null;
-        var json = await response.Content.ReadAsStringAsync(cancellationToken);
-        if (string.IsNullOrWhiteSpace(json)) throw new InvalidOperationException("Confluence returned an empty JSON response.");
-        return JsonNode.Parse(json) as JsonObject ?? throw new InvalidOperationException("Confluence returned an invalid JSON object.");
+        for (var attempt = 1; ; attempt++)
+        {
+            using var request = new HttpRequestMessage(method, uri) { Content = content };
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _pat);
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            if (attachment) request.Headers.Add("X-Atlassian-Token", "nocheck");
+            using var response = await _http.SendAsync(request, cancellationToken);
+            // Only reads are repeated: a failed write may still have been applied.
+            if (method == HttpMethod.Get && attempt < MaxReadAttempts && RetryDelay(response, attempt) is { } wait)
+            {
+                await _delay(wait, cancellationToken);
+                continue;
+            }
+            if (allowNotFound && response.StatusCode == HttpStatusCode.NotFound) return null;
+            if (!response.IsSuccessStatusCode)
+                throw new InvalidOperationException(await FailureMessage(method, response, cancellationToken));
+            if (response.StatusCode == HttpStatusCode.NoContent) return null;
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (string.IsNullOrWhiteSpace(json)) throw new InvalidOperationException("Confluence returned an empty JSON response.");
+            return JsonNode.Parse(json) as JsonObject ?? throw new InvalidOperationException("Confluence returned an invalid JSON object.");
+        }
+    }
+
+    private static TimeSpan? RetryDelay(HttpResponseMessage response, int attempt)
+    {
+        if (response.StatusCode is not (HttpStatusCode.TooManyRequests or HttpStatusCode.BadGateway or
+            HttpStatusCode.ServiceUnavailable or HttpStatusCode.GatewayTimeout)) return null;
+        var wait = response.Headers.RetryAfter?.Delta ?? response.Headers.RetryAfter?.Date - DateTimeOffset.UtcNow ??
+            TimeSpan.FromSeconds(attempt);
+        return wait >= TimeSpan.Zero && wait <= MaxRetryDelay ? wait : null;
+    }
+
+    private async Task<string> FailureMessage(HttpMethod method, HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        var status = (int)response.StatusCode;
+        var message = $"Confluence {method.Method} failed (HTTP {status}).";
+        if (status is >= 300 and < 400) return message + " Redirects are not followed; configure the final HTTPS URL.";
+        var details = await ErrorDetails(response.Content, cancellationToken);
+        return details.Length == 0 ? message : $"{message} {details.Replace(_pat, "[redacted]", StringComparison.Ordinal)}";
+    }
+
+    // Reads only the server's own message, bounded and without control characters, for the terminal.
+    private static async Task<string> ErrorDetails(HttpContent content, CancellationToken cancellationToken)
+    {
+        await using var stream = await content.ReadAsStreamAsync(cancellationToken);
+        var buffer = new byte[MaxErrorBytes];
+        var length = await stream.ReadAtLeastAsync(buffer, buffer.Length, throwOnEndOfStream: false, cancellationToken);
+        try
+        {
+            var text = (JsonNode.Parse(buffer.AsSpan(0, length)) as JsonObject)?["message"] is JsonValue value &&
+                       value.TryGetValue<string>(out var message) ? message : "";
+            text = string.Concat(text.Where(character => !char.IsControl(character))).Trim();
+            return text[..Math.Min(text.Length, MaxErrorMessageLength)];
+        }
+        catch (JsonException)
+        {
+            return "";
+        }
     }
 
     public void Dispose() => _http.Dispose();

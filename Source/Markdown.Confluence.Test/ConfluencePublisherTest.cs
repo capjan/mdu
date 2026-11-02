@@ -278,10 +278,12 @@ public class ConfluencePublisherTest(ITestOutputHelper testOutput)
         Assert.All(server.Pages.Values.Where(page => page.Id != "10"), page => Assert.True(page.Private));
     }
 
-    [Fact]
-    public async Task LiftingReadRestrictionsPreservesPublisherOnlyEditProtection()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LiftingReadRestrictionsPreservesPublisherOnlyEditProtection(bool replaceAll)
     {
-        var server = new FakeConfluence();
+        var server = new FakeConfluence { RestrictionPutReplacesAll = replaceAll };
         using var client = new ConfluenceClient(Target(), "test-pat", server);
         await client.Preflight(default);
         var root = await client.CreatePage(Target().RootTitle, "10", "$root", default);
@@ -420,6 +422,97 @@ public class ConfluencePublisherTest(ITestOutputHelper testOutput)
         Assert.ThrowsAny<Exception>(() => new ConfluenceTarget(url, space, parent));
     }
 
+    [Theory]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    [InlineData(HttpStatusCode.BadGateway)]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    [InlineData(HttpStatusCode.GatewayTimeout)]
+    public async Task ReadsRetryTemporaryFailuresHonoringRetryAfter(HttpStatusCode status)
+    {
+        var failure = new HttpResponseMessage(status);
+        failure.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromSeconds(7));
+        var handler = new ScriptedHandler(failure, new HttpResponseMessage(status), SpaceResponse(), UserResponse());
+        var delays = new List<TimeSpan>();
+        using var client = new ConfluenceClient(Target(null), "test-pat", handler, Record(delays));
+        await client.Preflight(default);
+        Assert.Equal(4, handler.Calls);
+        Assert.Equal([TimeSpan.FromSeconds(7), TimeSpan.FromSeconds(2)], delays);
+    }
+
+    [Fact]
+    public async Task ReadsGiveUpAfterThreeAttempts()
+    {
+        var handler = new ScriptedHandler(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable),
+            new HttpResponseMessage(HttpStatusCode.ServiceUnavailable), new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
+        using var client = new ConfluenceClient(Target(null), "test-pat", handler, Record([]));
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => client.Preflight(default));
+        Assert.Equal(3, handler.Calls);
+        Assert.Contains("HTTP 503", error.Message);
+    }
+
+    [Fact]
+    public async Task ReadsDoNotWaitForAnExcessiveRetryAfter()
+    {
+        var failure = new HttpResponseMessage(HttpStatusCode.TooManyRequests);
+        failure.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromMinutes(5));
+        var handler = new ScriptedHandler(failure);
+        var delays = new List<TimeSpan>();
+        using var client = new ConfluenceClient(Target(null), "test-pat", handler, Record(delays));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.Preflight(default));
+        Assert.Equal(1, handler.Calls);
+        Assert.Empty(delays);
+    }
+
+    [Fact]
+    public async Task WritesAreNeverRetried()
+    {
+        var handler = new ScriptedHandler(SpaceResponse(), UserResponse(), new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
+        using var client = new ConfluenceClient(Target(null), "test-pat", handler, Record([]));
+        await client.Preflight(default);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.CreatePage(Target(null).RootTitle, null, "$root", default));
+        Assert.Equal(3, handler.Calls);
+    }
+
+    [Fact]
+    public async Task FailuresReportTheServerMessageWithoutTokenOrControlCharacters()
+    {
+        var handler = new ScriptedHandler(Json(HttpStatusCode.Forbidden, new JsonObject { ["message"] = "No\u001b[31m access for test-pat" }));
+        using var client = new ConfluenceClient(Target(null), "test-pat", handler);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => client.Preflight(default));
+        Assert.Contains("HTTP 403", error.Message);
+        Assert.Contains("access for [redacted]", error.Message);
+        Assert.DoesNotContain("\u001b", error.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("<html>Proxy error</html>")]
+    [InlineData("[\"not an object\"]")]
+    [InlineData("{\"message\":42}")]
+    public async Task FailuresIgnoreUnrecognizedErrorBodies(string body)
+    {
+        var handler = new ScriptedHandler(new HttpResponseMessage(HttpStatusCode.InternalServerError) { Content = new StringContent(body) });
+        using var client = new ConfluenceClient(Target(null), "test-pat", handler);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => client.Preflight(default));
+        Assert.Equal("Confluence GET failed (HTTP 500).", error.Message);
+    }
+
+    private static Func<TimeSpan, CancellationToken, Task> Record(List<TimeSpan> delays) => (delay, _) =>
+    {
+        delays.Add(delay);
+        return Task.CompletedTask;
+    };
+    private static HttpResponseMessage Json(HttpStatusCode status, JsonObject body) =>
+        new(status) { Content = new StringContent(body.ToJsonString()) };
+    private static HttpResponseMessage SpaceResponse() => Json(HttpStatusCode.OK, new JsonObject { ["key"] = "DOC" });
+    private static HttpResponseMessage UserResponse() => Json(HttpStatusCode.OK, new JsonObject { ["userKey"] = "publisher" });
+
+    private sealed class ScriptedHandler(params HttpResponseMessage[] responses) : HttpMessageHandler
+    {
+        public int Calls { get; private set; }
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(responses[Calls++]);
+    }
+
     private sealed class RedirectHandler : HttpMessageHandler
     {
         public int Calls { get; private set; }
@@ -458,6 +551,7 @@ internal sealed class FakeConfluence : HttpMessageHandler
     public Dictionary<string, byte[]> UploadedFiles { get; } = new(StringComparer.Ordinal);
     public bool IgnoreCreationRestrictions;
     public bool IgnoreRestrictionUpdates;
+    public bool RestrictionPutReplacesAll;
     public bool FailNextUpdate;
     public Func<string, string> NormalizeStorage = storage => storage;
     public int PageSize = 100;
@@ -553,6 +647,7 @@ internal sealed class FakeConfluence : HttpMessageHandler
             {
                 Assert.Equal(HttpMethod.Put, request.Method);
                 Assert.Equal(3, route.Length);
+                if (RestrictionPutReplacesAll) current.Private = current.EditProtected = false;
                 foreach (var restriction in Assert.IsType<JsonArray>(payload))
                 {
                     if (IgnoreRestrictionUpdates) continue;

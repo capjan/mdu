@@ -104,6 +104,7 @@ New pages remain readable only by the publisher until their content and edit pro
 - MDU never guesses renames. A moved or renamed source path becomes a new managed page; the old page is retained and reported as stale.
 - Removed pages and old attachment versions are not deleted automatically.
 - A whole publication is not transactional. Existing readers can see a mixture of old and new pages during deployment.
+- Reads are retried up to twice on HTTP 429, 502, 503, and 504, honoring `Retry-After` up to 30 seconds. Writes are never repeated automatically. Failures show the HTTP status and the message from Confluence.
 - Partial runs normally resume without duplicates. If initial creation succeeds but writing the ownership property fails, MDU deliberately refuses to adopt the unmarked placeholder on retry. An administrator must inspect and remove that specific placeholder before retrying.
 - Restoring a deleted or moved managed page is an administrative recovery action, not an automatic import into another location.
 - A source hierarchy change can also cause a parent mismatch without changing the logical page path, for example when adding a folder's `README.md`. MDU deliberately does not move existing pages automatically. Restore the previous source hierarchy, or publish under a new export ID and have an administrator retire the old export after verification.
