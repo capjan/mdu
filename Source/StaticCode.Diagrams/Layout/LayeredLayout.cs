@@ -55,6 +55,12 @@ internal sealed class LayeredLayout
     private const int PositioningIterations = 400;
     private const double AnchorWeight = 2;
 
+    // Very large layouts of callers that route their links get fewer iterations in place of a growing run time.
+    private const int OrderingWork = 72_000;
+    private const int MinOrderingIterations = 6;
+    private const int PositioningWork = 600_000;
+    private const int MinPositioningIterations = 60;
+
     public double NodeSeparation { get; init; } = 36;
     public double EdgeSeparation { get; init; } = 14;
     public double RankSeparation { get; init; } = 52;
@@ -69,6 +75,7 @@ internal sealed class LayeredLayout
 
     // Flat edges that ended up in one rank: the left vertex must stay before the right one.
     private readonly List<(Vertex Left, Vertex Right)> _flatPairs = new();
+    private readonly HashSet<(Vertex Left, Vertex Right)> _flatPairSet = new();
     private readonly Dictionary<(Vertex Left, Vertex Right), double> _flatGaps = new();
 
     public LayoutResult Compute(IReadOnlyList<LayoutNode> nodes, IReadOnlyList<LayoutEdge> edges, LayoutDirection direction)
@@ -86,6 +93,7 @@ internal sealed class LayeredLayout
             return new LayoutResult(Array.Empty<Point>(), edges.Select(_ => new EdgeRoute(Array.Empty<Point>(), null)).ToArray(), 0, 0);
 
         _flatPairs.Clear();
+        _flatPairSet.Clear();
         _flatGaps.Clear();
 
         // Every edge that is not flat spans at least two ranks so that labels and bends get a rank of their own.
@@ -115,6 +123,7 @@ internal sealed class LayeredLayout
                 var left = vertices[input.Source];
                 var right = vertices[input.Target];
                 _flatPairs.Add((left, right));
+                _flatPairSet.Add((left, right));
                 if (input.LabelWidth > 0)
                 {
                     var gap = (horizontal ? input.LabelHeight : input.LabelWidth) + 16;
@@ -320,11 +329,15 @@ internal sealed class LayeredLayout
         for (var index = 0; index < layer.Count; index++) layer[index].Order = index;
     }
 
+    private int Iterations(List<List<Vertex>> layers, int full, int work, int least) =>
+        CallerRoutesLinks ? Math.Min(full, Math.Max(least, work / Math.Max(1, layers.Sum(layer => layer.Count)))) : full;
+
     private void MinimizeCrossings(List<List<Vertex>> layers)
     {
         var best = layers.Select(layer => layer.ToArray()).ToList();
         var bestCrossings = CountCrossings(layers);
-        for (var iteration = 0; iteration < OrderingIterations && bestCrossings > 0; iteration++)
+        var iterations = Iterations(layers, OrderingIterations, OrderingWork, MinOrderingIterations);
+        for (var iteration = 0; iteration < iterations && bestCrossings > 0; iteration++)
         {
             if (iteration % 2 == 0)
                 for (var rank = 1; rank < layers.Count; rank++)
@@ -402,7 +415,7 @@ internal sealed class LayeredLayout
                 {
                     var left = layer[index];
                     var right = layer[index + 1];
-                    if (_flatPairs.Contains((left, right))) continue;
+                    if (_flatPairSet.Contains((left, right))) continue;
                     if (PairCrossings(right, left) >= PairCrossings(left, right)) continue;
                     layer[index] = right;
                     layer[index + 1] = left;
@@ -428,16 +441,24 @@ internal sealed class LayeredLayout
         return crossings;
     }
 
+    /// <summary>Counts the pairs of segments between two layers whose order flips, with a Fenwick tree over the lower ends.</summary>
     private static int CountCrossings(List<List<Vertex>> layers)
     {
         var crossings = 0;
         foreach (var layer in layers)
         {
-            var segments = layer.SelectMany(upper => upper.Lower.Select(lower => (Upper: upper.Order, Lower: lower.Order))).ToList();
-            for (var i = 0; i < segments.Count; i++)
-            for (var j = i + 1; j < segments.Count; j++)
-                if ((segments[i].Upper - segments[j].Upper) * (segments[i].Lower - segments[j].Lower) < 0)
-                    crossings++;
+            var segments = layer.SelectMany(upper => upper.Lower.Select(lower => (upper.Order, lower: lower.Order))).ToList();
+            if (segments.Count < 2) continue;
+
+            segments.Sort();
+            var tree = new int[segments.Max(segment => segment.lower) + 2];
+            for (var seen = 0; seen < segments.Count; seen++)
+            {
+                var atOrBefore = 0;
+                for (var slot = segments[seen].lower + 1; slot > 0; slot -= slot & -slot) atOrBefore += tree[slot];
+                crossings += seen - atOrBefore;
+                for (var slot = segments[seen].lower + 1; slot < tree.Length; slot += slot & -slot) tree[slot]++;
+            }
         }
 
         return crossings;
@@ -467,7 +488,8 @@ internal sealed class LayeredLayout
             for (var index = 0; index < layer.Count; index++)
                 layer[index].X = index == 0 ? layer[index].HalfBreadth : layer[index - 1].X + Gap(layer[index - 1], layer[index]);
 
-        for (var iteration = 0; iteration < PositioningIterations; iteration++)
+        var iterations = Iterations(layers, PositioningIterations, PositioningWork, MinPositioningIterations);
+        for (var iteration = 0; iteration < iterations; iteration++)
         {
             var moved = 0.0;
             if (iteration % 2 == 0)
@@ -582,8 +604,13 @@ internal sealed class LayeredLayout
         var separation = left.IsThin && right.IsThin ? EdgeSeparation
             : left.IsThin || right.IsThin ? (NodeSeparation + EdgeSeparation) / 2
             : NodeSeparation;
-        var flatGap = _flatGaps.GetValueOrDefault((left, right));
-        if (CallerRoutesLinks) flatGap += _flatGaps.GetValueOrDefault((right, left));
+        var flatGap = 0.0;
+        if (_flatGaps.Count > 0)
+        {
+            flatGap = _flatGaps.GetValueOrDefault((left, right));
+            if (CallerRoutesLinks) flatGap += _flatGaps.GetValueOrDefault((right, left));
+        }
+
         return left.HalfBreadth + right.HalfBreadth + separation + flatGap;
     }
 

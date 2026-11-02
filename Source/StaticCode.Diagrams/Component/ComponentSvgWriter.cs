@@ -26,8 +26,11 @@ internal sealed class ComponentSvgWriter
     // Layouts after the first know where the other ends of the links that leave a container are.
     private const int LayoutPasses = 3;
 
-    // A link looks for its way among this many obstacles nearest to it, which bounds the search in very large diagrams.
-    private const int MaxDetourObstacles = 48;
+    // Up to here a link takes the shortest way; beyond, a slightly longer one is worth the shorter search.
+    private const int MaxObstaclesForFullSearch = 256;
+
+    // All searches of a diagram together; links beyond this keep their route from the layout, so a build stays reproducible.
+    private const long MaxSearchSteps = 20_000_000;
 
     // Free space that a link keeps around elements and container labels.
     private const double ObstacleMargin = 6;
@@ -58,6 +61,11 @@ internal sealed class ComponentSvgWriter
 
     // Measured once, when routing starts and the containers no longer move.
     private readonly Dictionary<string, Bounds> _labelBounds = new(StringComparer.Ordinal);
+
+    // The input and result of each container's last layout, with the empty string for the diagram itself.
+    private readonly Dictionary<string, (List<LayoutNode> Nodes, List<LayoutEdge> Edges, ContainerLayout Layout)> _layouts = new(StringComparer.Ordinal);
+    private bool _layoutChanged;
+    private long _searchSteps = MaxSearchSteps;
 
     private ComponentSvgWriter(ComponentDiagram diagram)
     {
@@ -94,7 +102,9 @@ internal sealed class ComponentSvgWriter
         ContainerLayout root = null!;
         for (var pass = 0; pass < LayoutPasses; pass++)
         {
+            _layoutChanged = false;
             root = _root = LayoutContainer(null);
+            if (!_layoutChanged) break;
             Place(root, new Point(0, top));
         }
 
@@ -213,12 +223,17 @@ internal sealed class ComponentSvgWriter
             }
         }
 
+        // Equal input gives an equal layout, which is common in the later passes.
+        if (_layouts.TryGetValue(containerId ?? string.Empty, out var known) && known.Nodes.SequenceEqual(nodes) && known.Edges.SequenceEqual(edges)) return known.Layout;
+
+        _layoutChanged = true;
         var result = new LayeredLayout { CallerRoutesLinks = true, RankSeparation = RankSeparation }.Compute(nodes, edges, _horizontal ? LayoutDirection.LeftToRight : LayoutDirection.TopToBottom);
         var layout = new ContainerLayout(result.Width, result.Height);
         for (var position = 0; position < children.Count; position++) layout.Centers[children[position].Id] = result.NodeCenters[position];
         for (var edge = 0; edge < edges.Count; edge++) layout.Routes[roles[edge]] = result.Edges[edge];
 
         if (containerId != null) FitContainer(_elements[containerId], layout, result, children, edges, roles);
+        _layouts[containerId ?? string.Empty] = (nodes, edges, layout);
         return layout;
     }
 
@@ -402,7 +417,7 @@ internal sealed class ComponentSvgWriter
     }
 
     /// <summary>Takes the shortest way around the obstacles. A label's point stays on the route.</summary>
-    private static (List<Point> Points, Point? Label) Straighten(List<Point> points, Point? label, List<Bounds> obstacles)
+    private (List<Point> Points, Point? Label) Straighten(List<Point> points, Point? label, List<Bounds> obstacles)
     {
         var stop = label is { } center ? LabelStop(points, center) : -1;
         if (stop < 0) return (ShortestPath(points, obstacles), label);
@@ -466,37 +481,44 @@ internal sealed class ComponentSvgWriter
             var (first, last) = (Rounded(route.Value.Points[0]), Rounded(route.Value.Points[^1]));
             return first.CompareTo(last) <= 0 ? (first, last) : (last, first);
         });
-        foreach (var group in doubles.Where(group => group.Count() > 1).ToList())
+        foreach (var keys in doubles.Where(group => group.Count() > 1).Select(group => group.Select(route => route.Key).ToList()).ToList())
         {
-            var points = group.First().Value.Points;
+            var points = routes[keys[0]].Points;
             var (start, chord) = (points[0], points[^1] - points[0]);
             var normal = chord.Normalized.Perpendicular;
             double Breadth(string id) => Math.Abs(normal.X) * SizeOf(_elements[id]).Width + Math.Abs(normal.Y) * SizeOf(_elements[id]).Height;
 
-            var link = _links[group.First().Key];
-            var spacing = EndSpacing(Math.Min(Breadth(link.From), Breadth(link.To)), group.Count());
-            double Extent(RoutedLink labeled)
+            var link = _links[keys[0]];
+            var spacing = EndSpacing(Math.Min(Breadth(link.From), Breadth(link.To)), keys.Count);
+            var offsets = keys.Select((_, position) => normal * ((position - (keys.Count - 1) / 2.0) * spacing)).ToList();
+            for (var position = 0; position < keys.Count; position++)
             {
-                var label = NodeShapes.CreateLabel(labeled.Link.Label!);
-                return Math.Abs(normal.Y) * label.Width + Math.Abs(normal.X) * label.Height;
+                routes[keys[position]].Points[0] += offsets[position];
+                routes[keys[position]].Points[^1] += offsets[position];
             }
 
-            bool IsFreeLabel(int index) => routes[index].Label is { } center && LabelStop(routes[index].Points, center) < 0;
-            var labeled = group.Where(route => IsFreeLabel(route.Key)).ToList();
-            var gap = Math.Max(0, (chord.Length - labeled.Sum(route => Extent(_links[route.Key]))) / (labeled.Count + 1));
-            var along = gap;
-            foreach (var (route, position) in group.Select((route, position) => (route, position)))
-            {
-                var offset = normal * ((position - (group.Count() - 1) / 2.0) * spacing);
-                var free = IsFreeLabel(route.Key);
-                route.Value.Points[0] += offset;
-                route.Value.Points[^1] += offset;
-                if (!free) continue;
+            LineUpLabels(routes, keys, offsets, start, chord);
+        }
+    }
 
-                var extent = Extent(_links[route.Key]);
-                routes[route.Key] = (route.Value.Points, start + chord.Normalized * (along + extent / 2) + offset);
-                along += extent + gap;
-            }
+    /// <summary>Spreads the labels between the points of their routes evenly along the line between the ends of the links.</summary>
+    private void LineUpLabels(Dictionary<int, (List<Point> Points, Point? Label)> routes, List<int> keys, List<Point> offsets, Point start, Point chord)
+    {
+        var direction = chord.Normalized;
+        double Extent(int key)
+        {
+            var label = NodeShapes.CreateLabel(_links[key].Link.Label!);
+            return Math.Abs(direction.X) * label.Width + Math.Abs(direction.Y) * label.Height;
+        }
+
+        var free = Enumerable.Range(0, keys.Count).Where(position => routes[keys[position]].Label is { } center && LabelStop(routes[keys[position]].Points, center) < 0).ToList();
+        var gap = Math.Max(0, (chord.Length - free.Sum(position => Extent(keys[position]))) / (free.Count + 1));
+        var along = gap;
+        foreach (var position in free)
+        {
+            var extent = Extent(keys[position]);
+            routes[keys[position]] = (routes[keys[position]].Points, start + direction * (along + extent / 2) + offsets[position]);
+            along += extent + gap;
         }
     }
 
@@ -504,36 +526,40 @@ internal sealed class ComponentSvgWriter
         count > 1 ? Math.Min(PortSpacing, breadth * 2 * PortReach / (count - 1) * 0.9) : 0;
 
     /// <summary>
-    /// A free straight line needs no search. Otherwise the search looks for a way around the obstacles near the route first,
-    /// then around more of them, which is rarely needed. Without a free way the route stays as it is. An obstacle around an
-    /// end, such as a large label, cannot be avoided and does not count.
+    /// A free straight line needs no search. Otherwise the search knows the obstacles near the route at first, in a large
+    /// diagram only those in its way, and adds those that block its legs. Without a free way, or when the search steps are
+    /// used up, the route stays as it is. An obstacle around an end, such as a large label, cannot be avoided and does not count.
     /// </summary>
-    private static List<Point> ShortestPath(List<Point> route, List<Bounds> obstacles)
+    private List<Point> ShortestPath(List<Point> route, List<Bounds> obstacles)
     {
         var (start, end) = (route[0], route[^1]);
         var avoidable = obstacles.Where(obstacle => !obstacle.Blocks(start, start) && !obstacle.Blocks(end, end)).ToList();
         if (!avoidable.Any(obstacle => obstacle.Blocks(start, end))) return [start, end];
 
         var area = new Bounds(route.Min(point => point.X), route.Min(point => point.Y), route.Max(point => point.X), route.Max(point => point.Y));
-        var nearest = avoidable.OrderBy(obstacle => DistanceToChord(obstacle, start, end)).ToList();
-        return ShortestPath(start, end, nearest.Where(area.Overlaps).Take(MaxDetourObstacles), avoidable)
-            ?? ShortestPath(start, end, nearest.Take(2 * MaxDetourObstacles), avoidable)
-            ?? route;
-    }
+        var known = avoidable.Where(obstacle => avoidable.Count <= MaxObstaclesForFullSearch ? area.Overlaps(obstacle) : obstacle.Blocks(start, end)).ToHashSet();
+        while (_searchSteps > 0)
+        {
+            var path = ShortestPath(start, end, known, avoidable, out var inTheWay);
+            if (path != null) return path;
+            if (!inTheWay.Except(known).Any()) break;
+            known.UnionWith(inTheWay);
+        }
 
-    private static double DistanceToChord(Bounds obstacle, Point start, Point end)
-    {
-        var center = new Point((obstacle.Left + obstacle.Right) / 2, (obstacle.Top + obstacle.Bottom) / 2);
-        var chord = end - start;
-        var share = Math.Clamp((center - start).Dot(chord) / Math.Max(chord.Dot(chord), 1e-9), 0, 1);
-        return (center - (start + chord * share)).Length;
+        return route;
     }
 
     /// <summary>A* over the corners of some obstacles, so a link only bends where something is in its way.</summary>
-    private static List<Point>? ShortestPath(Point start, Point end, IEnumerable<Bounds> around, List<Bounds> obstacles)
+    private List<Point>? ShortestPath(Point start, Point end, IEnumerable<Bounds> around, List<Bounds> obstacles, out HashSet<Bounds> inTheWay)
     {
+        inTheWay = new HashSet<Bounds>();
         var nodes = new List<Point> { start, end };
-        nodes.AddRange(around.SelectMany(obstacle => obstacle.Corners).Where(corner => !obstacles.Any(obstacle => obstacle.Blocks(corner, corner))));
+        foreach (var corner in around.SelectMany(obstacle => obstacle.Corners))
+        {
+            var covering = obstacles.FindIndex(obstacle => obstacle.Blocks(corner, corner));
+            if (covering < 0) nodes.Add(corner);
+            else inTheWay.Add(obstacles[covering]);
+        }
 
         // Every leg stays between the nodes, so only the obstacles in their area can block one.
         var reach = new Bounds(nodes.Min(node => node.X), nodes.Min(node => node.Y), nodes.Max(node => node.X), nodes.Max(node => node.Y));
@@ -549,15 +575,23 @@ internal sealed class ComponentSvgWriter
             for (var index = 0; index < nodes.Count; index++)
                 if (!done[index] && !double.IsInfinity(distance[index]) && (current < 0 || distance[index] + remaining[index] < distance[current] + remaining[current]))
                     current = index;
-            if (current < 0) return null;
+            if (current < 0 || _searchSteps <= 0) return null;
             if (current == 1) break;
 
             done[current] = true;
+            _searchSteps -= nodes.Count;
             for (var index = 0; index < nodes.Count; index++)
             {
                 if (done[index]) continue;
                 var length = distance[current] + (nodes[index] - nodes[current]).Length;
-                if (length >= distance[index] || blocking.Any(obstacle => obstacle.Blocks(nodes[current], nodes[index]))) continue;
+                if (length >= distance[index]) continue;
+                var blocked = blocking.FindIndex(obstacle => obstacle.Blocks(nodes[current], nodes[index]));
+                if (blocked >= 0)
+                {
+                    inTheWay.Add(blocking[blocked]);
+                    continue;
+                }
+
                 distance[index] = length;
                 previous[index] = current;
             }
