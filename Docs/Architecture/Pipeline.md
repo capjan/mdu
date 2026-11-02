@@ -80,7 +80,7 @@ Assets are found through the links on each page. Only linked local files are cop
 
 The [quality requirements](README.md#quality-requirements) define the responsiveness, startup, memory, and correctness targets for future optimization. The flow below describes the current implementation.
 
-`mdu serve` prepares the complete navigation and search index, renders the entry page, and starts the local HTTP server. Other HTML pages are completed one at a time. A request for a pending page renders it before responding, so navigation and search results remain usable. The preview-only `/__mdu/status` endpoint distinguishes pending HTML work from complete-site readiness. Changes are collected for 20 ms and handled as one batch. Batches containing deletions or renames get another 75 ms to collect a replacement file, avoiding a site rebuild during a short atomic-save gap:
+`mdu serve` prepares the complete navigation and search index, renders the entry page, and starts the local HTTP server. Other HTML pages are completed one at a time. A request for a pending page renders it before responding, so navigation and search results remain usable. The preview-only `/__mdu/status` endpoint distinguishes pending HTML work from complete-site readiness. Changes are collected for 20 ms and handled as one batch. If a deletion or rename leaves a known page temporarily missing, another 75 ms collects a replacement file, avoiding a site rebuild during a short atomic-save gap. Atomic replacements already complete within the first batch need no extra delay:
 
 ```mermaid
 sequenceDiagram

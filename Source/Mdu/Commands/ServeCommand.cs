@@ -504,7 +504,9 @@ public sealed class ServeCommand
             while (changes.TryRead(out var change)) batch.Add(change);
             // Structural saves often rename the old file before creating its replacement.
             // Give those events more time to settle without delaying ordinary content edits.
-            if (batch.Any(change => change.Kind is FileChangeKind.Deleted or FileChangeKind.Renamed))
+            if (batch.Any(change => change.Kind is (FileChangeKind.Deleted or FileChangeKind.Renamed) &&
+                                    (_pages.ContainsKey(change.Path) && !File.Exists(change.Path) ||
+                                     change.OldPath is not null && _pages.ContainsKey(change.OldPath) && !File.Exists(change.OldPath))))
             {
                 await Task.Delay(TimeSpan.FromMilliseconds(75), cancellationToken);
                 while (changes.TryRead(out var change)) batch.Add(change);
