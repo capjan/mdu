@@ -12,6 +12,38 @@ namespace Mdu.Test;
 
 public class FixCommandTest
 {
+    [Fact]
+    public void FixAndSubsequentGraphsReadRewrittenFilesWithinTheSameProcess()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-fix-snapshots-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(root, "Guide"));
+        var home = Path.Combine(root, "README.md");
+        File.WriteAllText(home, "# Docs\n\n[Guide](Guide/README.md)");
+        File.WriteAllText(Path.Combine(root, "Guide", "README.md"), "# Guide");
+        try
+        {
+            var settings = new VisitorSettings { RootPath = root, SearchPattern = "*.md", IncludeHidden = true };
+            var graphBuilder = CreateGraphBuilder();
+            var before = Flatten(graphBuilder.CreateGraph(settings)).Single(page => page.FileInfo.FullName == home);
+            Assert.Contains("(Guide/README.md)", before.ReadMarkdown());
+
+            var command = new FixCommand(graphBuilder, new LinterVisitor(new ConsoleLintErrorReceiver()));
+            Assert.Equal(0, command.Execute(settings));
+
+            var after = Flatten(graphBuilder.CreateGraph(settings)).Single(page => page.FileInfo.FullName == home);
+            Assert.NotSame(before, after);
+            Assert.Contains("(Guide.md)", after.ReadMarkdown());
+            Assert.DoesNotContain("(Guide/README.md)", after.ReadMarkdown());
+            Assert.True(File.Exists(Path.Combine(root, "Guide.md")));
+
+            // Explicitly retaining an old node retains its snapshot; a writer that reuses it must invalidate it.
+            Assert.Contains("(Guide/README.md)", before.ReadMarkdown());
+            before.InvalidateMarkdown();
+            Assert.Equal(after.ReadMarkdown(), before.ReadMarkdown());
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
