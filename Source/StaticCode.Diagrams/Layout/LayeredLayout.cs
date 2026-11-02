@@ -151,7 +151,7 @@ internal sealed class LayeredLayout
         AssignCoordinates(layers);
         foreach (var vertex in vertices) AssignPorts(vertex);
 
-        var layoutWidth = allVertices.Max(vertex => vertex.X + vertex.HalfBreadth);
+        var layoutWidth = Content(allVertices).Max(vertex => vertex.X + vertex.HalfBreadth);
         var layoutHeight = allVertices.Max(vertex => vertex.Y + vertex.Depth / 2);
         Point Map(double x, double y) => direction switch
         {
@@ -438,6 +438,13 @@ internal sealed class LayeredLayout
         return crossings;
     }
 
+    /// <summary>Ports mark where edges leave, so they do not count toward the size of the layout.</summary>
+    private static List<Vertex> Content(List<Vertex> vertices)
+    {
+        var content = vertices.Where(vertex => !vertex.IsPort).ToList();
+        return content.Count > 0 ? content : vertices;
+    }
+
     private static void OrderAnchoredLayers(List<List<Vertex>> layers)
     {
         foreach (var layer in layers.Where(layer => layer.Count > 1 && layer.All(vertex => vertex.Anchor != null)))
@@ -466,7 +473,7 @@ internal sealed class LayeredLayout
         }
 
         var all = layers.SelectMany(layer => layer).ToList();
-        var minX = all.Min(vertex => vertex.X - vertex.HalfBreadth);
+        var minX = Content(all).Min(vertex => vertex.X - vertex.HalfBreadth);
         foreach (var vertex in all) vertex.X -= minX;
 
         double? previousCenter = null;
@@ -499,21 +506,8 @@ internal sealed class LayeredLayout
         {
             var vertex = layer[index];
             double sum = 0, weight = 0;
-            void Pull(List<Vertex> neighbors, List<double> neighborOffsets)
-            {
-                for (var position = 0; position < neighbors.Count; position++)
-                {
-                    var neighbor = neighbors[position];
-                    var segmentWeight = vertex.IsDummy && neighbor.IsDummy ? 8
-                        : DirectShortLinks ? (vertex.IsDummy || neighbor.IsDummy ? 1 : 4)
-                        : vertex.IsDummy || neighbor.IsDummy ? 2 : 1;
-                    sum += segmentWeight * (neighbor.X + neighborOffsets[position]);
-                    weight += segmentWeight;
-                }
-            }
-
-            Pull(vertex.Upper, vertex.UpperOffsets);
-            Pull(vertex.Lower, vertex.LowerOffsets);
+            AddPull(vertex, vertex.Upper, vertex.UpperOffsets, ref sum, ref weight);
+            AddPull(vertex, vertex.Lower, vertex.LowerOffsets, ref sum, ref weight);
             if (vertex.Anchor is { } anchor)
             {
                 sum += AnchorWeight * anchor;
@@ -538,6 +532,19 @@ internal sealed class LayeredLayout
         }
 
         return moved;
+    }
+
+    private void AddPull(Vertex vertex, List<Vertex> neighbors, List<double> offsets, ref double sum, ref double weight)
+    {
+        for (var position = 0; position < neighbors.Count; position++)
+        {
+            var neighbor = neighbors[position];
+            var segmentWeight = vertex.IsDummy && neighbor.IsDummy ? 8
+                : DirectShortLinks ? (vertex.IsDummy || neighbor.IsDummy ? 1 : 4)
+                : vertex.IsDummy || neighbor.IsDummy ? 2 : 1;
+            sum += segmentWeight * (neighbor.X + offsets[position]);
+            weight += segmentWeight;
+        }
     }
 
     private static double[] FitNonDecreasing(double[] values, double[] weights)

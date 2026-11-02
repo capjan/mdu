@@ -30,6 +30,13 @@ internal sealed class ComponentSvgWriter
     private const double ObstacleMargin = 6;
     private const double PortSpacing = 30;
     private const double CornerRadius = 16;
+    private const double EdgeLabelMargin = 2;
+
+    // Link ends that move beside a container's label stay this far from the corner of their element.
+    private const double PortInset = 8;
+
+    // A last segment shorter than this along the axis, and much flatter than steep, reads as a hook.
+    private const double MinApproach = 8;
 
     // Link ends stay within this share of a side around its center, and lean toward the other end by the second one.
     private const double PortReach = 0.35;
@@ -45,6 +52,9 @@ internal sealed class ComponentSvgWriter
     private readonly Point _axis;
     private readonly Point _cross;
     private ContainerLayout? _root;
+
+    // Measured once, when routing starts and the containers no longer move.
+    private readonly Dictionary<string, Bounds> _labelBounds = new(StringComparer.Ordinal);
 
     private ComponentSvgWriter(ComponentDiagram diagram)
     {
@@ -97,17 +107,29 @@ internal sealed class ComponentSvgWriter
         var labels = new StringBuilder();
         var minX = 0.0;
         var maxX = root.ContentWidth;
+        var minY = 0.0;
+        var maxY = top + root.ContentHeight;
         var routes = RouteLinks();
         foreach (var link in _links)
         {
             if (!routes.TryGetValue(link.Index, out var route)) continue;
             var (points, labelCenter) = route;
             WriteLink(edges, link, points);
+            foreach (var point in points)
+            {
+                minX = Math.Min(minX, point.X);
+                maxX = Math.Max(maxX, point.X);
+                minY = Math.Min(minY, point.Y);
+                maxY = Math.Max(maxY, point.Y);
+            }
+
             if (link.Link.Label == null || labelCenter is not { } center) continue;
             var label = NodeShapes.CreateLabel(link.Link.Label);
             NodeShapes.WriteLabel(labels, label, center);
             minX = Math.Min(minX, center.X - label.Width / 2);
             maxX = Math.Max(maxX, center.X + label.Width / 2);
+            minY = Math.Min(minY, center.Y - label.Height / 2);
+            maxY = Math.Max(maxY, center.Y + label.Height / 2);
         }
 
         var nodes = new StringBuilder();
@@ -126,10 +148,10 @@ internal sealed class ComponentSvgWriter
         }
 
         var svgWidth = maxX - minX + 2 * CanvasPadding;
-        var svgHeight = top + root.ContentHeight + 2 * CanvasPadding;
+        var svgHeight = maxY - minY + 2 * CanvasPadding;
         var svg = new StringBuilder();
         svg.Append("<svg xmlns=\"http://www.w3.org/2000/svg\" class=\"diagram-component\"")
-            .Append($" viewBox=\"{F(minX - CanvasPadding)} {F(-CanvasPadding)} {F(svgWidth)} {F(svgHeight)}\"")
+            .Append($" viewBox=\"{F(minX - CanvasPadding)} {F(minY - CanvasPadding)} {F(svgWidth)} {F(svgHeight)}\"")
             .Append($" width=\"{F(svgWidth)}\" height=\"{F(svgHeight)}\"")
             .Append($" font-size=\"{F(TextMetrics.FontSize)}\" role=\"img\" aria-label=\"{Escape(_diagram.Title ?? "Component diagram")}\">\n")
             .Append("<g class=\"diagram-containers\">\n").Append(containers)
@@ -257,8 +279,9 @@ internal sealed class ComponentSvgWriter
             if (role == Role.Through) continue;
 
             var route = layout.Routes[roles[edge]];
-            var port = result.NodeCenters[role == Role.Exit ? edges[edge].Target : edges[edge].Source];
-            var border = _cross * Across(port) + _axis * (role == Role.Exit ? borderAfter : borderBefore);
+            // A port can lie beside the content, which it must not widen; its link then leaves at the content's edge.
+            var across = Math.Clamp(Across(result.NodeCenters[role == Role.Exit ? edges[edge].Target : edges[edge].Source]), 0, crossExtent);
+            var border = _cross * across + _axis * (role == Role.Exit ? borderAfter : borderBefore);
             var points = role == Role.Exit
                 ? route.Points.TakeWhile(point => Along(point) < borderAfter).Append(border)
                 : route.Points.SkipWhile(point => Along(point) <= borderBefore).Prepend(border);
@@ -266,8 +289,8 @@ internal sealed class ComponentSvgWriter
 
             // Port positions along the border, relative to the container's center, for the parent's layout.
             layout.Ports[roles[edge]] = _horizontal
-                ? layout.Origin.Y + port.Y - layout.Height / 2
-                : layout.Origin.X + port.X - layout.Width / 2;
+                ? layout.Origin.Y + across - layout.Height / 2
+                : layout.Origin.X + across - layout.Width / 2;
         }
     }
 
@@ -300,9 +323,19 @@ internal sealed class ComponentSvgWriter
         }
 
         FaceOtherEnds(routes);
-        Straighten(routes);
+        var edgeLabels = new Dictionary<int, Bounds>();
+        foreach (var (index, route) in routes)
+        {
+            if (_links[index].Link.Label is not { } text || route.Label is not { } center) continue;
+            var label = NodeShapes.CreateLabel(text);
+            edgeLabels[index] = new Bounds(center.X - label.Width / 2, center.Y - label.Height / 2, center.X + label.Width / 2, center.Y + label.Height / 2);
+        }
+
+        var obstacles = routes.Keys.ToDictionary(index => index, index => Obstacles(_links[index], edgeLabels));
+        Straighten(routes, obstacles);
         SpreadPorts(routes);
-        Straighten(routes);
+        Straighten(routes, obstacles);
+        AttachInterfaces(routes);
         return routes;
     }
 
@@ -331,35 +364,61 @@ internal sealed class ComponentSvgWriter
         }
     }
 
-    private void Straighten(Dictionary<int, (List<Point> Points, Point? Label)> routes)
+    private void Straighten(Dictionary<int, (List<Point> Points, Point? Label)> routes, Dictionary<int, List<Bounds>> obstacles)
     {
-        foreach (var link in _links)
-        {
-            if (!routes.TryGetValue(link.Index, out var route)) continue;
-            routes[link.Index] = (Straighten(route.Points, route.Label, Obstacles(link)), route.Label);
-        }
-    }
-
-    /// <summary>Takes the shortest way around the obstacles. A label's point stays on the route.</summary>
-    private static List<Point> Straighten(List<Point> points, Point? label, List<Bounds> obstacles)
-    {
-        var stop = label is { } center ? points.FindIndex(1, Math.Max(0, points.Count - 2), point => (point - center).Length < 0.5) : -1;
-        if (stop < 0) return ShortestPath(points, obstacles);
-
-        var result = ShortestPath(points.GetRange(0, stop + 1), obstacles);
-        result.AddRange(ShortestPath(points.GetRange(stop, points.Count - stop), obstacles).Skip(1));
-        return result;
+        foreach (var (index, route) in routes.ToList()) routes[index] = Straighten(route.Points, route.Label, obstacles[index]);
     }
 
     /// <summary>
-    /// Dijkstra over the corners of the obstacles near a route, so a link only bends where something is in its way.
-    /// Without a free way, for example when an end lies in an obstacle, the route stays as it is.
+    /// Takes the shortest way around the obstacles. A label's point stays on the route; a label between the points, as on
+    /// a flat link, moves to the middle of the new route.
+    /// </summary>
+    private static (List<Point> Points, Point? Label) Straighten(List<Point> points, Point? label, List<Bounds> obstacles)
+    {
+        if (label is not { } center) return (ShortestPath(points, obstacles), null);
+
+        var stop = points.FindIndex(1, Math.Max(0, points.Count - 2), point => (point - center).Length < 0.5);
+        if (stop < 0)
+        {
+            var path = ShortestPath(points, obstacles);
+            return (path, Middle(path));
+        }
+
+        var result = ShortestPath(points.GetRange(0, stop + 1), obstacles);
+        result.AddRange(ShortestPath(points.GetRange(stop, points.Count - stop), obstacles).Skip(1));
+        return (result, center);
+    }
+
+    private static Point Middle(List<Point> path)
+    {
+        var remaining = path.Zip(path.Skip(1)).Sum(segment => (segment.Second - segment.First).Length) / 2;
+        foreach (var (from, to) in path.Zip(path.Skip(1)))
+        {
+            var length = (to - from).Length;
+            if (remaining <= length) return from + (to - from).Normalized * remaining;
+            remaining -= length;
+        }
+
+        return path[^1];
+    }
+
+    /// <summary>
+    /// Looks for a way around the obstacles near the route first, then around all of them, which is rarely needed. Without
+    /// a free way, for example when an end lies in an obstacle, the route stays as it is.
     /// </summary>
     private static List<Point> ShortestPath(List<Point> route, List<Bounds> obstacles)
     {
         var area = new Bounds(route.Min(point => point.X), route.Min(point => point.Y), route.Max(point => point.X), route.Max(point => point.Y));
-        var nodes = new List<Point> { route[0], route[^1] };
-        nodes.AddRange(obstacles.Where(area.Overlaps).SelectMany(obstacle => obstacle.Corners).Where(corner => !obstacles.Any(obstacle => obstacle.Blocks(corner, corner))));
+        return ShortestPath(route[0], route[^1], obstacles.Where(area.Overlaps), obstacles)
+            ?? ShortestPath(route[0], route[^1], obstacles, obstacles)
+            ?? route;
+    }
+
+    /// <summary>Dijkstra over the corners of some obstacles, so a link only bends where something is in its way.</summary>
+    private static List<Point>? ShortestPath(Point start, Point end, IEnumerable<Bounds> around, List<Bounds> obstacles)
+    {
+        var nodes = new List<Point> { start, end };
+        nodes.AddRange(around.SelectMany(obstacle => obstacle.Corners).Where(corner => !obstacles.Any(obstacle => obstacle.Blocks(corner, corner))));
 
         var distance = Enumerable.Repeat(double.PositiveInfinity, nodes.Count).ToArray();
         var previous = Enumerable.Repeat(-1, nodes.Count).ToArray();
@@ -371,7 +430,7 @@ internal sealed class ComponentSvgWriter
             for (var index = 0; index < nodes.Count; index++)
                 if (!done[index] && !double.IsInfinity(distance[index]) && (current < 0 || distance[index] < distance[current]))
                     current = index;
-            if (current < 0) return route;
+            if (current < 0) return null;
             if (current == 1) break;
 
             done[current] = true;
@@ -391,8 +450,28 @@ internal sealed class ComponentSvgWriter
         return path;
     }
 
-    /// <summary>What a link keeps away from: other elements, foreign containers, and the labels of its own containers.</summary>
-    private List<Bounds> Obstacles(RoutedLink link)
+    /// <summary>The last route decides where a link meets an interface: on the circle, or below the label for what lies below.</summary>
+    private void AttachInterfaces(Dictionary<int, (List<Point> Points, Point? Label)> routes)
+    {
+        void Attach(string id, List<Point> points, int end, int neighbor)
+        {
+            if (!_boxes.TryGetValue(id, out var box) || box.Kind != ElementKind.Interface) return;
+            var circle = ComponentShapes.InterfaceCenter(box, _centers[id]);
+            var toward = points[neighbor] - circle;
+            points[end] = !_horizontal && toward.Y > ComponentShapes.InterfaceRadiusValue + 1
+                ? new Point(_centers[id].X, _centers[id].Y + box.Height / 2)
+                : circle + toward.Normalized * ComponentShapes.InterfaceRadiusValue;
+        }
+
+        foreach (var (index, route) in routes)
+        {
+            Attach(_links[index].Link.From, route.Points, 0, 1);
+            Attach(_links[index].Link.To, route.Points, route.Points.Count - 1, route.Points.Count - 2);
+        }
+    }
+
+    /// <summary>What a link keeps away from: other elements, foreign containers, the labels of its own containers, and the labels of other links.</summary>
+    private List<Bounds> Obstacles(RoutedLink link, Dictionary<int, Bounds> edgeLabels)
     {
         var own = Containers(link.From).Concat(Containers(link.To)).ToHashSet(StringComparer.Ordinal);
         var obstacles = new List<Bounds>();
@@ -407,6 +486,7 @@ internal sealed class ComponentSvgWriter
             else obstacles.Add(own.Contains(element.Id) ? LabelBounds(element) : box.Inflated(ObstacleMargin));
         }
 
+        obstacles.AddRange(edgeLabels.Where(label => label.Key != link.Index).Select(label => label.Value.Inflated(EdgeLabelMargin)));
         return obstacles;
     }
 
@@ -420,9 +500,11 @@ internal sealed class ComponentSvgWriter
     /// <summary>A container's label with the room that links keep from it; the content right below it stays reachable.</summary>
     private Bounds LabelBounds(ComponentElement container)
     {
+        if (_labelBounds.TryGetValue(container.Id, out var known)) return known;
+
         var box = BoundsOf(container);
         var (left, width, height) = ComponentShapes.LabelArea(container, box.Left, box.Right - box.Left);
-        return new Bounds(left - ObstacleMargin, box.Top - ObstacleMargin, left + width + ObstacleMargin, box.Top + height + ObstacleMargin / 2);
+        return _labelBounds[container.Id] = new Bounds(left - ObstacleMargin, box.Top - ObstacleMargin, left + width + ObstacleMargin, box.Top + height + ObstacleMargin / 2);
     }
 
     /// <summary>Orders the link ends on each side of an element by where they lead, so they leave without crossing.</summary>
@@ -462,11 +544,18 @@ internal sealed class ComponentSvgWriter
             var ordered = side.OrderBy(end => Across(end.Toward)).ToList();
             Point End(int position) => _cross * (center + lean + position * spacing - spread) + _axis * (_centers[id].Dot(_axis) + sideOf * (_horizontal ? size.Width : size.Height) / 2);
 
-            // Links that come down through a container's label move beside it, if the side is wide enough.
+            // Links that come down through a container's label move beside it and closer together, if the side is wide enough.
             if (!_horizontal && sideOf < 0)
                 foreach (var container in Containers(id).Select(container => LabelBounds(_elements[container])))
-                    if (ordered.Select((end, position) => (end.Toward, Port: End(position).X)).Any(end => end.Toward.Y <= container.Bottom + 1 && end.Port >= container.Left && end.Port <= container.Right))
-                        lean = Math.Clamp(container.Right + 1 - center + spread, -room, room);
+                {
+                    if (!ordered.Select((end, position) => (end.Toward, Port: End(position).X)).Any(end => end.Toward.Y <= container.Bottom + 1 && end.Port >= container.Left && end.Port <= container.Right)) continue;
+
+                    var free = center + breadth / 2 - PortInset - (container.Right + 1);
+                    if (free < 0) continue;
+                    spacing = ordered.Count > 1 ? Math.Min(spacing, free / (ordered.Count - 1)) : 0;
+                    spread = (ordered.Count - 1) / 2.0 * spacing;
+                    lean = container.Right + 1 - center + spread;
+                }
 
             for (var position = 0; position < ordered.Count; position++)
             {
@@ -527,6 +616,11 @@ internal sealed class ComponentSvgWriter
     {
         var fromHead = Marker(link.Link.FromHead);
         var toHead = Marker(link.Link.ToHead);
+
+        // An end needs room for its marker and a clear approach, or the line would double back or arrive in a hook.
+        while (points.Count > 2 && CrampedEnd(points[^1], points[^2], toHead)) points.RemoveAt(points.Count - 2);
+        while (points.Count > 2 && CrampedEnd(points[0], points[1], fromHead)) points.RemoveAt(1);
+
         var startDirection = (points[1] - points[0]).Normalized;
         var endDirection = (points[^1] - points[^2]).Normalized;
         var start = points[0];
@@ -558,6 +652,13 @@ internal sealed class ComponentSvgWriter
         SvgMarkers.Write(svg, toHead, end, endDirection);
         SvgMarkers.Write(svg, fromHead, start, startDirection * -1);
         svg.Append('\n');
+    }
+
+    private bool CrampedEnd(Point end, Point neighbor, MarkerKind head)
+    {
+        var segment = end - neighbor;
+        var along = Math.Abs(segment.Dot(_axis));
+        return segment.Length < SvgMarkers.Inset(head) + 4 || (along < MinApproach && Math.Abs(segment.Dot(_cross)) > 4 * along);
     }
 
     private static MarkerKind Marker(LinkHead head) => head switch

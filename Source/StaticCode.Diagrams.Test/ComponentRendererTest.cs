@@ -63,6 +63,38 @@ public class ComponentRendererTest
         Renderer --> Icons
         """;
 
+    private const string Crowded = """
+        actor User
+        node "Edge" {
+          [LB]
+          [Cache]
+        }
+        frame "App" {
+          [API] as A
+          [Worker] as K
+          [Mailer] as X
+        }
+        database "DB" as D
+        queue Bus
+        User --> [LB] : https
+        [LB] --> [Cache]
+        [LB] --> A
+        [Cache] --> A : miss
+        A --> D
+        A --> Bus
+        Bus --> K
+        K --> D
+        K --> X
+        X --> User : mail
+        A --> Edge
+        """;
+
+    private const string FlatDetour = """
+        [A] -right-> [B] : hello
+        [B] -right-> [C]
+        [A] -right-> [C]
+        """;
+
     private static readonly XNamespace Svg = "http://www.w3.org/2000/svg";
 
     [Fact]
@@ -222,6 +254,118 @@ public class ComponentRendererTest
                 foreach (var box in shapes.Concat(labels))
                     Assert.False(x > box.Left + 1 && x < box.Right - 1 && y > box.Top + 1 && y < box.Bottom - 1, $"({x}, {y}) in {box}");
             }
+    }
+
+    [Fact]
+    public void LinksArriveWithoutAHook()
+    {
+        var root = XElement.Parse(DiagramRenderer.RenderPlantUmlSvg(Crowded));
+
+        foreach (var route in EdgeRoutes(root))
+        {
+            if (route.Count < 3) continue;
+            var (last, previous, before) = (route[^1], route[^2], route[^3]);
+            var dot = (last.X - previous.X) * (previous.X - before.X) + (last.Y - previous.Y) * (previous.Y - before.Y);
+            Assert.True(dot >= 0, $"{before} to {previous} to {last}");
+            Assert.True(Math.Abs(last.Y - previous.Y) * 4 >= Math.Abs(last.X - previous.X), $"flat arrival from {previous} to {last}");
+        }
+    }
+
+    [Theory]
+    [InlineData(Crowded)]
+    [InlineData(Layered)]
+    [InlineData("[A]\n[Some very wide middle element]\n[C]\nA --> C\nA --> [Some very wide middle element]\n[Some very wide middle element] --> C")]
+    [InlineData(FlatDetour)]
+    public void LinksStayInsideTheViewBox(string source)
+    {
+        var root = XElement.Parse(DiagramRenderer.RenderPlantUmlSvg(source));
+
+        var box = root.Attribute("viewBox")!.Value.Split(' ').Select(value => double.Parse(value, CultureInfo.InvariantCulture)).ToArray();
+        foreach (var point in EdgeRoutes(root).SelectMany(route => route))
+        {
+            Assert.InRange(point.X, box[0], box[0] + box[2]);
+            Assert.InRange(point.Y, box[1], box[1] + box[3]);
+        }
+    }
+
+    [Fact]
+    public void LinksStayOutOfOtherElementsWhenTheyDetour()
+    {
+        var root = XElement.Parse(DiagramRenderer.RenderPlantUmlSvg(FlatDetour));
+
+        var middle = Bounds(ElementShape(root, "C"));
+        foreach (var route in EdgeRoutes(root))
+        foreach (var point in PointsOf(route))
+            Assert.False(point.X > middle.Left + 1 && point.X < middle.Right - 1 && point.Y > middle.Top + 1 && point.Y < middle.Bottom - 1, $"{point} in {middle}");
+    }
+
+    [Fact]
+    public void AFlatLinkKeepsItsLabelOnItsDetour()
+    {
+        var root = XElement.Parse(DiagramRenderer.RenderPlantUmlSvg(FlatDetour));
+
+        var label = LabelCenter(root, "hello");
+        var distance = EdgeRoutes(root).SelectMany(PointsOf).Min(point => Math.Sqrt(Math.Pow(point.X - label.X, 2) + Math.Pow(point.Y - label.Y, 2)));
+        Assert.True(distance < 12, $"label at {label} is {distance} from the nearest link");
+    }
+
+    [Fact]
+    public void LinksStayOffTheLabelsOfOtherLinks()
+    {
+        var root = XElement.Parse(DiagramRenderer.RenderPlantUmlSvg("""
+            [A] --> [D] : first long label
+            [A] --> [E]
+            [A] --> [F]
+            [B] --> [D]
+            [B] --> [E] : second long label
+            [B] --> [F]
+            [C] --> [D]
+            [C] --> [E]
+            [C] --> [F] : third long label
+            """));
+
+        var routes = EdgeRoutes(root);
+        var labels = root.Descendants(Svg + "rect").Where(rect => Class(rect) == "diagram-edge-label-background").Select(Bounds).ToList();
+        Assert.Equal(3, labels.Count);
+        foreach (var (label, owner) in labels.Zip(new[] { 0, 4, 8 }))
+        foreach (var point in routes.Where((_, index) => index != owner).SelectMany(PointsOf))
+            Assert.False(point.X > label.Left && point.X < label.Right && point.Y > label.Top && point.Y < label.Bottom, $"{point} crosses {label}");
+    }
+
+    [Fact]
+    public void InterfaceLinksAttachOnTheSideOfTheirRoute()
+    {
+        var root = XElement.Parse(DiagramRenderer.RenderPlantUmlSvg("package P {\n[G]\ninterface API\n}\n[O]\nG --> O\nO --> API"));
+
+        var circle = root.Descendants(Svg + "circle").Single(shape => Class(shape) == "diagram-node-shape");
+        var center = (X: double.Parse(circle.Attribute("cx")!.Value, CultureInfo.InvariantCulture), Y: double.Parse(circle.Attribute("cy")!.Value, CultureInfo.InvariantCulture));
+        var route = EdgeRoutes(root)[1];
+        var (end, previous) = (route[^1], route[^2]);
+        Assert.True((end.X - center.X) * (previous.X - center.X) + (end.Y - center.Y) * (previous.Y - center.Y) > 0, $"{end} on the circle at {center}, coming from {previous}");
+    }
+
+    [Fact]
+    public void KeepsContainerPaddingEvenAroundContent()
+    {
+        var root = XElement.Parse(DiagramRenderer.RenderPlantUmlSvg("rectangle P {\n[Alpha]\n[Beta]\n[Gamma]\n}\nrectangle Q {\n[One]\n[Two]\n}\nAlpha --> Two\nAlpha --> One\nGamma --> Two\nBeta --> One"));
+
+        var content = new[] { "Alpha", "Beta", "Gamma" }.Select(member => Bounds(ElementShape(root, member))).ToList();
+        var container = root.Descendants(Svg + "g").Where(group => Class(group).Contains("diagram-container-rectangle")).Select(group => Bounds(group.Element(Svg + "rect")!))
+            .First(box => box.Left <= content[0].Left && box.Right >= content[0].Right && box.Top <= content[0].Top && box.Bottom >= content[0].Bottom);
+        Assert.Equal(content.Min(box => box.Left) - container.Left, container.Right - content.Max(box => box.Right), 0);
+    }
+
+    private static IEnumerable<(double X, double Y)> PointsOf(List<(double X, double Y)> route)
+    {
+        foreach (var (from, to) in route.Zip(route.Skip(1)))
+            for (var step = 0; step <= 40; step++)
+                yield return (from.X + (to.X - from.X) * step / 40, from.Y + (to.Y - from.Y) * step / 40);
+    }
+
+    private static (double X, double Y) LabelCenter(XElement root, string text)
+    {
+        var label = root.Descendants(Svg + "g").Single(group => Class(group).Contains("diagram-edge-labels")).Descendants(Svg + "text").Single(element => element.Value == text);
+        return (double.Parse(label.Attribute("x")!.Value, CultureInfo.InvariantCulture), double.Parse(label.Attribute("y")!.Value, CultureInfo.InvariantCulture));
     }
 
     /// <summary>The points of every drawn link, including the corners of its rounded bends.</summary>
