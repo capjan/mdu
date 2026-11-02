@@ -33,10 +33,10 @@ package "mdu" {
   [Link rewriting] as Links
 }
 package "Markdown" {
-  [Markdown.Document] as Doc
-  [Markdown.Linter] as Linter
-  [Markdown.Renderer] as Renderer
-  [Markdown.Search] as Search
+  [Document] as Doc
+  [Linter] as Linter
+  [Renderer] as Renderer
+  [Search] as Search
 }
 package "StaticCode" {
   [Highlighter] as Highlighter
