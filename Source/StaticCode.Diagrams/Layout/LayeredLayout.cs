@@ -17,7 +17,8 @@ internal enum LayoutPin
 }
 
 /// <param name="Margin">Extra free space on both sides along the layer, for example for self-loops.</param>
-internal sealed record LayoutNode(double Width, double Height, double Margin = 0, LayoutPin Pin = LayoutPin.None);
+/// <param name="Anchor">Where along the layer the node wants to be, for example toward the far end of a port's link.</param>
+internal sealed record LayoutNode(double Width, double Height, double Margin = 0, LayoutPin Pin = LayoutPin.None, double? Anchor = null);
 
 /// <param name="MinLength">
 /// Minimum number of ranks between source and target. 0 makes a flat edge: both ends stay in the same rank when the
@@ -52,11 +53,19 @@ internal sealed class LayeredLayout
     private const int OrderingIterations = 24;
     private const int TransposePasses = 8;
     private const int PositioningIterations = 400;
+    private const double AnchorWeight = 2;
 
     public double NodeSeparation { get; init; } = 36;
     public double EdgeSeparation { get; init; } = 14;
     public double RankSeparation { get; init; } = 52;
     public double PortSpacing { get; init; } = 14;
+
+    /// <summary>
+    /// For callers that route the links themselves once everything is placed: unlabeled edges between neighboring ranks
+    /// stay direct instead of getting a bend rank of their own, and connected nodes line up in preference to the
+    /// dummies of long edges, which then only keep room free.
+    /// </summary>
+    public bool CallerRoutesLinks { get; init; }
 
     // Flat edges that ended up in one rank: the left vertex must stay before the right one.
     private readonly List<(Vertex Left, Vertex Right)> _flatPairs = new();
@@ -69,7 +78,9 @@ internal sealed class LayeredLayout
         {
             Breadth = horizontal ? node.Height : node.Width,
             Depth = horizontal ? node.Width : node.Height,
-            Margin = node.Margin
+            Margin = node.Margin,
+            IsPort = node.Pin != LayoutPin.None,
+            Anchor = node.Anchor
         }).ToList();
         if (vertices.Count == 0)
             return new LayoutResult(Array.Empty<Point>(), edges.Select(_ => new EdgeRoute(Array.Empty<Point>(), null)).ToArray(), 0, 0);
@@ -86,7 +97,7 @@ internal sealed class LayeredLayout
                 item.Index,
                 reversed[item.Index] ? item.Edge.Target : item.Edge.Source,
                 reversed[item.Index] ? item.Edge.Source : item.Edge.Target,
-                item.Edge.MinLength <= 0 ? 0 : 2 * item.Edge.MinLength))
+                item.Edge.MinLength <= 0 ? 0 : CallerRoutesLinks && item.Edge.LabelWidth == 0 ? item.Edge.MinLength : 2 * item.Edge.MinLength))
             .ToList();
 
         AssignRanks(vertices, ranked, nodes.Select(node => node.Pin).ToArray());
@@ -104,10 +115,17 @@ internal sealed class LayeredLayout
                 var left = vertices[input.Source];
                 var right = vertices[input.Target];
                 _flatPairs.Add((left, right));
-                if (input.LabelWidth > 0) _flatGaps[(left, right)] = (horizontal ? input.LabelHeight : input.LabelWidth) + 16;
+                if (input.LabelWidth > 0)
+                {
+                    var gap = (horizontal ? input.LabelHeight : input.LabelWidth) + 16;
+                    _flatGaps[(left, right)] = CallerRoutesLinks ? _flatGaps.GetValueOrDefault((left, right)) + gap : gap;
+                }
+
                 continue;
             }
 
+            var upperPort = (reversed[edge.Index] ? input.TargetPort : input.SourcePort) ?? 0;
+            var lowerPort = (reversed[edge.Index] ? input.SourcePort : input.TargetPort) ?? 0;
             var labelRank = from.Rank + (to.Rank - from.Rank) / 2;
             var chain = new List<Vertex> { from };
             var previous = from;
@@ -121,23 +139,24 @@ internal sealed class LayeredLayout
                     labels[edge.Index] = dummy;
                 }
 
-                Connect(previous, dummy);
+                Connect(previous, dummy, previous == from ? upperPort : 0, 0);
                 chain.Add(dummy);
                 allVertices.Add(dummy);
                 previous = dummy;
             }
 
-            Connect(previous, to);
+            Connect(previous, to, previous == from ? upperPort : 0, lowerPort);
             chain.Add(to);
             chains[edge.Index] = chain;
         }
 
         var layers = BuildLayers(vertices, allVertices.Max(vertex => vertex.Rank) + 1);
         MinimizeCrossings(layers);
+        OrderAnchoredLayers(layers);
         AssignCoordinates(layers);
         foreach (var vertex in vertices) AssignPorts(vertex);
 
-        var layoutWidth = allVertices.Max(vertex => vertex.X + vertex.HalfBreadth);
+        var layoutWidth = Content(allVertices).Max(vertex => vertex.X + vertex.HalfBreadth);
         var layoutHeight = allVertices.Max(vertex => vertex.Y + vertex.Depth / 2);
         Point Map(double x, double y) => direction switch
         {
@@ -255,7 +274,7 @@ internal sealed class LayeredLayout
                 rank[node] = outgoing[node].Min(edge => rank[edge.Lower] - edge.MinLength);
         }
 
-        // Pinned nodes go one rank-pair above or below everything else.
+        // Pinned nodes go one rank above or below everything else.
         var free = Enumerable.Range(0, count).Where(node => pins[node] == LayoutPin.None).ToList();
         if (free.Count < count)
         {
@@ -263,17 +282,20 @@ internal sealed class LayeredLayout
             var last = free.Count > 0 ? free.Max(node => rank[node]) : 0;
             for (var node = 0; node < count; node++)
                 if (pins[node] != LayoutPin.None)
-                    rank[node] = pins[node] == LayoutPin.First ? first - 2 : last + 2;
+                    rank[node] = pins[node] == LayoutPin.First ? first - 1 : last + 1;
         }
 
         var lowest = rank.Min();
         for (var node = 0; node < count; node++) vertices[node].Rank = rank[node] - lowest;
     }
 
-    private static void Connect(Vertex upper, Vertex lower)
+    /// <summary>Connects two vertices; the ports are where the edge ends, relative to the centers along the layer.</summary>
+    private static void Connect(Vertex upper, Vertex lower, double upperPort, double lowerPort)
     {
         upper.Lower.Add(lower);
+        upper.LowerOffsets.Add(lowerPort - upperPort);
         lower.Upper.Add(upper);
+        lower.UpperOffsets.Add(upperPort - lowerPort);
     }
 
     private List<List<Vertex>> BuildLayers(List<Vertex> vertices, int layerCount)
@@ -421,6 +443,24 @@ internal sealed class LayeredLayout
         return crossings;
     }
 
+    /// <summary>Ports mark where edges leave, so they do not count toward the size of the layout.</summary>
+    private static List<Vertex> Content(List<Vertex> vertices)
+    {
+        var content = vertices.Where(vertex => !vertex.IsPort).ToList();
+        return content.Count > 0 ? content : vertices;
+    }
+
+    private static void OrderAnchoredLayers(List<List<Vertex>> layers)
+    {
+        foreach (var layer in layers.Where(layer => layer.Count > 1 && layer.All(vertex => vertex.Anchor != null)))
+        {
+            var ordered = layer.OrderBy(vertex => vertex.Anchor).ToList();
+            layer.Clear();
+            layer.AddRange(ordered);
+            UpdateOrder(layer);
+        }
+    }
+
     private void AssignCoordinates(List<List<Vertex>> layers)
     {
         foreach (var layer in layers)
@@ -438,7 +478,7 @@ internal sealed class LayeredLayout
         }
 
         var all = layers.SelectMany(layer => layer).ToList();
-        var minX = all.Min(vertex => vertex.X - vertex.HalfBreadth);
+        var minX = Content(all).Min(vertex => vertex.X - vertex.HalfBreadth);
         foreach (var vertex in all) vertex.X -= minX;
 
         double? previousCenter = null;
@@ -471,11 +511,12 @@ internal sealed class LayeredLayout
         {
             var vertex = layer[index];
             double sum = 0, weight = 0;
-            foreach (var neighbor in vertex.Upper.Concat(vertex.Lower))
+            AddPull(vertex, vertex.Upper, vertex.UpperOffsets, ref sum, ref weight);
+            AddPull(vertex, vertex.Lower, vertex.LowerOffsets, ref sum, ref weight);
+            if (vertex.Anchor is { } anchor)
             {
-                var segmentWeight = vertex.IsDummy && neighbor.IsDummy ? 8 : vertex.IsDummy || neighbor.IsDummy ? 2 : 1;
-                sum += segmentWeight * neighbor.X;
-                weight += segmentWeight;
+                sum += AnchorWeight * anchor;
+                weight += AnchorWeight;
             }
 
             offsets[index] = index == 0 ? 0 : offsets[index - 1] + Gap(layer[index - 1], vertex);
@@ -496,6 +537,19 @@ internal sealed class LayeredLayout
         }
 
         return moved;
+    }
+
+    private void AddPull(Vertex vertex, List<Vertex> neighbors, List<double> offsets, ref double sum, ref double weight)
+    {
+        for (var position = 0; position < neighbors.Count; position++)
+        {
+            var neighbor = neighbors[position];
+            var segmentWeight = vertex.IsDummy && neighbor.IsDummy ? 8
+                : CallerRoutesLinks ? (vertex.IsDummy || neighbor.IsDummy ? 1 : 4)
+                : vertex.IsDummy || neighbor.IsDummy ? 2 : 1;
+            sum += segmentWeight * (neighbor.X + offsets[position]);
+            weight += segmentWeight;
+        }
     }
 
     private static double[] FitNonDecreasing(double[] values, double[] weights)
@@ -525,10 +579,12 @@ internal sealed class LayeredLayout
 
     private double Gap(Vertex left, Vertex right)
     {
-        var separation = left.IsDummy && right.IsDummy ? EdgeSeparation
-            : left.IsDummy || right.IsDummy ? (NodeSeparation + EdgeSeparation) / 2
+        var separation = left.IsThin && right.IsThin ? EdgeSeparation
+            : left.IsThin || right.IsThin ? (NodeSeparation + EdgeSeparation) / 2
             : NodeSeparation;
-        return left.HalfBreadth + right.HalfBreadth + separation + _flatGaps.GetValueOrDefault((left, right));
+        var flatGap = _flatGaps.GetValueOrDefault((left, right));
+        if (CallerRoutesLinks) flatGap += _flatGaps.GetValueOrDefault((right, left));
+        return left.HalfBreadth + right.HalfBreadth + separation + flatGap;
     }
 
     /// <summary>Spreads the edge ends on each side of a node so that arrowheads do not overlap.</summary>
@@ -561,6 +617,8 @@ internal sealed class LayeredLayout
 
         public double Margin;
         public bool IsDummy;
+        public bool IsPort;
+        public double? Anchor;
         public int Rank;
         public int Order;
         public double X;
@@ -575,6 +633,14 @@ internal sealed class LayeredLayout
         public readonly List<Vertex> Upper = new();
         public readonly List<Vertex> Lower = new();
 
+        /// <summary>Where this vertex would line up with each neighbor, relative to that neighbor's center.</summary>
+        public readonly List<double> UpperOffsets = new();
+
+        public readonly List<double> LowerOffsets = new();
+
         public double HalfBreadth => Breadth / 2 + Margin;
+
+        /// <summary>Takes no more room than an edge passing by.</summary>
+        public bool IsThin => IsDummy || IsPort;
     }
 }
