@@ -1039,6 +1039,55 @@ public class PdfRendererTest
     }
 
     [Fact]
+    public void KeepsMarkedPlaygroundInHtmlButOmitsItFromPdf()
+    {
+        const string markdown = """
+            # Hero Banner
+
+            <!-- pdf:hidden -->
+            ```hero
+            title: PlaygroundTitleQ8
+            text: PlaygroundTextQ8
+            effect: connections
+            width: content
+            playground: true
+            actions:
+              - text: PlaygroundActionQ8
+                link: "#overview"
+            ```
+
+            ## Try it
+
+            PlaygroundInstructionsQ8
+            <!-- /pdf:hidden -->
+
+            ## Overview
+
+            ReferenceOverviewQ8
+
+            ## Syntax
+
+            ReferenceSyntaxQ8
+            """;
+        var renderer = new HtmlRenderer();
+        var html = renderer.RenderMarkdownFragment(markdown);
+
+        Assert.Contains("class=\"hero-playground-template\"", html);
+        foreach (var text in new[] { "PlaygroundTitleQ8", "PlaygroundTextQ8", "PlaygroundActionQ8", "PlaygroundInstructionsQ8" })
+            Assert.Contains(text, html);
+
+        using var output = new MemoryStream();
+        new PdfRenderer(renderer).WritePdf(output, "Hero Banner",
+            [new PdfSourceSection("Hero Banner", "index.html", markdown)]);
+        var pdf = Encoding.Latin1.GetString(output.ToArray());
+
+        foreach (var text in new[] { "PlaygroundTitleQ8", "PlaygroundTextQ8", "PlaygroundActionQ8", "PlaygroundInstructionsQ8", "Try it", "Copy YAML" })
+            Assert.DoesNotContain(Hex(text), pdf);
+        foreach (var text in new[] { "ReferenceOverviewQ8", "ReferenceSyntaxQ8" })
+            Assert.Contains(Hex(text), pdf);
+    }
+
+    [Fact]
     public void CompositeStatePdfLinkCoversItsWholeFrameAndKeepsTheChildDestination()
     {
         var document = new System.Xml.XmlDocument();
