@@ -686,6 +686,38 @@ public class SearchIndexBuilderTest
         Assert.Equal("Before the operation. After the reference.", page.GetProperty("text").GetString());
     }
 
+    [Theory]
+    [InlineData("openapi-tag", "Users")]
+    [InlineData("openapi-overview", "Users")]
+    [InlineData("openapi-tag", "<select><option>Users</option></select>")]
+    [InlineData("openapi-overview", "<select><option>Users</option></select>")]
+    public void EndsOperationGroupingAtApiHeadingsWithoutIds(string sectionClass, string heading)
+    {
+        var entries = BuildIndex($$"""
+            <!--mdu-openapi-start-->
+
+            <h3 id="operation" class="openapi-operation">GET /widgets</h3>
+            <p>Operation details.</p>
+            <h2 class="{{sectionClass}}">{{heading}}</h2>
+            <h3 id="users-notes">Notes</h3>
+            <p>User details.</p>
+
+            ```sh
+            user-command
+            ```
+
+            <!--mdu-openapi-end-->
+            """);
+
+        Assert.Equal(2, entries.Length);
+        Assert.Equal("guide.html#operation", entries[0].GetProperty("url").GetString());
+        Assert.Equal("Operation details. Users", entries[0].GetProperty("text").GetString());
+        Assert.Equal(string.Empty, entries[0].GetProperty("code").GetString());
+        Assert.Equal("guide.html#users-notes", entries[1].GetProperty("url").GetString());
+        Assert.Equal("User details.", entries[1].GetProperty("text").GetString());
+        Assert.Equal("user-command", entries[1].GetProperty("code").GetString());
+    }
+
     private static JsonElement[] BuildIndex(string markdown)
     {
         var outputPath = Path.Combine(Path.GetTempPath(), $"mdu-search-test-{Guid.NewGuid():N}");

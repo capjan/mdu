@@ -84,6 +84,7 @@ public sealed class SearchIndexBuilder
             var text = NormalizeText(part.Text);
             if (part.Title is null || string.IsNullOrEmpty(part.Id))
             {
+                if (part.IsApiSection) operationEntry = -1;
                 var content = part.Title is null ? text : $"{part.Title} {text}".Trim();
                 if (currentEntry >= 0) AppendToEntry(currentEntry, content, part.Code);
                 else if (content.Length > 0 || part.Code.Count > 0)
@@ -143,10 +144,12 @@ public sealed class SearchIndexBuilder
     internal enum SearchMarker { None, OpenApiStart, OpenApiEnd }
 
     private static SearchMarker ReadOpenApiMarker(ReadOnlySpan<char> content) =>
-        content.SequenceEqual(OpenApiMarkdownRenderer.BlockStartMarker.AsSpan(4, OpenApiMarkdownRenderer.BlockStartMarker.Length - 7))
+        content.SequenceEqual(GetMarkerContent(OpenApiMarkdownRenderer.BlockStartMarker))
             ? SearchMarker.OpenApiStart
-            : content.SequenceEqual(OpenApiMarkdownRenderer.BlockEndMarker.AsSpan(4, OpenApiMarkdownRenderer.BlockEndMarker.Length - 7))
+            : content.SequenceEqual(GetMarkerContent(OpenApiMarkdownRenderer.BlockEndMarker))
                 ? SearchMarker.OpenApiEnd : SearchMarker.None;
+
+    private static ReadOnlySpan<char> GetMarkerContent(string marker) => marker.AsSpan(4..^3);
 
     private static string NormalizeText(StringBuilder text) => WhitespaceRegex.Replace(text.ToString(), " ").Trim();
 
