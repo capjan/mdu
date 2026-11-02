@@ -26,4 +26,5 @@ public static class RuleCodes
     public const string DuplicateFootnote = "MDU021";
     public const string LocalFragmentExists = "MDU022";
     public const string LocalFragmentExistsName = "LocalFragmentExists";
+    public const string DiagramTooLarge = "MDU023";
 }

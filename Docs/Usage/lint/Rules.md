@@ -33,6 +33,7 @@ navigation:
 | `MDU020` | `UnusedFootnote` | Warning | Every footnote definition is reachable from a reference in page text. | — |
 | `MDU021` | `DuplicateFootnote` | Warning | A footnote label is defined only once per page. | — |
 | `MDU022` | `LocalFragmentExists` | Error | A link fragment matches an anchor on the target page. | — |
+| `MDU023` | `DiagramTooLarge` | Warning | A PlantUML component diagram has at most 1000 elements and 2000 links. |
 
 ## MDU001: HeadingRequired
 
@@ -95,3 +96,7 @@ Fix the fragment, or add an explicit id to the heading when existing links must 
 The linter also lists pages marked `navigation.visible: false` that no visible page links to. These orphaned pages are informational; they do not have a rule code and do not affect the exit code.
 
 [Back to lint](README.md)
+
+## MDU023: DiagramTooLarge
+
+This warning points to a PlantUML component diagram with more than 1000 elements or 2000 links. MDU does not draw such a diagram, because it would take a long time and a lot of memory, and the block stays a code block. Split the diagram into smaller ones; warnings do not make `mdu lint` fail.

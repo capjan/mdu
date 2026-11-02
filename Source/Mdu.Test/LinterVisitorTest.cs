@@ -74,6 +74,20 @@ public class LinterVisitorTest
     }
 
     [Fact]
+    public void TooLargeDiagramWarnsAtItsCodeBlock()
+    {
+        var links = string.Join('\n', Enumerable.Range(0, 2001).Select(_ => "[A] --> [B]"));
+        WithPage("Overview.md", $"# Overview\n\n```plantuml\n{links}\n```", "Overview", 0,
+            errors => Assert.Empty(errors),
+            assertWarnings: warnings =>
+            {
+                var warning = Assert.Single(warnings);
+                Assert.Equal(3, warning.LineNumber);
+                Assert.Equal(RuleCodes.DiagramTooLarge, CodeOf(warning));
+            });
+    }
+
+    [Fact]
     public void ReferencedFootnoteDoesNotWarn()
     {
         WithPage("Overview.md", "# Overview\n\nA note[^used].\n\n[^used]: Referenced.", "Overview", 0,

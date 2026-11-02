@@ -32,7 +32,26 @@ public static class DiagramRenderer
         IsometricSvgWriter.Write(IsometricParser.Parse(source), $"iso-{StableHash(source):x8}-{instance.ToString(CultureInfo.InvariantCulture)}");
 
     /// <exception cref="DiagramSyntaxException">The source is not a supported PlantUML component diagram.</exception>
-    public static string RenderPlantUmlSvg(string source) => ComponentSvgWriter.Write(ComponentParser.Parse(source));
+    public static string RenderPlantUmlSvg(string source)
+    {
+        var diagram = ComponentParser.Parse(source);
+        if (diagram.IsTooLarge)
+            throw new DiagramSyntaxException($"A component diagram can have at most {ComponentDiagram.MaxElements} elements and {ComponentDiagram.MaxLinks} links.", 1);
+        return ComponentSvgWriter.Write(diagram);
+    }
+
+    /// <summary>Whether a valid PlantUML component diagram is too large to draw, so that its block stays a code block.</summary>
+    public static bool IsPlantUmlTooLarge(string source)
+    {
+        try
+        {
+            return ComponentParser.Parse(source).IsTooLarge;
+        }
+        catch (DiagramSyntaxException)
+        {
+            return false;
+        }
+    }
 
     /// <summary>
     /// Returns <c>false</c> for other languages and for diagrams outside the supported syntax. Isometric diagrams are

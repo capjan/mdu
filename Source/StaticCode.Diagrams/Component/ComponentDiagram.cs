@@ -81,6 +81,10 @@ public sealed record ComponentLink(
 
 public sealed class ComponentDiagram
 {
+    // Well above what stays readable; they protect builds from generated diagrams that would take minutes and gigabytes.
+    public const int MaxElements = 1000;
+    public const int MaxLinks = 2000;
+
     public ComponentDiagram(
         string? title, bool leftToRight, IReadOnlyList<ComponentElement> elements, IReadOnlyList<ComponentLink> links)
     {
@@ -97,4 +101,6 @@ public sealed class ComponentDiagram
 
     public IReadOnlyList<ComponentElement> Elements { get; }
     public IReadOnlyList<ComponentLink> Links { get; }
+
+    public bool IsTooLarge => Elements.Count > MaxElements || Links.Count > MaxLinks;
 }

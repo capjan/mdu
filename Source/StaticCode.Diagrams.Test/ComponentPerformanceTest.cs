@@ -64,6 +64,19 @@ public class ComponentPerformanceTest
         }
     }
 
+    [Theory]
+    [InlineData(1000, 0, false)]
+    [InlineData(1001, 0, true)]
+    [InlineData(2, 2000, false)]
+    [InlineData(2, 2001, true)]
+    public void DiagramsAboveTheLimitAreNotDrawn(int elements, int links, bool tooLarge)
+    {
+        var source = string.Join('\n', Enumerable.Range(0, elements).Select(element => $"[N{element}]").Concat(Enumerable.Repeat("[N0] --> [N1]", links)));
+
+        Assert.Equal(tooLarge, DiagramRenderer.IsPlantUmlTooLarge(source));
+        if (tooLarge) Assert.False(DiagramRenderer.TryRenderSvg("plantuml", source, out _));
+    }
+
     [Fact]
     public void TheSameDiagramAlwaysGivesTheSameSvg()
     {
