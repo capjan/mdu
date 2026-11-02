@@ -107,6 +107,26 @@ public sealed class RenderCommandCustomIconsTest : IDisposable
         Assert.Equal("Before Light nested & text Dark nested text after.", entry.GetProperty("text").GetString());
     }
 
+    [Fact]
+    public void IndexesTextWhenCustomSvgNeedsTheDomFallback()
+    {
+        WriteFile(".icons/acme/filtered.svg", """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+              <defs><filter id="blur"><feGaussianBlur stdDeviation="1"/></filter></defs>
+              <text filter="url(#blur)">Filtered <tspan>label</tspan></text>
+            </svg>
+            """);
+        IconCatalog.UseCustomIcons(Path.Combine(_root, ".icons"));
+        Assert.True(IconCatalog.TryGetIcon("acme-filtered", out var icon));
+        Assert.False(SearchIndexBuilder.TryReadTokens(icon.Glyph.Body, svgContext: true, out _));
+        WriteFile("README.md", "# Guide\n\nBefore :acme-filtered: and :acme-filtered: after.");
+
+        Assert.Equal(0, Render());
+        using var index = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(_root, "site", "search-index.json")));
+        var entry = Assert.Single(index.RootElement.EnumerateArray());
+        Assert.Equal("Before Filtered label and Filtered label after.", entry.GetProperty("text").GetString());
+    }
+
     private int Render()
     {
         var command = new RenderCommand(

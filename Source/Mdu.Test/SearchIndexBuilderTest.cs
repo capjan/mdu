@@ -559,6 +559,133 @@ public class SearchIndexBuilderTest
         Assert.Equal("GET", operation.GetProperty("code").GetString());
     }
 
+    [Theory]
+    [InlineData("<h2>Limits</h2>")]
+    [InlineData("<H2>Limits</H2>")]
+    public void KeepsTextUnderHtmlHeadingsWithoutIds(string heading)
+    {
+        var entries = BuildIndex($"# Guide\n\n{heading}\n\n<p>Rate limit is 100.</p>");
+        var entry = Assert.Single(entries);
+        Assert.Equal("guide.html#guide", entry.GetProperty("url").GetString());
+        Assert.Equal("Limits Rate limit is 100.", entry.GetProperty("text").GetString());
+    }
+
+    [Fact]
+    public void IndexesPagesContainingOnlyHtmlHeadingsWithoutIds()
+    {
+        var entry = Assert.Single(BuildIndex("<h2>Limits</h2><p>Rate limit is 100.</p>"));
+        Assert.Equal("guide.html", entry.GetProperty("url").GetString());
+        Assert.Equal("Limits Rate limit is 100.", entry.GetProperty("text").GetString());
+    }
+
+    [Theory]
+    [InlineData("iframe")]
+    [InlineData("noembed")]
+    [InlineData("noframes")]
+    [InlineData("noscript")]
+    public void ExcludesNonRenderedFallbackMarkup(string element)
+    {
+        var entry = Assert.Single(BuildIndex($"# Guide\n\nBefore.\n\n<{element}><h2 id='hidden'>Hidden</h2><p>Your browser <a href='y'>fallback</a></p></{element}>\n\nAfter."));
+        Assert.Equal("Before. After.", entry.GetProperty("text").GetString());
+    }
+
+    [Theory]
+    [InlineData("<h2 id='setup'>Setup</h2>")]
+    [InlineData("<h2 id='setup'><select><option>Setup</option></select></h2>")]
+    public void AssignsCodeToHtmlHeadingsInDocumentOrder(string heading)
+    {
+        var entries = BuildIndex($"# Guide\n\n```sh\nintro-tool\n```\n\n{heading}\n\nUse `inline-tool`.\n\n```sh\ninstall-tool\n```\n\n## Next\n\n```sh\nnext-tool\n```");
+        Assert.Equal(3, entries.Length);
+        Assert.Equal("intro-tool", entries[0].GetProperty("code").GetString());
+        Assert.Equal("guide.html#setup", entries[1].GetProperty("url").GetString());
+        Assert.Equal("inline-tool install-tool", entries[1].GetProperty("code").GetString());
+        Assert.Equal("next-tool", entries[2].GetProperty("code").GetString());
+    }
+
+    [Theory]
+    [InlineData("<!--mdu-openapi-start-->")]
+    [InlineData("<!--mdu-openapi-end-->")]
+    public void KeepsMarkerOnlyPagesSearchable(string marker)
+    {
+        var entry = Assert.Single(BuildIndex(marker));
+        Assert.Equal("Guide", entry.GetProperty("title").GetString());
+        Assert.Equal("guide.html", entry.GetProperty("url").GetString());
+    }
+
+    [Theory]
+    [InlineData("<!--mdu-openapi-start-->")]
+    [InlineData("<!--mdu-openapi-end-->")]
+    public void IgnoresUnpairedOpenApiMarkers(string marker)
+    {
+        var entries = BuildIndex($$"""
+            ### `GET` /widgets {.openapi-operation}
+
+            First description.
+
+            {{marker}}
+
+            #### Notes
+
+            Extra details.
+            """);
+        var entry = Assert.Single(entries);
+        Assert.Contains("Notes Extra details.", entry.GetProperty("text").GetString());
+    }
+
+    [Theory]
+    [InlineData("foo<!-- note -->bar")]
+    [InlineData("foo<script>hidden</script>bar")]
+    [InlineData("foo<style>hidden</style>bar")]
+    [InlineData("foo<template>hidden</template>bar")]
+    [InlineData("foo<noscript>hidden</noscript>bar")]
+    public void KeepsWordBoundariesAroundExcludedContent(string html)
+    {
+        var entry = Assert.Single(BuildIndex($"# Guide\n\n<p>{html}</p>"));
+        Assert.Equal("foo bar", entry.GetProperty("text").GetString());
+    }
+
+    [Theory]
+    [InlineData("xmp")]
+    [InlineData("title")]
+    public void DoesNotExposeInternalCodeMarkersInRawText(string element)
+    {
+        var entry = Assert.Single(BuildIndex($"# Guide\n\n<{element}>\n\n```sh\ninstall-tool\n```\n\n</{element}>"));
+        var text = entry.GetProperty("text").GetString()!;
+        var code = entry.GetProperty("code").GetString()!;
+        Assert.DoesNotContain("mdu-search-code-", text);
+        Assert.Contains("install-tool", text + code);
+    }
+
+    [Fact]
+    public void DoesNotIndexCodeInsideTemplates()
+    {
+        var entry = Assert.Single(BuildIndex("# Guide\n\n<template>\n\n```sh\nhidden-command\n```\n\n</template>\n\nVisible."));
+        Assert.Equal("Visible.", entry.GetProperty("text").GetString());
+        Assert.Equal(string.Empty, entry.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public void KeepsPageLevelProseAroundAnOpenApiBlockWithoutAnOuterHeading()
+    {
+        var entries = BuildIndex("""
+            <!--mdu-openapi-start-->
+
+            Before the operation.
+
+            ### `GET` /widgets {.openapi-operation}
+
+            Operation details.
+
+            <!--mdu-openapi-end-->
+
+            After the reference.
+            """);
+
+        Assert.Equal(2, entries.Length);
+        var page = Assert.Single(entries, entry => entry.GetProperty("url").GetString() == "guide.html");
+        Assert.Equal("Before the operation. After the reference.", page.GetProperty("text").GetString());
+    }
+
     private static JsonElement[] BuildIndex(string markdown)
     {
         var outputPath = Path.Combine(Path.GetTempPath(), $"mdu-search-test-{Guid.NewGuid():N}");

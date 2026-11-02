@@ -1,5 +1,4 @@
-using System.Collections;
-using System.Reflection;
+using Builder = Markdown.Search.SearchIndexBuilder;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Markdig;
@@ -12,24 +11,15 @@ namespace Mdu.Test;
 
 public class SearchHtmlReaderTest
 {
-    private static readonly Type Builder = typeof(Markdown.Search.SearchIndexBuilder);
-    private static object Invoke(string name, params object?[] arguments) =>
-        Builder.GetMethod(name, BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, arguments)!;
-
-    private static string Snapshot(object value) => JsonSerializer.Serialize(((IEnumerable)value).Cast<object>().Select(part =>
-        new[] { "Id", "Title", "IsOperation", "IsApiSection", "Marker", "Text" }.Select(name =>
-        {
-            var text = part.GetType().GetProperty(name)!.GetValue(part)?.ToString();
-            return name == "Text" && text is not null ? Regex.Replace(text, @"\s+", " ").Trim() : text;
-        }).ToArray()).ToArray());
-
-    private static bool TryRead(string html, out object? parts)
+    private static string Snapshot(IEnumerable<Builder.SearchPart> parts) => JsonSerializer.Serialize(parts.Select(part => new
     {
-        object?[] arguments = [html, null];
-        var accepted = (bool)Invoke("TryReadHtmlTokens", arguments);
-        parts = arguments[1];
-        return accepted;
-    }
+        part.Id, part.Title, part.IsOperation, part.IsApiSection, part.Marker,
+        Text = Regex.Replace(part.Text.ToString(), @"\s+", " ").Trim(),
+        part.Code
+    }));
+
+    private static bool TryRead(string html, out List<Builder.SearchPart> parts) =>
+        Builder.TryReadTokens(html, svgContext: false, out parts);
 
     [Theory]
     [InlineData("<H2 data-label='a > b' ID='a&amp;b'>Nested <strong>heading</strong></H2><p>Text &amp; entities.</p>")]
@@ -56,7 +46,7 @@ public class SearchHtmlReaderTest
     public void AcceptedHtmlMatchesFullDom(string html)
     {
         Assert.True(TryRead(html, out var parts));
-        Assert.Equal(Snapshot(Invoke("ReadHtmlDom", html)), Snapshot(parts!));
+        Assert.Equal(Snapshot(Builder.ReadHtmlDom(html)), Snapshot(parts!));
     }
 
     [Theory]
@@ -79,7 +69,7 @@ public class SearchHtmlReaderTest
     public void AmbiguousHtmlUsesFullDom(string html)
     {
         Assert.False(TryRead(html, out _));
-        Assert.Equal(Snapshot(Invoke("ReadHtmlDom", html)), Snapshot(Invoke("ReadHtml", html)));
+        Assert.Equal(Snapshot(Builder.ReadHtmlDom(html)), Snapshot(new Builder().ReadHtml(html)));
     }
 
     [Theory]
@@ -89,16 +79,14 @@ public class SearchHtmlReaderTest
     [InlineData("<style><![CDATA[text { fill: red }]]></style><text>Label</text>")]
     public void ReadsSvgFragmentsWithoutCopyingThemIntoAWrapper(string svg)
     {
-        object?[] arguments = [svg, true, null];
-        Assert.True((bool)Invoke("TryReadTokens", arguments));
-        Assert.Equal(Snapshot(Invoke("ReadHtmlDom", $"<svg>{svg}</svg>")), Snapshot(arguments[2]!));
+        Assert.True(Builder.TryReadTokens(svg, svgContext: true, out var parts));
+        Assert.Equal(Snapshot(Builder.ReadHtmlDom($"<svg>{svg}</svg>")), Snapshot(parts));
     }
 
     [Fact]
     public void SvgFragmentsCannotCloseTheirParsingContext()
     {
-        object?[] arguments = ["</svg><h2 id='outside'>Outside</h2>", true, null];
-        Assert.False((bool)Invoke("TryReadTokens", arguments));
+        Assert.False(Builder.TryReadTokens("</svg><h2 id='outside'>Outside</h2>", svgContext: true, out _));
     }
 
     [Fact]
@@ -113,7 +101,7 @@ public class SearchHtmlReaderTest
             var html = $"<{outer} id='outer'>Lead<{middle} id='middle'>Middle<{inner} id='inner'>Inner</{inner}>Tail</{middle}>End</{outer}><h2 id='next'>Next</h2><p>Final.</p>";
             if (!TryRead(html, out var parts)) continue;
             accepted++;
-            Assert.True(Snapshot(Invoke("ReadHtmlDom", html)) == Snapshot(parts!), html);
+            Assert.True(Snapshot(Builder.ReadHtmlDom(html)) == Snapshot(parts!), html);
         }
         Assert.True(accepted > 100);
     }
@@ -127,8 +115,36 @@ public class SearchHtmlReaderTest
         foreach (var inner in tags)
         {
             var html = $"<h2 id='before'>Before</h2><{outer}>Lead<{middle}>Middle<{inner}>Inner</{inner}>Tail</{middle}>End</{outer}><h2 id='after'>After</h2><p>Final.</p>";
-            Assert.True(Snapshot(Invoke("ReadHtmlDom", html)) == Snapshot(Invoke("ReadHtml", html)), html);
+            Assert.True(Snapshot(Builder.ReadHtmlDom(html)) == Snapshot(new Builder().ReadHtml(html)), html);
         }
+    }
+
+    [Theory]
+    [InlineData("# Guide\n\nParagraph **bold** with [link](other.md), `code` and &amp; entity.\n\n## Next\n\n- One\n- Two")]
+    [InlineData("# Guide\n\n| Key | Value |\n| --- | --- |\n| `tool` | ++ctrl+c++ :rocket: |\n\n> [!TIP]\n> Useful **text**.")]
+    [InlineData("# Guide\n\n- [x] Done\n- [ ] Next\n\n![Alt with `code`](image.png)")]
+    [InlineData("# Guide\n\nBefore.\n\n```sh\ninstall-tool\n```\n\n```mermaid\nA --> B\n```\n\nAfter.")]
+    [InlineData("# Footnotes\n\nFirst[^b]. Again[^b]. Second[^a].\n\n[^a]: Alpha.\n[^b]: Beta **text**.\n[^unused]: Unused.")]
+    [InlineData("# Formula $x$\n\nUse $x + y$ and :material-home:.")]
+    [InlineData("# Guide\n\nWrite `[**Setup**](next.md)` and `[link](next.md)`.")]
+    [InlineData("# Guide\n\n[![Alt with `code`](image.png)](next.md)\n\n![Outer ![Inner `nested`](inner.png)](outer.png)")]
+    public void MarkdownAndHtmlReadersAgree(string markdown)
+    {
+        var pipeline = new MarkdownPipelineBuilder().UseGridTables().UsePipeTables().UseAdvancedExtensions()
+            .UseHeadingIds().UseGitHubAlerts().UseIconsAndEmojis().UseKeyboardKeys().Build();
+        var reader = new Builder();
+        var direct = reader.ReadMarkdown(Markdig.Markdown.Parse(markdown, pipeline));
+        var html = reader.ReadRenderedHtml(Markdig.Markdown.Parse(markdown, pipeline), pipeline);
+        Assert.Equal(Snapshot(direct), Snapshot(html));
+    }
+
+    [Fact]
+    public void ReusesTheDomParserAcrossPages()
+    {
+        const string html = "<h2 id='guide'>Guide</h2><select><option>Choice</option></select>";
+        var reader = new Builder();
+        for (var index = 0; index < 3; index++)
+            Assert.Equal(Snapshot(Builder.ReadHtmlDom(html)), Snapshot(reader.ReadHtml(html)));
     }
 
     [Fact]
@@ -176,6 +192,6 @@ public class SearchHtmlReaderTest
         foreach (var block in document.Descendants().OfType<CodeBlock>().ToArray()) block.Parent!.Remove(block);
         var html = document.ToHtml(pipeline);
         Assert.True(TryRead(html, out var parts));
-        Assert.Equal(Snapshot(Invoke("ReadHtmlDom", html)), Snapshot(parts!));
+        Assert.Equal(Snapshot(Builder.ReadHtmlDom(html)), Snapshot(parts!));
     }
 }

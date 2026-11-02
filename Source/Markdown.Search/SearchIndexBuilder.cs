@@ -1,3 +1,5 @@
+using System.Globalization;
+using StaticCode.Icons;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -31,6 +33,12 @@ public sealed class SearchIndexBuilder
     private static readonly SearchIndexJsonContext JsonContext = new(JsonOptions);
 
     private readonly List<SearchIndexEntry> _entries = new();
+    private readonly Dictionary<IconGlyph, string> _iconText = new();
+    private readonly string _codePrefix = $"mdu-search-code-{Guid.NewGuid():N}:";
+    private HtmlParser? _htmlParser;
+    private IElement? _svgContext;
+
+    private HtmlParser HtmlParser => _htmlParser ??= new HtmlParser(new HtmlParserOptions { IsScripting = true });
     private readonly MarkdownPipeline _pipeline = new MarkdownPipelineBuilder()
         .UseGridTables()
         .UsePipeTables()
@@ -41,151 +49,153 @@ public sealed class SearchIndexBuilder
         .UseKeyboardKeys()
         .Build();
 
-    public void Clear() => _entries.Clear();
+    public void Clear()
+    {
+        _entries.Clear();
+        _iconText.Clear();
+    }
 
     public void AddPage(string title, string url, string markdown)
     {
         _entries.RemoveAll(entry => entry.PageUrl.Equals(url, StringComparison.Ordinal));
-
+        var firstEntry = _entries.Count;
         var document = Markdig.Markdown.Parse(markdown, _pipeline);
-        var codeBySection = new Dictionary<string, List<string>>(StringComparer.Ordinal);
-        var sectionId = string.Empty;
-        var sectionIdBeforeOpenApiBlock = string.Empty;
-        var canReadMarkdown = true;
-        var codeBlocks = new List<CodeBlock>();
-        foreach (var item in document.Descendants())
-        {
-            if (item is HeadingBlock heading)
-                sectionId = heading.GetAttributes().Id ?? string.Empty;
-            else if (item is HtmlBlock htmlBlock)
-            {
-                // Code after an API reference belongs to the section that contains the reference, not to its last operation.
-                var blockHtml = htmlBlock.Lines.ToString();
-                if (blockHtml.Contains(OpenApiMarkdownRenderer.BlockStartMarker, StringComparison.Ordinal))
-                    sectionIdBeforeOpenApiBlock = sectionId;
-                if (blockHtml.Contains(OpenApiMarkdownRenderer.BlockEndMarker, StringComparison.Ordinal))
-                    sectionId = sectionIdBeforeOpenApiBlock;
-            }
-
-            if (item is CodeInline inline)
-            {
-                AddCode(codeBySection, sectionId, inline.Content);
-                NormalizeMarkdownLinks(inline);
-            }
-            else if (item is CodeBlock block)
-            {
-                if (IsSearchableCodeBlock(block))
-                    AddCode(codeBySection, sectionId, GetCode(block));
-                codeBlocks.Add(block);
-            }
-            if (item is not CodeBlock && canReadMarkdown && !IsSupportedNode(item)) canReadMarkdown = false;
-        }
-        foreach (var block in codeBlocks) block.Parent!.Remove(block);
-
-        var parts = canReadMarkdown ? ReadMarkdown(document) : ReadHtml(document.ToHtml(_pipeline));
-        var hasMarkers = parts.Any(part => part.Marker != 0);
-        var inOpenApi = !hasMarkers && parts.Any(part => part.IsOperation);
+        var parts = document.Descendants().All(IsSupportedNode)
+            ? ReadMarkdown(document)
+            : ReadRenderedHtml(document, _pipeline);
+        var pairedMarkers = GetPairedMarkers(parts);
+        var inOpenApi = pairedMarkers.Count == 0 && parts.Any(part => part.IsOperation);
+        var currentEntry = -1;
         var outsideEntry = -1;
         var operationEntry = -1;
-        foreach (var part in parts)
+        for (var index = 0; index < parts.Count; index++)
         {
-            if (part.Marker != 0)
+            var part = parts[index];
+            if (pairedMarkers.Contains(index))
             {
-                inOpenApi = part.Marker == 1;
+                inOpenApi = part.Marker == SearchMarker.OpenApiStart;
+                if (inOpenApi) outsideEntry = currentEntry;
+                else currentEntry = outsideEntry;
                 operationEntry = -1;
                 continue;
             }
+            if (part.Marker != SearchMarker.None) continue;
 
-            var text = WhitespaceRegex.Replace(part.Text.ToString(), " ").Trim();
-            var code = part.Title is not null && string.IsNullOrEmpty(part.Id)
-                ? null
-                : codeBySection.GetValueOrDefault(part.Id ?? string.Empty);
-            if (part.Title is null)
+            var text = NormalizeText(part.Text);
+            if (part.Title is null || string.IsNullOrEmpty(part.Id))
             {
-                if (outsideEntry >= 0) AppendToEntry(outsideEntry, text, null);
-                else if (text.Length > 0 || code is { Count: > 0 } || parts.Count == 1)
+                var content = part.Title is null ? text : $"{part.Title} {text}".Trim();
+                if (currentEntry >= 0) AppendToEntry(currentEntry, content, part.Code);
+                else if (content.Length > 0 || part.Code.Count > 0)
                 {
-                    AddEntry(title, string.Empty, url, text, code);
-                    outsideEntry = _entries.Count - 1;
+                    AddEntry(title, string.Empty, url, content, part.Code);
+                    currentEntry = _entries.Count - 1;
+                    if (outsideEntry < 0) outsideEntry = currentEntry;
                 }
                 continue;
             }
 
             if (inOpenApi && operationEntry >= 0 && !part.IsApiSection)
             {
-                AppendToEntry(operationEntry, $"{part.Title} {text}".Trim(), code);
+                AppendToEntry(operationEntry, $"{part.Title} {text}".Trim(), part.Code);
+                currentEntry = operationEntry;
                 continue;
             }
-            operationEntry = -1;
-            if (string.IsNullOrEmpty(part.Id)) continue;
-            AddEntry(title, part.Title, $"{url}#{Uri.EscapeDataString(part.Id)}", text, code);
-            if (inOpenApi && part.IsOperation) operationEntry = _entries.Count - 1;
-            else if (!inOpenApi) outsideEntry = _entries.Count - 1;
+            AddEntry(title, part.Title, $"{url}#{Uri.EscapeDataString(part.Id)}", text, part.Code);
+            currentEntry = _entries.Count - 1;
+            operationEntry = inOpenApi && part.IsOperation ? currentEntry : -1;
         }
+        if (_entries.Count == firstEntry) AddEntry(title, string.Empty, url, string.Empty, null);
     }
 
-    // Unknown extension nodes use the HTML path until their visible text semantics are covered explicitly.
-    private static bool IsSupportedNode(MarkdownObject node) =>
-        node.GetType() == typeof(HeadingBlock) || node.GetType() == typeof(ParagraphBlock) ||
-        node.GetType() == typeof(ListBlock) || node.GetType() == typeof(ListItemBlock) ||
-        node.GetType() == typeof(QuoteBlock) || node.GetType() == typeof(ThematicBreakBlock) ||
-        node.GetType() == typeof(LinkReferenceDefinitionGroup) || node.GetType() == typeof(LinkReferenceDefinition) ||
-        node.GetType() == typeof(ContainerInline) || node.GetType() == typeof(LiteralInline) ||
-        node.GetType() == typeof(EmphasisInline) || node.GetType() == typeof(LinkInline) ||
-        node.GetType() == typeof(CodeInline) || node.GetType() == typeof(HtmlEntityInline) ||
-        node.GetType() == typeof(LineBreakInline) || node.GetType() == typeof(AutolinkInline) ||
-        node.GetType() == typeof(Table) || node.GetType() == typeof(TableRow) || node.GetType() == typeof(TableCell) ||
-        node.GetType() == typeof(AlertBlock) && IsKnownAlert((AlertBlock)node) || node.GetType() == typeof(KeysInline) ||
-        node.GetType() == typeof(EmojiShortcodeInline) || node.GetType() == typeof(TaskList) ||
-        node.GetType() == typeof(IconInline) || node.GetType() == typeof(MathInline) ||
-        node.GetType() == typeof(FootnoteLink) || node.GetType() == typeof(FootnoteGroup) ||
-        node.GetType() == typeof(Footnote) || node.GetType() == typeof(FootnoteLinkReferenceDefinition) ||
-        node.GetType() == typeof(HeadingLinkReferenceDefinition);
+    private static HashSet<int> GetPairedMarkers(IReadOnlyList<SearchPart> parts)
+    {
+        var paired = new HashSet<int>();
+        var start = -1;
+        for (var index = 0; index < parts.Count; index++)
+        {
+            if (parts[index].Marker == SearchMarker.OpenApiStart && start < 0) start = index;
+            else if (parts[index].Marker == SearchMarker.OpenApiEnd && start >= 0)
+            {
+                paired.Add(start);
+                paired.Add(index);
+                start = -1;
+            }
+        }
+        return paired;
+    }
 
-    private static bool IsKnownAlert(AlertBlock alert) =>
-        alert.Kind.ToString().ToUpperInvariant() is "NOTE" or "TIP" or "IMPORTANT" or "WARNING" or "CAUTION";
+    private static readonly HashSet<Type> SupportedNodes =
+    [
+        typeof(HeadingBlock), typeof(ParagraphBlock), typeof(ListBlock), typeof(ListItemBlock), typeof(QuoteBlock),
+        typeof(ThematicBreakBlock), typeof(LinkReferenceDefinitionGroup), typeof(LinkReferenceDefinition),
+        typeof(ContainerInline), typeof(LiteralInline), typeof(EmphasisInline), typeof(LinkInline), typeof(CodeInline),
+        typeof(HtmlEntityInline), typeof(LineBreakInline), typeof(AutolinkInline), typeof(Table), typeof(TableRow),
+        typeof(Markdig.Extensions.Tables.TableCell), typeof(AlertBlock), typeof(KeysInline), typeof(EmojiShortcodeInline), typeof(TaskList),
+        typeof(IconInline), typeof(MathInline), typeof(FootnoteLink), typeof(FootnoteGroup), typeof(Footnote),
+        typeof(FootnoteLinkReferenceDefinition), typeof(HeadingLinkReferenceDefinition)
+    ];
 
-    private sealed class SearchPart(string? id = null, string? title = null, bool isOperation = false, bool isApiSection = false, int marker = 0)
+    private static bool IsSupportedNode(MarkdownObject node) => node is CodeBlock ||
+        SupportedNodes.Contains(node.GetType()) &&
+        (node is not AlertBlock alert || GitHubAlertExtension.GetTitle(alert.Kind.ToString()) is not null);
+
+    internal enum SearchMarker { None, OpenApiStart, OpenApiEnd }
+
+    private static SearchMarker ReadOpenApiMarker(ReadOnlySpan<char> content) =>
+        content.SequenceEqual(OpenApiMarkdownRenderer.BlockStartMarker.AsSpan(4, OpenApiMarkdownRenderer.BlockStartMarker.Length - 7))
+            ? SearchMarker.OpenApiStart
+            : content.SequenceEqual(OpenApiMarkdownRenderer.BlockEndMarker.AsSpan(4, OpenApiMarkdownRenderer.BlockEndMarker.Length - 7))
+                ? SearchMarker.OpenApiEnd : SearchMarker.None;
+
+    private static string NormalizeText(StringBuilder text) => WhitespaceRegex.Replace(text.ToString(), " ").Trim();
+
+    // These elements cannot contribute visible content on the rendered, JavaScript-enabled site.
+    private static bool IsExcludedElement(string name) => name is
+        "script" or "style" or "template" or "iframe" or "noembed" or "noframes" or "noscript";
+
+    internal sealed class SearchPart(string? id = null, string? title = null, bool isOperation = false, bool isApiSection = false, SearchMarker marker = SearchMarker.None)
     {
         public string? Id { get; } = id;
-        public string? Title { get; } = title;
+        public string? Title { get; set; } = title;
         public bool IsOperation { get; } = isOperation;
         public bool IsApiSection { get; } = isApiSection;
-        public int Marker { get; } = marker;
+        public SearchMarker Marker { get; } = marker;
         public StringBuilder Text { get; } = new();
+        public List<string> Code { get; } = new();
     }
 
-    private static List<SearchPart> ReadMarkdown(MarkdownDocument document)
+    internal List<SearchPart> ReadMarkdown(MarkdownDocument document)
     {
         var parts = new List<SearchPart> { new() };
-        HtmlParser? iconParser = null;
-        IElement? iconContext = null;
         void Read(MarkdownObject node)
         {
             if (node is HeadingBlock heading)
             {
                 var text = new StringBuilder();
-                if (heading.Inline is not null) ReadInline(heading.Inline, text);
                 var attributes = heading.GetAttributes();
                 var operation = attributes.Classes?.Contains("openapi-operation") == true;
-                parts.Add(new SearchPart(attributes.Id, WhitespaceRegex.Replace(text.ToString(), " ").Trim(), operation,
-                    operation || attributes.Classes?.Contains("openapi-tag") == true || attributes.Classes?.Contains("openapi-overview") == true));
+                var part = new SearchPart(attributes.Id, string.Empty, operation,
+                    operation || attributes.Classes?.Contains("openapi-tag") == true || attributes.Classes?.Contains("openapi-overview") == true);
+                if (heading.Inline is not null) ReadInline(heading.Inline, text, part.Code);
+                part.Title = NormalizeText(text);
+                parts.Add(part);
             }
-            else if (node is FootnoteGroup footnotes)
+            else if (node is CodeBlock code)
             {
-                foreach (var footnote in footnotes.OfType<Footnote>().Where(note => note.Order > 0).OrderBy(note => note.Order)) Read(footnote);
+                if (IsSearchableCodeBlock(code)) AddCode(parts[^1].Code, GetCode(code));
+                parts[^1].Text.Append(' ');
             }
             else if (node is ParagraphBlock paragraph)
             {
-                if (paragraph.Inline is not null) ReadInline(paragraph.Inline, parts[^1].Text);
+                if (paragraph.Inline is not null) ReadInline(paragraph.Inline, parts[^1].Text, parts[^1].Code);
                 parts[^1].Text.Append(' ');
             }
             else if (node is ContainerBlock container)
             {
                 if (node is AlertBlock alert)
                 {
-                    var kind = alert.Kind.ToString();
-                    parts[^1].Text.Append(char.ToUpperInvariant(kind[0])).Append(kind.AsSpan(1).ToString().ToLowerInvariant()).Append(' ');
+                    parts[^1].Text.Append(GitHubAlertExtension.GetTitle(alert.Kind.ToString())).Append(' ');
                 }
                 foreach (var child in container) Read(child);
                 parts[^1].Text.Append(' ');
@@ -194,15 +204,22 @@ public sealed class SearchIndexBuilder
         Read(document);
         return parts;
 
-        void ReadInline(Inline inline, StringBuilder text)
+        void ReadInline(Inline inline, StringBuilder text, List<string> codeValues)
         {
             switch (inline)
             {
                 case LiteralInline literal: text.Append(literal.Content.AsSpan()); break;
-                case CodeInline code: text.Append(' ').Append(code.Content).Append(' '); break;
+                case CodeInline code:
+                    AddCode(codeValues, code.Content);
+                    NormalizeMarkdownLinks(code);
+                    text.Append(' ').Append(code.Content).Append(' ');
+                    break;
                 case HtmlEntityInline entity: text.Append(entity.Transcoded.AsSpan()); break;
                 case LineBreakInline: text.Append(' '); break;
-                case LinkInline { IsImage: true }: text.Append(' '); break;
+                case LinkInline { IsImage: true } image:
+                    foreach (var code in image.Descendants().OfType<CodeInline>()) AddCode(codeValues, code.Content);
+                    text.Append(' ');
+                    break;
                 case EmojiShortcodeInline emoji: text.Append(' ').Append(emoji.Emoji).Append(' '); break;
                 case TaskList: text.Append(' '); break;
                 case FootnoteLink footnote:
@@ -215,8 +232,8 @@ public sealed class SearchIndexBuilder
                     text.Append(" \\(").Append(math.Content.AsSpan()).Append("\\) ");
                     break;
                 case IconInline icon:
-                    AppendIconText(icon.Icon.Glyph.Body, text);
-                    if (icon.Icon.DarkGlyph is { } dark) AppendIconText(dark.Body, text);
+                    AppendIconText(icon.Icon.Glyph, text);
+                    if (icon.Icon.DarkGlyph is { } dark) AppendIconText(dark, text);
                     break;
                 case KeysInline keys:
                     text.Append(' ');
@@ -231,34 +248,115 @@ public sealed class SearchIndexBuilder
                 case AutolinkInline link: text.Append(' ').Append(link.Url).Append(' '); break;
                 case ContainerInline container:
                     if (inline.GetType() != typeof(ContainerInline)) text.Append(' ');
-                    foreach (var child in container) ReadInline(child, text);
+                    foreach (var child in container) ReadInline(child, text, codeValues);
                     if (inline.GetType() != typeof(ContainerInline)) text.Append(' ');
                     break;
             }
         }
 
         // Simple SVG uses tokens; unusual fragments retain their SVG parsing context.
-        void AppendIconText(string body, StringBuilder text)
+        void AppendIconText(IconGlyph glyph, StringBuilder text)
         {
-            if (TryReadTokens(body, svgContext: true, out var parts) && parts.Count == 1)
+            if (!_iconText.TryGetValue(glyph, out var content))
             {
-                text.Append(' ').Append(parts[0].Text).Append(' ');
-                return;
+                var glyphText = new StringBuilder();
+                if (TryReadTokens(glyph.Body, svgContext: true, out var glyphParts) && glyphParts.Count == 1)
+                    glyphText.Append(glyphParts[0].Text);
+                else
+                {
+                    _svgContext ??= HtmlParser.ParseDocument(string.Empty).CreateElement("http://www.w3.org/2000/svg", "svg");
+                    foreach (var node in HtmlParser.ParseFragment(glyph.Body, _svgContext)) AppendHtmlText(node, glyphText);
+                }
+                content = glyphText.ToString();
+                _iconText.Add(glyph, content);
             }
-            parts.Clear();
-            iconParser ??= new HtmlParser();
-            iconContext ??= iconParser.ParseDocument(string.Empty).CreateElement("http://www.w3.org/2000/svg", "svg");
-            text.Append(' ');
-            foreach (var node in iconParser.ParseFragment(body, iconContext)) AppendHtmlText(node, text);
-            text.Append(' ');
+            text.Append(' ').Append(content).Append(' ');
         }
     }
 
-    // This is a conservative fast path, not an HTML tree builder. Ambiguous structures use the DOM path.
-    private static bool TryReadHtmlTokens(string html, out List<SearchPart> parts) =>
-        TryReadTokens(html, svgContext: false, out parts);
+    internal List<SearchPart> ReadRenderedHtml(MarkdownDocument document, MarkdownPipeline pipeline)
+    {
+        var prefix = _codePrefix;
+        var code = new List<string>();
+        using var writer = new StringWriter();
+        var renderer = new Markdig.Renderers.HtmlRenderer(writer);
+        pipeline.Setup(renderer);
+        renderer.ObjectRenderers.Insert(0, new SearchCodeBlockRenderer(code, prefix));
+        renderer.ObjectRenderers.Insert(0, new SearchCodeInlineRenderer(code, prefix));
+        renderer.ObjectRenderers.Insert(0, new SearchLinkInlineRenderer(code, prefix));
+        renderer.Render(document);
+        return ReadHtml(writer.ToString(), code, prefix);
+    }
 
-    private static bool TryReadTokens(string html, bool svgContext, out List<SearchPart> parts)
+    private static void WriteCodeMarker(Markdig.Renderers.HtmlRenderer renderer, string code, List<string> values, string prefix)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return;
+        renderer.Write("<!--").Write(prefix).Write(values.Count.ToString(CultureInfo.InvariantCulture)).Write("-->");
+        values.Add(code.Trim());
+    }
+
+    private sealed class SearchCodeBlockRenderer(List<string> code, string prefix) : HtmlObjectRenderer<CodeBlock>
+    {
+        protected override void Write(Markdig.Renderers.HtmlRenderer renderer, CodeBlock block)
+        {
+            if (IsSearchableCodeBlock(block)) WriteCodeMarker(renderer, GetCode(block), code, prefix);
+        }
+    }
+
+    private sealed class SearchCodeInlineRenderer(List<string> code, string prefix) : Markdig.Renderers.Html.Inlines.CodeInlineRenderer
+    {
+        protected override void Write(Markdig.Renderers.HtmlRenderer renderer, CodeInline inline)
+        {
+            if (renderer.EnableHtmlForInline) WriteCodeMarker(renderer, inline.Content, code, prefix);
+            NormalizeMarkdownLinks(inline);
+            base.Write(renderer, inline);
+        }
+    }
+
+    private sealed class SearchLinkInlineRenderer(List<string> code, string prefix) : Markdig.Renderers.Html.Inlines.LinkInlineRenderer
+    {
+        protected override void Write(Markdig.Renderers.HtmlRenderer renderer, LinkInline inline)
+        {
+            if (inline.IsImage && renderer.EnableHtmlForInline)
+                foreach (var value in inline.Descendants().OfType<CodeInline>()) WriteCodeMarker(renderer, value.Content, code, prefix);
+            base.Write(renderer, inline);
+        }
+    }
+
+    private static bool TryReadCode(ReadOnlySpan<char> comment, IReadOnlyList<string>? values, string? prefix, out string code)
+    {
+        code = string.Empty;
+        if (values is null || prefix is null || !comment.StartsWith(prefix, StringComparison.Ordinal) ||
+            !int.TryParse(comment[prefix.Length..], NumberStyles.None, CultureInfo.InvariantCulture, out var index) ||
+            (uint)index >= (uint)values.Count) return false;
+        code = values[index];
+        return true;
+    }
+
+    // In raw-text elements a generated code comment is text rather than a DOM comment.
+    private static void AppendText(ReadOnlySpan<char> value, StringBuilder text, List<string> target, IReadOnlyList<string>? code, string? prefix)
+    {
+        while (code is { Count: > 0 } && prefix is not null)
+        {
+            var start = value.IndexOf("<!--", StringComparison.Ordinal);
+            if (start < 0) break;
+            var end = value[(start + 4)..].IndexOf("-->", StringComparison.Ordinal);
+            if (end < 0) break;
+            text.Append(value[..start]);
+            var length = end + 7;
+            if (TryReadCode(value.Slice(start + 4, end), code, prefix, out var item))
+            {
+                target.Add(item);
+                text.Append(' ');
+            }
+            else text.Append(value.Slice(start, length));
+            value = value[(start + length)..];
+        }
+        text.Append(value);
+    }
+
+    // This is a conservative fast path, not an HTML tree builder. Ambiguous structures use the DOM path.
+    internal static bool TryReadTokens(string html, bool svgContext, out List<SearchPart> parts, IReadOnlyList<string>? codeValues = null, string? codePrefix = null)
     {
         parts = new List<SearchPart> { new() };
         using var source = new TextSource(html);
@@ -271,6 +369,7 @@ public sealed class SearchIndexBuilder
         var svgDepth = contextDepth;
         var hiddenDepth = 0;
         StringBuilder? heading = null;
+        List<string>? headingCode = null;
         string? headingId = null;
         var operation = false;
         var apiSection = false;
@@ -287,15 +386,19 @@ public sealed class SearchIndexBuilder
                     var text = token.Data.Memory.Span;
                     if (stack.Count > 0 && stack[^1] is "table" or "thead" or "tbody" or "tfoot" or "tr" or "ul" or "ol")
                         if (!text.IsWhiteSpace()) return false;
-                    (heading ?? parts[^1].Text).Append(text);
+                    AppendText(text, heading ?? parts[^1].Text, headingCode ?? parts[^1].Code, codeValues, codePrefix);
                     break;
                 case HtmlTokenType.Comment:
                     if (hiddenDepth > 0) break;
-                    var marker = token.Data.Memory.Span;
-                    if (marker.SequenceEqual(OpenApiMarkdownRenderer.BlockStartMarker.AsSpan(4, OpenApiMarkdownRenderer.BlockStartMarker.Length - 7)) || marker.SequenceEqual(OpenApiMarkdownRenderer.BlockEndMarker.AsSpan(4, OpenApiMarkdownRenderer.BlockEndMarker.Length - 7)))
+                    (heading ?? parts[^1].Text).Append(' ');
+                    if (TryReadCode(token.Data.Memory.Span, codeValues, codePrefix, out var code))
+                        (headingCode ?? parts[^1].Code).Add(code);
+                    else
                     {
+                        var marker = ReadOpenApiMarker(token.Data.Memory.Span);
+                        if (marker == SearchMarker.None) break;
                         if (heading is not null) return false;
-                        parts.Add(new SearchPart(marker: marker.SequenceEqual(OpenApiMarkdownRenderer.BlockStartMarker.AsSpan(4, OpenApiMarkdownRenderer.BlockStartMarker.Length - 7)) ? 1 : -1));
+                        parts.Add(new SearchPart(marker: marker));
                         parts.Add(new SearchPart());
                     }
                     break;
@@ -305,17 +408,18 @@ public sealed class SearchIndexBuilder
                     var inSvg = svgDepth > 0 || name == "svg";
                     var isVoid = !inSvg && name is "br" or "hr" or "img" or "input" or "source" or "track";
                     if (token.IsSelfClosing && !inSvg && !isVoid) return false;
-                    var hidden = name is "script" or "style" or "template";
+                    var hidden = IsExcludedElement(name);
                     if (!hidden && hiddenDepth == 0 && IsHeading(name))
                     {
                         heading = new StringBuilder();
+                        headingCode = new List<string>();
                         var id = token.GetAttribute("id");
                         headingId = id.Memory.Length == 0 ? null : id.ToString();
                         var classes = token.GetAttribute("class").Memory.Span;
                         operation = HasHtmlClass(classes, "openapi-operation");
                         apiSection = operation || HasHtmlClass(classes, "openapi-tag") || HasHtmlClass(classes, "openapi-overview");
                     }
-                    else if (!hidden && hiddenDepth == 0) (heading ?? parts[^1].Text).Append(' ');
+                    else if (hiddenDepth == 0) (heading ?? parts[^1].Text).Append(' ');
                     if (!isVoid && !token.IsSelfClosing)
                     {
                         stack.Add(name);
@@ -324,7 +428,7 @@ public sealed class SearchIndexBuilder
                         if (!inSvg)
                         {
                             if (name == "script") tokenizer.State = HtmlParseMode.Script;
-                            else if (name == "style") tokenizer.State = HtmlParseMode.Rawtext;
+                            else if (name is "style" or "iframe" or "noembed" or "noframes" or "noscript") tokenizer.State = HtmlParseMode.Rawtext;
                             else if (name == "textarea") tokenizer.State = HtmlParseMode.RCData;
                         }
                     }
@@ -334,16 +438,20 @@ public sealed class SearchIndexBuilder
                     if (endName is null || stack.Count <= contextDepth || stack[^1] != endName) return false;
                     stack.RemoveAt(stack.Count - 1);
                     if (endName == "svg") svgDepth--;
-                    if (endName is "script" or "style" or "template")
+                    if (IsExcludedElement(endName))
                     {
                         hiddenDepth--;
+                        if (hiddenDepth == 0) (heading ?? parts[^1].Text).Append(' ');
                         break;
                     }
                     if (hiddenDepth > 0) break;
                     if (IsHeading(endName))
                     {
-                        parts.Add(new SearchPart(headingId, WhitespaceRegex.Replace(heading!.ToString(), " ").Trim(), operation, apiSection));
+                        var part = new SearchPart(headingId, NormalizeText(heading!), operation, apiSection);
+                        part.Code.AddRange(headingCode!);
+                        parts.Add(part);
                         heading = null;
+                        headingCode = null;
                     }
                     else (heading ?? parts[^1].Text).Append(' ');
                     break;
@@ -410,40 +518,49 @@ public sealed class SearchIndexBuilder
         _ => null
     };
 
-    private static List<SearchPart> ReadHtml(string html)
+    internal List<SearchPart> ReadHtml(string html, IReadOnlyList<string>? code = null, string? prefix = null)
     {
-        if (TryReadHtmlTokens(html, out var parts)) return parts;
-        parts.Clear();
-        return ReadHtmlDom(html);
+        if (TryReadTokens(html, svgContext: false, out var parts, code, prefix)) return parts;
+        return ReadHtmlDom(html, code, prefix, HtmlParser);
     }
 
-    private static List<SearchPart> ReadHtmlDom(string html)
+    internal static List<SearchPart> ReadHtmlDom(string html, IReadOnlyList<string>? code = null, string? prefix = null, HtmlParser? parser = null)
     {
-        var parser = new HtmlParser();
+        parser ??= new HtmlParser(new HtmlParserOptions { IsScripting = true });
         using var document = parser.ParseDocument(html);
         var parts = new List<SearchPart> { new() };
         void Read(INode node)
         {
             if (node is IComment comment)
             {
-                var marker = $"<!--{comment.Data}-->";
-                if (marker == OpenApiMarkdownRenderer.BlockStartMarker || marker == OpenApiMarkdownRenderer.BlockEndMarker)
+                parts[^1].Text.Append(' ');
+                if (TryReadCode(comment.Data.AsSpan(), code, prefix, out var value)) parts[^1].Code.Add(value);
+                else
                 {
-                    parts.Add(new SearchPart(marker: marker == OpenApiMarkdownRenderer.BlockStartMarker ? 1 : -1));
+                    var marker = ReadOpenApiMarker(comment.Data.AsSpan());
+                    if (marker == SearchMarker.None) return;
+                    parts.Add(new SearchPart(marker: marker));
                     parts.Add(new SearchPart());
                 }
             }
-            else if (node is IText text) parts[^1].Text.Append(text.Data);
+            else if (node is IText text) AppendText(text.Data.AsSpan(), parts[^1].Text, parts[^1].Code, code, prefix);
             else if (node is IElement element)
             {
-                if (element.LocalName is "script" or "style" or "template") return;
-                if (element.LocalName.Length == 2 && element.LocalName[0] == 'h' && element.LocalName[1] is >= '1' and <= '6')
+                if (IsExcludedElement(element.LocalName))
+                {
+                    parts[^1].Text.Append(' ');
+                    return;
+                }
+                if (IsHeading(element.LocalName))
                 {
                     var title = new StringBuilder();
-                    AppendHtmlText(element, title);
+                    var headingCode = new List<string>();
+                    AppendHtmlText(element, title, headingCode, code, prefix);
                     var operation = element.ClassList.Contains("openapi-operation");
-                    parts.Add(new SearchPart(element.GetAttribute("id"), WhitespaceRegex.Replace(title.ToString(), " ").Trim(),
-                        operation, operation || element.ClassList.Contains("openapi-tag") || element.ClassList.Contains("openapi-overview")));
+                    var part = new SearchPart(element.GetAttribute("id"), NormalizeText(title), operation,
+                        operation || element.ClassList.Contains("openapi-tag") || element.ClassList.Contains("openapi-overview"));
+                    part.Code.AddRange(headingCode);
+                    parts.Add(part);
                     return;
                 }
                 parts[^1].Text.Append(' ');
@@ -456,13 +573,23 @@ public sealed class SearchIndexBuilder
         return parts;
     }
 
-    private static void AppendHtmlText(INode node, StringBuilder text)
+    private static void AppendHtmlText(INode node, StringBuilder text, List<string>? target = null, IReadOnlyList<string>? code = null, string? prefix = null)
     {
-        if (node is IText content) text.Append(content.Data);
-        else if (node is IElement element && element.LocalName is not ("script" or "style" or "template"))
+        if (node is IText content)
+        {
+            if (target is null) text.Append(content.Data);
+            else AppendText(content.Data.AsSpan(), text, target, code, prefix);
+        }
+        else if (node is IComment comment)
         {
             text.Append(' ');
-            foreach (var child in node.ChildNodes) AppendHtmlText(child, text);
+            if (target is not null && TryReadCode(comment.Data.AsSpan(), code, prefix, out var value)) target.Add(value);
+        }
+        else if (node is IElement element)
+        {
+            text.Append(' ');
+            if (IsExcludedElement(element.LocalName)) return;
+            foreach (var child in node.ChildNodes) AppendHtmlText(child, text, target, code, prefix);
             text.Append(' ');
         }
     }
@@ -485,12 +612,9 @@ public sealed class SearchIndexBuilder
     private void AddEntry(string title, string section, string url, string text, List<string>? code) =>
         _entries.Add(new SearchIndexEntry(title, section, url, url.Split('#')[0], text, string.Join(" ", code ?? [])));
 
-    private static void AddCode(Dictionary<string, List<string>> codeBySection, string sectionId, string code)
+    private static void AddCode(List<string> code, string value)
     {
-        if (string.IsNullOrWhiteSpace(code)) return;
-        if (!codeBySection.TryGetValue(sectionId, out var sectionCode))
-            codeBySection.Add(sectionId, sectionCode = []);
-        sectionCode.Add(code.Trim());
+        if (!string.IsNullOrWhiteSpace(value)) code.Add(value.Trim());
     }
 
     private static string GetCode(CodeBlock block) =>
