@@ -157,6 +157,7 @@ Content that appears only on the website.
 - Content pages repeat the document title in a small header. The footer shows the current page and the total page count.
 - Links between included pages, links on diagram nodes, links in tables, and external links stay clickable.
 - Light fills distinguish code and table headers while keeping pages readable on a monochrome printer.
+- Embedded HTML is parsed using browser-style HTML rules, including recovery of unclosed or misnested elements. In code examples, escape `<` as `&lt;` in raw HTML or use Markdown code blocks.
 
 ### Page breaks
 

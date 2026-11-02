@@ -34,6 +34,7 @@
     </ItemGroup>
 
     <ItemGroup>
+      <PackageReference Include="AngleSharp" Version="1.9.0" />
       <PackageReference Include="CSharpMath.VectSharp" Version="1.0.0-pre.2" />
       <PackageReference Include="Markdig" Version="1.4.1" />
       <PackageReference Include="Microsoft.OpenApi" Version="3.10.2" />

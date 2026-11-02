@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml;
@@ -40,20 +39,13 @@ public sealed class PdfRenderer(HtmlRenderer htmlRenderer)
 
     private string GetDescription(string markdown)
     {
-        var html = PdfLayout.NormalizeVoidElements(htmlRenderer.RenderPdfMarkdownFragment(markdown));
-        var document = new XmlDocument { PreserveWhitespace = true };
-        document.LoadXml($"<root>{html}</root>");
-        PdfLayout.RemoveNonRenderedElements(document);
+        var document = PdfHtmlDocument.Parse(htmlRenderer.RenderPdfMarkdownFragment(markdown));
         return PdfLayout.CollapseWhitespace(document.SelectSingleNode("//p")?.InnerText ?? string.Empty);
     }
 }
 
 internal sealed class PdfLayout
 {
-    private static readonly Regex StartTagRegex = new(@"<[a-zA-Z][^<>]*>", RegexOptions.Compiled);
-    private static readonly Regex BooleanAttributeRegex = new(
-        @"""[^""]*""|'[^']*'|\s(?<name>disabled|hidden|checked|selected|required|multiple|controls|playsinline|autoplay|muted|loop|data-media-error)(?=[\s/>])",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
     internal const double PageWidth = 595.28;
     internal const double PageHeight = 841.89;
     internal const double Left = 48;
@@ -102,22 +94,13 @@ internal sealed class PdfLayout
         string html;
         try
         {
-            html = NormalizeVoidElements(_htmlRenderer.RenderPdfMarkdownFragment(section.Markdown));
+            html = _htmlRenderer.RenderPdfMarkdownFragment(section.Markdown);
         }
         catch (PdfHiddenContentException exception)
         {
             throw new PdfHiddenContentException($"Page \"{section.Title}\" ({section.RelativeHtmlPath}): {exception.Message}");
         }
-        var document = new XmlDocument { PreserveWhitespace = true };
-        try
-        {
-            document.LoadXml($"<root>{html}</root>");
-        }
-        catch (XmlException exception)
-        {
-            throw new XmlException($"Page \"{section.Title}\" ({section.RelativeHtmlPath}): {exception.Message}", exception);
-        }
-        RemoveNonRenderedElements(document);
+        var document = PdfHtmlDocument.Parse(html);
         var blocks = document.DocumentElement!.ChildNodes.Cast<XmlNode>().ToArray();
         if (_y > Top)
         {
@@ -985,35 +968,8 @@ internal sealed class PdfLayout
     internal static string F(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
     private static bool HasClass(XmlElement element, string name) =>
         element.GetAttribute("class").Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains(name, StringComparer.Ordinal);
-    internal static string CollapseWhitespace(string text) => Regex.Replace(WebUtility.HtmlDecode(text), @"\s+", " ").Trim();
-    private static string NormalizeInlineWhitespace(string text) => Regex.Replace(WebUtility.HtmlDecode(text), @"\s+", " ");
-    // Browsers do not display these elements, and removing them from the parsed document covers every layout path.
-    // Inside textarea and title, such tags are text that a browser shows.
-    internal static void RemoveNonRenderedElements(XmlDocument document)
-    {
-        foreach (var element in document.GetElementsByTagName("*").Cast<XmlElement>()
-                     .Where(element => element.LocalName.ToLowerInvariant() is "script" or "style" or "template" &&
-                                       !HasAncestor(element, "textarea", "title")).ToArray())
-            element.ParentNode?.RemoveChild(element);
-    }
-
-    private static bool HasAncestor(XmlNode node, params string[] names)
-    {
-        for (var parent = node.ParentNode; parent is XmlElement element; parent = element.ParentNode)
-            if (names.Contains(element.LocalName, StringComparer.OrdinalIgnoreCase)) return true;
-        return false;
-    }
-
-    internal static string NormalizeVoidElements(string html)
-    {
-        var normalized = Regex.Replace(html, @"<(input|br|hr|img|source)(?<attributes>[^<>]*?)(?<!/)>", "<$1${attributes} />", RegexOptions.IgnoreCase);
-        return StartTagRegex.Replace(normalized, tag =>
-            BooleanAttributeRegex.Replace(tag.Value, match =>
-            {
-                var name = match.Groups["name"].Value;
-                return name.Length == 0 ? match.Value : $" {name}=\"{name}\"";
-            }));
-    }
+    internal static string CollapseWhitespace(string text) => Regex.Replace(text, @"\s+", " ").Trim();
+    private static string NormalizeInlineWhitespace(string text) => Regex.Replace(text, @"\s+", " ");
     private static IEnumerable<XmlElement> Descendants(XmlElement element, string name) =>
         element.GetElementsByTagName(name).OfType<XmlElement>();
 
