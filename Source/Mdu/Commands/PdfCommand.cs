@@ -45,7 +45,9 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         // Like mdu render, the PDF is not written without the custom icons that its pages use.
         try
         {
-            SiteConfigurationReader.UseCustomIcons(rootPath, SiteConfigurationReader.ReadForContent(rootPath));
+            var siteConfiguration = SiteConfigurationReader.ReadForContent(rootPath);
+            SiteConfigurationReader.UseCustomIcons(rootPath, siteConfiguration);
+            SiteConfigurationReader.UseDiagramLimits(siteConfiguration);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException or YamlException)
         {

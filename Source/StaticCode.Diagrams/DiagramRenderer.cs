@@ -13,6 +13,9 @@ namespace StaticCode.Diagrams;
 /// </summary>
 public static class DiagramRenderer
 {
+    private static int _maxElements = ComponentDiagram.DefaultMaxElements;
+    private static int _maxLinks = ComponentDiagram.DefaultMaxLinks;
+
     public const string IsometricLanguage = "isometric";
 
     /// <summary>Appears in rendered HTML exactly when an isometric diagram has phase controls.</summary>
@@ -32,7 +35,42 @@ public static class DiagramRenderer
         IsometricSvgWriter.Write(IsometricParser.Parse(source), $"iso-{StableHash(source):x8}-{instance.ToString(CultureInfo.InvariantCulture)}");
 
     /// <exception cref="DiagramSyntaxException">The source is not a supported PlantUML component diagram.</exception>
-    public static string RenderPlantUmlSvg(string source) => ComponentSvgWriter.Write(ComponentParser.Parse(source));
+    public static string RenderPlantUmlSvg(string source)
+    {
+        var diagram = ComponentParser.Parse(source);
+        if (OverLimit(diagram) is { } problem) throw new DiagramSyntaxException($"The component diagram has {problem}.", 1);
+        return ComponentSvgWriter.Write(diagram);
+    }
+
+    /// <summary>
+    /// Sets the largest component diagrams to draw, for the whole process; larger ones stay code blocks. 0 means no limit.
+    /// The site's <c>mdu.yml</c> applies to every page, and the renderer has no way to pass it down to a code block.
+    /// </summary>
+    public static void UseComponentDiagramLimits(int maxElements = ComponentDiagram.DefaultMaxElements, int maxLinks = ComponentDiagram.DefaultMaxLinks)
+    {
+        _maxElements = maxElements;
+        _maxLinks = maxLinks;
+    }
+
+    /// <summary>Says how a valid PlantUML component diagram exceeds the limits, or <c>null</c> if it can be drawn.</summary>
+    public static string? DescribePlantUmlOverLimit(string source)
+    {
+        try
+        {
+            return OverLimit(ComponentParser.Parse(source));
+        }
+        catch (DiagramSyntaxException)
+        {
+            return null;
+        }
+    }
+
+    private static string? OverLimit(ComponentDiagram diagram)
+    {
+        if (_maxElements > 0 && diagram.Elements.Count > _maxElements) return $"{diagram.Elements.Count} elements, over the limit of {_maxElements} (diagrams.maxElements)";
+        if (_maxLinks > 0 && diagram.Links.Count > _maxLinks) return $"{diagram.Links.Count} links, over the limit of {_maxLinks} (diagrams.maxLinks)";
+        return null;
+    }
 
     /// <summary>
     /// Returns <c>false</c> for other languages and for diagrams outside the supported syntax. Isometric diagrams are

@@ -1,4 +1,6 @@
 using Markdown.Renderer.Res.Model;
+using StaticCode.Diagrams;
+using StaticCode.Diagrams.Component;
 using StaticCode.Icons;
 using YamlDotNet.RepresentationModel;
 
@@ -27,6 +29,8 @@ public static class SiteConfigurationReader
             AttributionVisible = !includeHtmlSettings || ReadAttributionVisible(root),
             Glossary = ReadGlossary(root),
             Icons = ReadIcons(root),
+            MaxDiagramElements = ReadDiagramLimit(root, "maxElements"),
+            MaxDiagramLinks = ReadDiagramLimit(root, "maxLinks"),
             LogoLight = ReadAsset(root, "logo", "light"),
             LogoDark = ReadAsset(root, "logo", "dark"),
             FaviconLight = ReadAsset(root, "favicon", "light"),
@@ -107,6 +111,25 @@ public static class SiteConfigurationReader
         if (path is not null && !Directory.Exists(path))
             throw new InvalidOperationException($"Configured icons folder does not exist: {path}");
         IconCatalog.UseCustomIcons(path);
+    }
+
+    /// <summary>Applies the <c>diagrams</c> limits of the site, or the defaults without them.</summary>
+    public static void UseDiagramLimits(SiteConfiguration configuration) =>
+        DiagramRenderer.UseComponentDiagramLimits(
+            configuration.MaxDiagramElements ?? ComponentDiagram.DefaultMaxElements,
+            configuration.MaxDiagramLinks ?? ComponentDiagram.DefaultMaxLinks);
+
+    /// <summary>For mdu lint, which also runs when the file has errors in unrelated settings: the limits then stay the defaults.</summary>
+    public static void TryUseDiagramLimits(string rootPath)
+    {
+        try
+        {
+            UseDiagramLimits(ReadForContent(rootPath));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or YamlDotNet.Core.YamlException or InvalidOperationException)
+        {
+            DiagramRenderer.UseComponentDiagramLimits();
+        }
     }
 
     public static void CopyAssets(string rootPath, string outputPath, SiteConfiguration configuration)
@@ -192,6 +215,14 @@ public static class SiteConfigurationReader
         if (node is not YamlScalarNode scalar || string.IsNullOrWhiteSpace(scalar.Value))
             throw new InvalidOperationException("The 'icons' setting in mdu.yml must be a folder path.");
         return scalar.Value;
+    }
+
+    private static int? ReadDiagramLimit(YamlMappingNode root, string key)
+    {
+        if (!root.Children.TryGetValue(new YamlScalarNode("diagrams"), out var diagrams) || diagrams is not YamlMappingNode mapping ||
+            !mapping.Children.TryGetValue(new YamlScalarNode(key), out var node)) return null;
+        if (node is YamlScalarNode scalar && int.TryParse(scalar.Value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var limit)) return limit;
+        throw new InvalidOperationException($"The 'diagrams.{key}' setting in mdu.yml must be a whole number, or 0 for no limit.");
     }
 
     private static string? ReadScalar(YamlMappingNode mapping, string key) =>

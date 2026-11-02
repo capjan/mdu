@@ -89,7 +89,11 @@ public class MarkdownDocumentReader : IMarkdownDocumentReader
         return new MarkdownDocumentAnalysis(
             markdownLinks.Concat(diagramLinks).Concat(htmlLinks).ToArray(),
             footnotes.UnusedFootnotes,
-            footnotes.DuplicateFootnotes);
+            footnotes.DuplicateFootnotes,
+            document.Descendants<FencedCodeBlock>()
+                .Where(block => block.Info?.Trim().ToLowerInvariant() is "plantuml" or "puml")
+                .Select(block => new MarkdownPlantUmlBlock(block.Lines.ToString(), block.Line + 1))
+                .ToArray());
     }
 
     private static (IReadOnlyList<MarkdownFootnote> UnusedFootnotes, IReadOnlyList<MarkdownFootnote> DuplicateFootnotes)

@@ -179,6 +179,7 @@ public sealed class ServeCommand
         _renderer.SetGlossary(glossaryMarkdown);
         _iconsPath = SiteConfigurationReader.GetIconsPath(_rootPath, siteConfiguration);
         SiteConfigurationReader.UseCustomIcons(_rootPath, siteConfiguration);
+        SiteConfigurationReader.UseDiagramLimits(siteConfiguration);
         var graph = _graphBuilder.CreateGraph(_settings, glossaryPath, requireImportedGlossaries: true);
         _navigationRoots = graph;
 

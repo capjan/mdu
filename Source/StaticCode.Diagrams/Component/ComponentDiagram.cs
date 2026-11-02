@@ -81,6 +81,10 @@ public sealed record ComponentLink(
 
 public sealed class ComponentDiagram
 {
+    // Well above what stays readable; they protect builds from generated diagrams that would take minutes and gigabytes.
+    public const int DefaultMaxElements = 1000;
+    public const int DefaultMaxLinks = 2000;
+
     public ComponentDiagram(
         string? title, bool leftToRight, IReadOnlyList<ComponentElement> elements, IReadOnlyList<ComponentLink> links)
     {

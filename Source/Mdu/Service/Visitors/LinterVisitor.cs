@@ -8,6 +8,7 @@ using Markdown.Linter.Rules.Rule4;
 using Mdu.Model;
 using YamlDotNet.Core;
 using YamlDotNet.RepresentationModel;
+using StaticCode.Diagrams;
 
 namespace Mdu.Service.Visitors;
 
@@ -130,6 +131,7 @@ public class LinterVisitor: IVisitor<MarkdownFile>
         var markdownContent = entity.ReadMarkdown();
         var markdownAnalysis = MarkdownDocument.ReadAnalysis(markdownContent);
         ReportFootnotes(markdownFilePath, markdownAnalysis);
+        ReportLargeDiagrams(markdownFilePath, markdownAnalysis);
         ReportLegacySidebarMetadata(entity);
         ReportInvalidNavigationMetadata(entity);
         foreach (var issue in MarkdownCompatibility.FindIssues(markdownContent))
@@ -279,6 +281,14 @@ public class LinterVisitor: IVisitor<MarkdownFile>
         foreach (var footnote in analysis.DuplicateFootnotes)
             ErrorReceiver.AddWarning(filePath, footnote.LineNumber,
                 $"{RuleCodes.DuplicateFootnote}: Footnote '[{footnote.Label}]' is defined more than once; only the first definition is used.");
+    }
+
+    private void ReportLargeDiagrams(string filePath, MarkdownDocumentAnalysis analysis)
+    {
+        foreach (var block in analysis.PlantUmlBlocks)
+            if (DiagramRenderer.DescribePlantUmlOverLimit(block.Source) is { } problem)
+                ErrorReceiver.AddWarning(filePath, block.LineNumber,
+                    $"{RuleCodes.DiagramTooLarge}: The component diagram has {problem} and stays a code block. Split it or raise the limit in mdu.yml.");
     }
 
     private void ReportLegacySidebarMetadata(MarkdownFile page)

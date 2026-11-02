@@ -87,7 +87,7 @@ Reads what MDU needs to know about a page without rendering it: the YAML front m
 
 ## Markdown.Linter
 
-Contains the rule codes `MDU001`–`MDU022` and the validators that need only one page and the file system:
+Contains the rule codes `MDU001`–`MDU023` and the validators that need only one page and the file system:
 
 | Validator | Rule |
 | --- | --- |
@@ -118,7 +118,7 @@ Parses diagram sources and writes SVG. `DiagramRenderer.TryRenderSvg` handles Me
 - Context diagrams place the central system in the middle and its neighbors around it.
 - The SVG uses semantic CSS classes so the site stylesheet can theme it for light and dark mode.
 
-When a source uses unsupported syntax, `TryRenderSvg` returns `false` and the block stays a code block.
+When a source uses unsupported syntax, or a component diagram exceeds its size limits, `TryRenderSvg` returns `false` and the block stays a code block.
 
 ## StaticCode.Icons
 

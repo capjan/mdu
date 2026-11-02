@@ -49,6 +49,7 @@ public class LintCommand
             Console.Error.WriteLine($"Could not resolve Markdown sources: {exception.Message}");
             return 1;
         }
+        SiteConfigurationReader.TryUseDiagramLimits(rootPath);
         _linterVisitor.Prepare(graph, rootPath);
         graph.Visit(_linterVisitor);
         return format == LintFormat.Text
