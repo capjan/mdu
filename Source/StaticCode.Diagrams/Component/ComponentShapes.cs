@@ -165,6 +165,15 @@ internal static class ComponentShapes
     }
 
     /// <summary>The smallest width that fits the container's label.</summary>
+    /// <summary>Where a container's label sits: its left edge and size, measured from the container's top.</summary>
+    public static (double Left, double Width, double Height) LabelArea(ComponentElement element, double left, double width)
+    {
+        var label = TextMetrics.Wrap(Text(element), double.MaxValue);
+        var labelWidth = TextMetrics.Measure(label).Width + 20;
+        var centered = element.Kind is ElementKind.Cloud or ElementKind.Database;
+        return (centered ? left + (width - labelWidth) / 2 : left, labelWidth, HeaderHeight(element) - 8);
+    }
+
     public static double MinContainerWidth(ComponentElement element) =>
         TextMetrics.Width(Text(element).Split('\n')[^1]) + 2 * ContainerPadding + 24;
 

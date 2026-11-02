@@ -110,6 +110,39 @@ public class LayeredLayoutTest
     }
 
     [Fact]
+    public void LinesUpPortsInsteadOfCenters()
+    {
+        var edges = new[] { new LayoutEdge(0, 1, SourcePort: 20, TargetPort: -10) };
+
+        var result = new LayeredLayout().Compute(new[] { Box, Box }, edges, LayoutDirection.TopToBottom);
+
+        Assert.Equal(result.NodeCenters[0].X + 20, result.NodeCenters[1].X - 10, 1);
+    }
+
+    [Fact]
+    public void AnchorsPullNodesAlongTheLayer()
+    {
+        var nodes = new[] { Box, new LayoutNode(60, 30, Anchor: 300), new LayoutNode(60, 30, Anchor: 0) };
+        var edges = new[] { new LayoutEdge(0, 1), new LayoutEdge(0, 2) };
+
+        var result = new LayeredLayout().Compute(nodes, edges, LayoutDirection.TopToBottom);
+
+        Assert.True(result.NodeCenters[1].X - result.NodeCenters[2].X > 100);
+    }
+
+    [Fact]
+    public void DirectShortLinksSkipTheBendRank()
+    {
+        var edges = new[] { new LayoutEdge(0, 1) };
+
+        var direct = new LayeredLayout { DirectShortLinks = true }.Compute(new[] { Box, Box }, edges, LayoutDirection.TopToBottom);
+        var bent = new LayeredLayout().Compute(new[] { Box, Box }, edges, LayoutDirection.TopToBottom);
+
+        Assert.Equal(2, direct.Edges[0].Points.Count);
+        Assert.Equal(3, bent.Edges[0].Points.Count);
+    }
+
+    [Fact]
     public void KeepsFlatEdgesInOneRankInOrder()
     {
         var nodes = new[] { Box, Box, Box };
