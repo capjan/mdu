@@ -25,7 +25,7 @@ The following values are **development targets, not performance guarantees or cl
 
 ### Performance targets
 
-The initial reference environment is an Apple M4 with 16 GiB RAM, macOS arm64, .NET SDK 10.0.403 / runtime 10.0.14, and a Release build using normal framework-dependent execution. Reference sites contain 6, 53, and 503 Markdown pages, with diagrams, OpenAPI, highlighted code, and icons. The large site repeats fixed content templates; it does not represent every possible 500-page site. Comparisons must record the source revision, corpus, runtime settings, output state, and filesystem-cache conditions.
+The initial reference environment is an Apple M4 with 16 GiB RAM, macOS arm64, .NET SDK 10.0.403 / runtime 10.0.14, and a Release build using normal framework-dependent execution. The original baseline sites contain 6, 53, and 503 Markdown pages, with diagrams, OpenAPI, highlighted code, and icons. Documentation growth changes the small/documentation counts; comparisons must freeze and identify their inputs. The large site repeats fixed content templates; it does not represent every possible 500-page site. Comparisons must record the source revision, corpus, runtime settings, output state, and filesystem-cache conditions.
 
 | Measurement | Development target |
 | --- | --- |

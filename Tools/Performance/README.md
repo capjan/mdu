@@ -2,6 +2,8 @@
 
 All active benchmark generation, process measurement, diagnostics, browser control, reporting and archiving use C#/.NET 10. There is no Python, Node.js or npm dependency. Git and the operating system provide repository metadata and process resource APIs. The [historical baseline](results/2026-11-02.md) and its raw archive retain the provenance of the original investigation; their recorded Python version describes that past run, not a current requirement.
 
+The [optimization checkpoint](results/2026-11-02-optimization.md) records the implemented changes, separate portable/native measurements, frozen-input reproduction, and the still-open acceptance decision.
+
 ## Reproduce
 
 Run from the repository root, sequentially without concurrent builds/tests/benchmarks:

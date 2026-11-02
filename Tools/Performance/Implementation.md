@@ -14,6 +14,8 @@ Approved scope: native .NET development tools, local static website assets, resp
 
 Remaining work includes percentile acceptance across multiple processes, extended memory acceptance, PDF scheduling for expensive download workloads, and the startup/full-render targets of the normal framework-dependent .NET tool. The existing native release format must be reported separately; it does not silently replace the agreed reference execution mode.
 
+Checkpoint: [measured implementation and unresolved execution-format decision](results/2026-11-02-optimization.md). Production revision `d955cf8` passes 1,483 Release tests (6 platform skips). The portable reference still takes 3.80 s for the large render versus the 2 s goal; native release execution takes 1.35 s. Work pauses for the user's decision on delivery/acceptance before changing the documented reference or proceeding with the remaining acceptance work.
+
 Preserve the historical baseline and its provenance. Each implementation step requires focused correctness checks and measured end-to-end comparisons. Pause for the user's decision if a target proves incompatible with correctness or the approved architecture.
 
 ## Tool migration verification
