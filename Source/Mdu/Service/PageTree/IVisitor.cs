@@ -1,4 +1,4 @@
-namespace Core.Collections.NodeGraph;
+namespace Mdu.Service.PageTree;
 
 /// <summary>
 /// Visitor of a Node Graph

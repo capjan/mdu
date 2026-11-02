@@ -1,6 +1,5 @@
 using System.Globalization;
-using Core.Parser.Special;
-using Core.Collections.NodeGraph;
+using Mdu.Service.PageTree;
 using Markdown.Document;
 using Mdu.Model;
 using YamlDotNet.Core;
@@ -21,9 +20,7 @@ public class DataPreparationVisitor: IVisitor<MarkdownFile>
 
     public bool Process(MarkdownFile entity, int graphDepth)
     {
-        using var reader = new StringReader(entity.ReadMarkdown());
-        var input = new ParserInput(reader);
-        var header = _markdownReader.ReadHeader(input);
+        var header = _markdownReader.ReadHeader(entity.ReadMarkdown());
         entity.HeadingTitle = header.Title;
         entity.FrontMatter = header.FrontMatter;
         var navigationSettings = ReadFrontMatterSettings(header.FrontMatter);

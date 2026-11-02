@@ -1,4 +1,4 @@
-namespace Core.Collections.NodeGraph;
+namespace Mdu.Service.PageTree;
 
 /// <summary>
 /// A graph traversal algorithm

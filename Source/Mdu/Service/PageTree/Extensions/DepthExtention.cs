@@ -1,4 +1,4 @@
-namespace Core.Collections.NodeGraph.Extensions;
+namespace Mdu.Service.PageTree.Extensions;
 
 public static class DepthExtension
 {

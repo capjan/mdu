@@ -1,7 +1,7 @@
 using System.Collections;
 using System.Text.RegularExpressions;
 
-namespace SuperiorIO;
+namespace Markdown.Linter.Paths;
 
 public class SuperiorPath : IEnumerable<PathElement>
 {

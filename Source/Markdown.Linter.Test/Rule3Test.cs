@@ -56,6 +56,22 @@ public class Rule3Test
         });
     }
 
+    [Fact]
+    public void ChecksRelativeParentAndEncodedPathSegments()
+    {
+        WithSource((source, root) =>
+        {
+            var folder = Directory.CreateDirectory(Path.Combine(root, "Folder Name"));
+            File.WriteAllText(Path.Combine(folder.FullName, "Target.md"), "# Target");
+            var nested = Directory.CreateDirectory(Path.Combine(root, "nested"));
+            var nestedSource = Path.Combine(nested.FullName, "source.md");
+            File.WriteAllText(nestedSource, "# Source");
+
+            Assert.True(new Rule3Validator().Validate(new Rule3Input(nestedSource, "../Folder%20Name/Target.md")).IsValid);
+            Assert.False(new Rule3Validator().Validate(new Rule3Input(nestedSource, "../folder%20name/Target.md")).IsValid);
+        });
+    }
+
     private static void WithSource(Action<string, string> action)
     {
         var root = CreateDirectory();

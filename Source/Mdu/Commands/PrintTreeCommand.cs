@@ -1,4 +1,4 @@
-using Core.Collections.NodeGraph.Extensions;
+using Mdu.Service.PageTree.Extensions;
 using Mdu.Commands.Settings;
 using Mdu.Service;
 using Mdu.Service.Visitors;

@@ -1,5 +1,5 @@
 using System.Xml;
-using Core.Collections.NodeGraph.Extensions;
+using Mdu.Service.PageTree.Extensions;
 using Markdown.Renderer;
 using Mdu.Commands.Settings;
 using Mdu.Model;

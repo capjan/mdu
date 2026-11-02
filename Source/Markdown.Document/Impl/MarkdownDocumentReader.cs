@@ -1,7 +1,5 @@
-﻿using System.Net;
+using System.Net;
 using System.Text.RegularExpressions;
-using Core.Extensions.ParserRelated;
-using Core.Parser;
 using Markdig;
 using Markdig.Extensions.Footnotes;
 using Markdig.Renderers.Html;
@@ -32,9 +30,9 @@ public class MarkdownDocumentReader : IMarkdownDocumentReader
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
     private static readonly Regex HtmlCommentRegex = new("<!--.*?(?:-->|$)", RegexOptions.Compiled | RegexOptions.Singleline);
 
-    public IMarkdownHeader ReadHeader(IParserInput input)
+    public IMarkdownHeader ReadHeader(string input)
     {
-        var content = input.ReadAll();
+        var content = input.Replace("\r", "");
         var m = Regex.Match(content, RegExPattern.MarkdownHeader);
 
         var frontMatter = string.Empty;
@@ -63,11 +61,11 @@ public class MarkdownDocumentReader : IMarkdownDocumentReader
         return end < 2 ? string.Empty : markdown[2..(end + 1)].TrimEnd();
     }
 
-    public IEnumerable<IMarkdownLink> ReadLinks(IParserInput input) => ReadAnalysis(input).Links;
+    public IEnumerable<IMarkdownLink> ReadLinks(string input) => ReadAnalysis(input).Links;
 
-    public MarkdownDocumentAnalysis ReadAnalysis(IParserInput input)
+    public MarkdownDocumentAnalysis ReadAnalysis(string input)
     {
-        var content = input.ReadAll();
+        var content = input.Replace("\r", "");
         var document = Markdig.Parsers.MarkdownParser.Parse(content, LinkParsingPipeline);
         var definitions = Markdig.Syntax.LinkReferenceDefinitionExtensions
             .GetLinkReferenceDefinitions(document, addGroup: false);
@@ -236,12 +234,6 @@ public class MarkdownDocumentReader : IMarkdownDocumentReader
             return MermaidLinkedDiagramHeaderRegex.IsMatch(text);
         }
 
-        return false;
-    }
-
-    private bool TryParseLink(IParserInput input, out IMarkdownLink link)
-    {
-        link = Contants.EmptyLink;
         return false;
     }
 

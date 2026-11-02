@@ -1,4 +1,4 @@
-using Core.Collections.NodeGraph.Extensions;
+using Mdu.Service.PageTree.Extensions;
 using Markdown.Renderer;
 using Markdown.Search;
 using Mdu.Commands.Settings;

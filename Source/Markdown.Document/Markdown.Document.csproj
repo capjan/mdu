@@ -8,7 +8,6 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="Cap.Core" Version="11.0.0" />
       <PackageReference Include="Markdig" Version="1.4.1" />
     </ItemGroup>
 
