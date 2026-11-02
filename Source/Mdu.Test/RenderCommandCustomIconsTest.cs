@@ -84,6 +84,29 @@ public sealed class RenderCommandCustomIconsTest : IDisposable
         Assert.Equal(Path.Combine(_root, "assets", "icons"), SiteConfigurationReader.GetIconsPath(_root, configuration));
     }
 
+    [Fact]
+    public void KeepsCustomSvgTextAndBothThemeVariantsInTheSearchIndex()
+    {
+        WriteFile(".icons/acme/logo.svg", """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+              <style>text { fill: red }</style>
+              <text x="0" y="12">Light <tspan>nested</tspan> &amp; text</text>
+            </svg>
+            """);
+        WriteFile(".icons/acme/logo.dark.svg", """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+              <text x="0" y="12">Dark <tspan>nested</tspan> text</text>
+            </svg>
+            """);
+        WriteFile("README.md", "# Logo :acme-logo:\n\nBefore :acme-logo: after.");
+
+        Assert.Equal(0, Render());
+        using var index = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(_root, "site", "search-index.json")));
+        var entry = Assert.Single(index.RootElement.EnumerateArray());
+        Assert.Equal("Logo Light nested & text Dark nested text", entry.GetProperty("section").GetString());
+        Assert.Equal("Before Light nested & text Dark nested text after.", entry.GetProperty("text").GetString());
+    }
+
     private int Render()
     {
         var command = new RenderCommand(

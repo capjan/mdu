@@ -418,6 +418,147 @@ public class SearchIndexBuilderTest
         Assert.Contains(entries, entry => entry.GetProperty("text").GetString()!.Contains("Between the references", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void ReadsHtmlHeadingsAndExcludesHeadingsInsideNonRenderedContent()
+    {
+        var entries = BuildIndex("""
+            <div>
+            <h1 data-label="a > b" id='visible'>Visible <em>heading</em></h1>
+            <p>Before <strong>nested</strong> text.</p>
+            <template><h2 id="hidden">Hidden heading</h2><p>Hidden template.</p></template>
+            <script>const example = '<h2 id="fake">Fake heading</h2>';</script>
+            <style>/* <h2 id="style">Hidden style</h2> */</style>
+            <!-- <h2 id="comment">Hidden comment</h2> -->
+            <h2 ID=next>Next &amp; final</h2>
+            <p>After.</p>
+            </div>
+            """);
+
+        Assert.Equal(2, entries.Length);
+        Assert.Equal("Visible heading", entries[0].GetProperty("section").GetString());
+        Assert.Equal("guide.html#visible", entries[0].GetProperty("url").GetString());
+        Assert.Equal("Before nested text.", entries[0].GetProperty("text").GetString());
+        Assert.Equal("Next & final", entries[1].GetProperty("section").GetString());
+        Assert.Equal("guide.html#next", entries[1].GetProperty("url").GetString());
+        Assert.Equal("After.", entries[1].GetProperty("text").GetString());
+    }
+
+    [Fact]
+    public void PreservesPlainMarkdownTextBoundariesAndHeadingIds()
+    {
+        var entries = BuildIndex("""
+            Introduction &amp; details.
+
+            # 6. Guide
+
+            Read **nested *text*** and [the guide](next.md), then `command`.
+
+            > Quoted paragraph.
+
+            - First
+            - Second
+
+            ## Custom {#specific}
+
+            Final.
+            """);
+
+        Assert.Equal(3, entries.Length);
+        Assert.Equal("Introduction & details.", entries[0].GetProperty("text").GetString());
+        Assert.Equal("guide.html#6-guide", entries[1].GetProperty("url").GetString());
+        Assert.Equal("Read nested text and the guide , then command . Quoted paragraph. First Second",
+            entries[1].GetProperty("text").GetString());
+        Assert.Equal("guide.html#specific", entries[2].GetProperty("url").GetString());
+    }
+
+    [Theory]
+    [InlineData(
+        "# Guide\n\n| Name | Value |\n| --- | --- |\n| **A** | `b` |\n| [C](next.md) | D |",
+        "Guide", "Name Value A b C D", "guide.html#guide", "b")]
+    [InlineData(
+        "# Guide\n\n+---+---+\n| A | B |\n+===+===+\n| C | D |\n+---+---+",
+        "Guide", "A B C D", "guide.html#guide", "")]
+    [InlineData(
+        "# Guide\n\n> [!NOTE]\n> Useful **text**.\n\n> [!TIP]\n> More.\n\n> [!IMPORTANT]\n> Read.\n\n> [!WARNING]\n> Careful.\n\n> [!CAUTION]\n> Stop.",
+        "Guide", "Note Useful text . Tip More. Important Read. Warning Careful. Caution Stop.", "guide.html#guide", "")]
+    [InlineData(
+        "# Guide\n\n> [!note]\n> Lowercase.\n\n> [!unknown]\n> Ordinary quote.",
+        "Guide", "Note Lowercase. [!unknown] Ordinary quote.", "guide.html#guide", "")]
+    [InlineData(
+        "# ++cmd+s++ Guide :rocket:\n\nUse ++ctrl+alt+del++ or ++arrow-up++ and ++cmd+\"A &amp; B\"++. :rocket: End.",
+        "⌘ Cmd + S Guide 🚀", "Use ⌃ Ctrl + Alt + ⌦ Del or ↑ Up and ⌘ Cmd + A & B . 🚀 End.", "guide.html#guide", "")]
+    [InlineData(
+        "# Guide\n\n- [x] Done\n- [ ] Pending **task**\n\n![**Alt** with `code`](image.png) End.",
+        "Guide", "Done Pending task End.", "guide.html#guide", "code")]
+    [InlineData(
+        "# Guide\n\n| Shortcut | Description |\n| --- | --- |\n| ++cmd+s++ | :rocket: **Go** |\n\n> [!TIP]\n> Use ++arrow-down++.",
+        "Guide", "Shortcut Description ⌘ Cmd + S 🚀 Go Tip Use ↓ Down .", "guide.html#guide", "")]
+    [InlineData(
+        "# Footnotes\n\nFirst[^b]. Again[^b]. Second[^a].\n\n[^a]: Alpha.\n[^b]: Beta **text**.",
+        "Footnotes", "First 1 . Again 1 . Second 2 . Beta text . ↩ ↩ Alpha. ↩", "guide.html#footnotes", "")]
+    [InlineData(
+        "# Notes\n\nText[^n].\n\n[^n]: First paragraph.\n\n    Second with `code`.\n\n[^unused]: Not referenced.",
+        "Notes", "Text 1 . First paragraph. Second with code . ↩", "guide.html#notes", "code")]
+    [InlineData(
+        "# Formula\n\nThe area is $A = \\pi r^2$.",
+        "Formula", "The area is \\(A = \\pi r^2\\) .", "guide.html#formula", "")]
+    [InlineData(
+        "# Formula $x$\n\nInline $$x + y$$ and $a & b$.",
+        "Formula \\(x\\)", "Inline \\(x + y\\) and \\(a & b\\) .", "guide.html#formula", "")]
+    [InlineData(
+        "# Icons :material-home:\n\nUse :material-home: and :octicons-heart-fill-24: :dashboard-github:.",
+        "Icons", "Use and .", "guide.html#icons", "")]
+    public void PreservesExtensionTextAndAnchors(string markdown, string section, string text, string url, string code)
+    {
+        var entry = Assert.Single(BuildIndex(markdown));
+
+        Assert.Equal(section, entry.GetProperty("section").GetString());
+        Assert.Equal(text, entry.GetProperty("text").GetString());
+        Assert.Equal(url, entry.GetProperty("url").GetString());
+        Assert.Equal(code, entry.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public void KeepsFootnoteReferencesInHeadingsAndDefinitionsInTheFinalSection()
+    {
+        var entries = BuildIndex("# Heading[^n]\n\n## Next\n\n[^n]: Note.");
+
+        Assert.Equal(2, entries.Length);
+        Assert.Equal("Heading 1", entries[0].GetProperty("section").GetString());
+        Assert.Equal("guide.html#heading", entries[0].GetProperty("url").GetString());
+        Assert.Equal(string.Empty, entries[0].GetProperty("text").GetString());
+        Assert.Equal("Note. ↩", entries[1].GetProperty("text").GetString());
+        Assert.Equal("guide.html#next", entries[1].GetProperty("url").GetString());
+    }
+
+    [Theory]
+    [InlineData("<h4>Notes</h4>")]
+    [InlineData("<h4><select><option>Notes</option></select></h4>")]
+    public void DoesNotAssignIntroductionCodeToAnOpenApiHeadingWithoutAnId(string heading)
+    {
+        var entries = BuildIndex($$"""
+            ```sh
+            intro-only-command
+            ```
+
+            # API guide
+
+            <!--mdu-openapi-start-->
+
+            ### `GET` /widgets {.openapi-operation}
+
+            {{heading}}
+            <p>Operation details.</p>
+
+            <!--mdu-openapi-end-->
+            """);
+
+        Assert.Equal("intro-only-command", entries[0].GetProperty("code").GetString());
+        var operation = Assert.Single(entries, entry => entry.GetProperty("section").GetString() == "GET /widgets");
+        Assert.Contains("Notes", operation.GetProperty("text").GetString());
+        Assert.Equal("GET", operation.GetProperty("code").GetString());
+    }
+
     private static JsonElement[] BuildIndex(string markdown)
     {
         var outputPath = Path.Combine(Path.GetTempPath(), $"mdu-search-test-{Guid.NewGuid():N}");
