@@ -13,7 +13,7 @@ MDU is one solution, `Mdu.sln`, with one executable project and several librarie
 | [mdu](#mdu) | `mdu` command line, page tree, orchestration | all libraries below |
 | [Markdown.Document](#markdown.document) | Reads titles, front matter, and links of a page | Markdig, Cap.Core |
 | [Markdown.Linter](#markdown.linter) | Validators for titles, link casing, and link targets | SuperiorIO, FluentValidation |
-| [Markdown.Renderer](#markdown.renderer) | HTML and PDF rendering, including OpenAPI references | StaticCode.\*, Markdig, Microsoft.OpenApi |
+| [Markdown.Renderer](#markdown.renderer) | HTML and PDF rendering, including OpenAPI references | StaticCode.\*, Markdig, Microsoft.OpenApi, AngleSharp |
 | [Markdown.Search](#markdown.search) | Static search index and search script | Markdown.Renderer |
 | [StaticCode.Highlighter](#staticcode.highlighter) | Syntax highlighting for code blocks | — |
 | [StaticCode.Diagrams](#staticcode.diagrams) | Mermaid, PlantUML, and context diagrams as SVG | — |
@@ -146,6 +146,7 @@ Parses paths into elements so the linter can compare a link target with the file
 | Library | Used for | Project |
 | --- | --- | --- |
 | [Markdig](https://github.com/xoofx/markdig) | CommonMark parsing and HTML output | Document, Renderer, Search |
+| [AngleSharp](https://github.com/AngleSharp/AngleSharp) | HTML parsing for PDF rendering | Renderer |
 | [System.CommandLine](https://github.com/dotnet/command-line-api) | Commands, options, and help | mdu |
 | [Microsoft.Extensions.DependencyInjection](https://learn.microsoft.com/dotnet/core/extensions/dependency-injection) | Service registration | mdu |
 | [YamlDotNet](https://github.com/aaubry/YamlDotNet) | Front matter, `mdu.yml`, and `hero` options | mdu, Renderer |
