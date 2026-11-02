@@ -24,7 +24,7 @@ public sealed class ConfluenceClient : IDisposable
     public ConfluenceClient(ConfluenceTarget target, string pat, HttpMessageHandler handler)
     {
         if (string.IsNullOrWhiteSpace(pat) || pat.Any(character => char.IsControl(character) || char.IsWhiteSpace(character)))
-            throw new ArgumentException("Set MDU_CONFLUENCE_PAT to a valid personal access token.");
+            throw new ArgumentException("Set MDU_CONFLUENCE_PAT or CONFLUENCE_PERSONAL_TOKEN to a valid personal access token.");
         Target = target;
         _pat = pat;
         _http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(100) };

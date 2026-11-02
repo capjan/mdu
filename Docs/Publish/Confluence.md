@@ -22,9 +22,9 @@ Provide three environment variables:
 
 | Variable | Required | Meaning |
 | --- | --- | --- |
-| `MDU_CONFLUENCE_URL` | Yes | HTTPS base URL, including any context path, for example `https://wiki.example.org/confluence` |
+| `MDU_CONFLUENCE_URL` or `CONFLUENCE_URL` | Yes | HTTPS base URL, including any context path, for example `https://wiki.example.org/confluence` |
 | `MDU_CONFLUENCE_SPACE` | Yes | The only space MDU may write to |
-| `MDU_CONFLUENCE_PAT` | Yes | Personal access token of a dedicated publishing account |
+| `MDU_CONFLUENCE_PAT` or `CONFLUENCE_PERSONAL_TOKEN` | Yes | Personal access token of a dedicated publishing account |
 | `MDU_CONFLUENCE_PARENT_PAGE_ID` | No | Existing page below which MDU creates its own root |
 
 Store the PAT as a masked CI secret, not in Markdown, a committed file, shell history, or a command argument. No username is needed: MDU sends the PAT as a Bearer token. Install your organization's certificate authority on the runner if needed; certificate verification cannot be disabled.
@@ -39,7 +39,7 @@ mdu publish confluence [path] [options]
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `--url <url>` | `MDU_CONFLUENCE_URL` | Override the Confluence base URL |
+| `--url <url>` | `MDU_CONFLUENCE_URL`, `CONFLUENCE_URL` | Override the Confluence base URL |
 | `--space <key>` | `MDU_CONFLUENCE_SPACE` | Override the target space |
 | `--parent-page-id <id>` | `MDU_CONFLUENCE_PARENT_PAGE_ID` | Set the existing parent page |
 | `--export-id <id>` | `documentation` | Stable identity for this documentation project |

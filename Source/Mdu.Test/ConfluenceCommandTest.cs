@@ -12,6 +12,34 @@ namespace Mdu.Test;
 public class ConfluenceCommandTest
 {
     [Theory]
+    [InlineData("option", "mdu", "generic", "option")]
+    [InlineData(null, "mdu", "generic", "mdu")]
+    [InlineData(null, null, "generic", "generic")]
+    [InlineData(null, " ", "generic", "generic")]
+    public void ResolvesSettingFromOptionThenVariablesInOrder(string? option, string? mdu, string? generic, string expected)
+    {
+        Environment.SetEnvironmentVariable("MDU_TEST_FIRST", mdu);
+        Environment.SetEnvironmentVariable("MDU_TEST_SECOND", generic);
+        try
+        {
+            Assert.Equal(expected, ConfluenceCommand.Required(option, "MDU_TEST_FIRST", "MDU_TEST_SECOND"));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("MDU_TEST_FIRST", null);
+            Environment.SetEnvironmentVariable("MDU_TEST_SECOND", null);
+        }
+    }
+
+    [Fact]
+    public void MissingSettingNamesEveryVariable()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ConfluenceCommand.Required(null, "MDU_TEST_MISSING_FIRST", "MDU_TEST_MISSING_SECOND"));
+        Assert.Contains("MDU_TEST_MISSING_FIRST or MDU_TEST_MISSING_SECOND", exception.Message);
+    }
+
+    [Theory]
     [InlineData("title: dashboard", false)]
     [InlineData("description: dashboard layout examples", false)]
     [InlineData("layout: article\ndashboard:\n  clock: true", false)]

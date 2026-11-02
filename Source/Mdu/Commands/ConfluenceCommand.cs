@@ -11,17 +11,19 @@ namespace Mdu.Commands;
 
 public sealed class ConfluenceCommand(GraphBuilder graphBuilder)
 {
+    private static readonly string[] TokenVariables = ["MDU_CONFLUENCE_PAT", "CONFLUENCE_PERSONAL_TOKEN"];
+
     public async Task<int> Execute(ConfluenceCommandSettings settings, CancellationToken cancellationToken = default)
     {
         try
         {
             var parentId = settings.ParentPageId ?? Environment.GetEnvironmentVariable("MDU_CONFLUENCE_PARENT_PAGE_ID");
             var target = new ConfluenceTarget(
-                Required(settings.Url, "MDU_CONFLUENCE_URL"),
+                Required(settings.Url, "MDU_CONFLUENCE_URL", "CONFLUENCE_URL"),
                 Required(settings.SpaceKey, "MDU_CONFLUENCE_SPACE"),
                 string.IsNullOrWhiteSpace(parentId) ? null : parentId,
                 settings.ExportId);
-            var token = Required(null, "MDU_CONFLUENCE_PAT");
+            var token = Required(null, TokenVariables);
             var root = CommandPathDefaults.ResolveRootPath(settings.RootPath);
             var configuration = SiteConfigurationReader.Read(root);
             var glossaryPath = SiteConfigurationReader.ResolveGlossaryPath(root, configuration);
@@ -47,8 +49,8 @@ public sealed class ConfluenceCommand(GraphBuilder graphBuilder)
                                            ArgumentException or HttpRequestException or JsonException or XmlException or YamlException)
         {
             var message = exception is HttpRequestException ? "Confluence connection failed; check the URL, network and certificate trust." : exception.Message;
-            var token = Environment.GetEnvironmentVariable("MDU_CONFLUENCE_PAT");
-            if (!string.IsNullOrEmpty(token)) message = message.Replace(token, "[redacted]", StringComparison.Ordinal);
+            foreach (var token in TokenVariables.Select(Environment.GetEnvironmentVariable))
+                if (!string.IsNullOrEmpty(token)) message = message.Replace(token, "[redacted]", StringComparison.Ordinal);
             Console.Error.WriteLine($"Could not publish to Confluence: {message}");
             return 1;
         }
@@ -93,8 +95,9 @@ public sealed class ConfluenceCommand(GraphBuilder graphBuilder)
         return new ConfluenceAsset("mdu-" + Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(content)) + ".pdf", content, false);
     }
 
-    private static string Required(string? value, string variable) =>
-        !string.IsNullOrWhiteSpace(value ?? Environment.GetEnvironmentVariable(variable))
-            ? (value ?? Environment.GetEnvironmentVariable(variable))!
-            : throw new InvalidOperationException($"Set {variable} before publishing to Confluence.");
+    // The explicit value wins, then the first variable that has a value.
+    public static string Required(string? value, params string[] variables) =>
+        new[] { value }.Concat(variables.Select(Environment.GetEnvironmentVariable))
+            .FirstOrDefault(candidate => !string.IsNullOrWhiteSpace(candidate))
+        ?? throw new InvalidOperationException($"Set {string.Join(" or ", variables)} before publishing to Confluence.");
 }

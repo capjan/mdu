@@ -130,7 +130,7 @@ var publishCommand = new Command("publish", "Publishes a documentation mirror.")
 var confluenceCommand = new Command("confluence", "Publishes edit-protected pages to one Confluence Data Center space.");
 var (confluencePattern, confluenceHidden) = AddVisitorOptions(confluenceCommand);
 var confluencePath = AddRootPathArgument(confluenceCommand, "Root folder containing Markdown files. Defaults to ./docs.");
-var confluenceUrl = new Option<string?>("--url") { Description = "HTTPS Confluence base URL. Defaults to MDU_CONFLUENCE_URL." };
+var confluenceUrl = new Option<string?>("--url") { Description = "HTTPS Confluence base URL. Defaults to MDU_CONFLUENCE_URL, then CONFLUENCE_URL." };
 var confluenceSpace = new Option<string?>("--space") { Description = "The only writable space key. Defaults to MDU_CONFLUENCE_SPACE." };
 var confluenceParent = new Option<string?>("--parent-page-id") { Description = "Existing parent page in the target space. Defaults to MDU_CONFLUENCE_PARENT_PAGE_ID." };
 var confluenceExport = new Option<string>("--export-id")
