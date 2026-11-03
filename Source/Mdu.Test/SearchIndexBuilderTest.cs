@@ -482,6 +482,12 @@ public class SearchIndexBuilderTest
         "# Guide\n\n> [!NOTE]\n> Useful **text**.\n\n> [!TIP]\n> More.\n\n> [!IMPORTANT]\n> Read.\n\n> [!WARNING]\n> Careful.\n\n> [!CAUTION]\n> Stop.",
         "Guide", "Note Useful text . Tip More. Important Read. Warning Careful. Caution Stop.", "guide.html#guide", "")]
     [InlineData(
+        "# Guide\n\n> [!RESULT]\n> Useful **text**.",
+        "Guide", "Result Useful text .", "guide.html#guide", "")]
+    [InlineData(
+        "# Guide\n\n> [!RESULT]\n> ## Example\n>\n> Text.",
+        "Guide", "Result Example Text.", "guide.html#guide", "")]
+    [InlineData(
         "# Guide\n\n> [!note]\n> Lowercase.\n\n> [!unknown]\n> Ordinary quote.",
         "Guide", "Note Lowercase. [!unknown] Ordinary quote.", "guide.html#guide", "")]
     [InlineData(

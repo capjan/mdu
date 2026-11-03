@@ -30,6 +30,15 @@ public class AlertTest
             html);
     }
 
+    [Fact]
+    public void AHeadingInAResultHasNoId()
+    {
+        var html = Render("## Section\n\n> [!RESULT]\n> ## Example\n");
+
+        Assert.Contains("<h2 id=\"section\">Section</h2>", html);
+        Assert.Contains("<h2>Example</h2>", html);
+    }
+
     [Theory]
     [InlineData("> [!note]\n> Text")]
     [InlineData("> [!Note]  \n> Text")]
@@ -90,6 +99,36 @@ public class AlertTest
         Assert.Contains("markdown-alert-tip", html);
         Assert.Contains("<blockquote>\n<p>Quote text</p>\n</blockquote>", html);
         Assert.Contains("markdown-alert-caution", html);
+    }
+
+    [Fact]
+    public void RendersAResultBelowACodeBlock()
+    {
+        var html = Render("```bash\nmdu tree\n```\n> [!RESULT]\n> The page **tree**.\n");
+
+        Assert.Contains("</code></pre>\n<div class=\"result-block\">\n" +
+            "<p class=\"result-block-title\">Result</p>\n<p>The page <strong>tree</strong>.</p>\n</div>\n", html);
+        Assert.DoesNotContain("markdown-alert", html);
+    }
+
+    [Theory]
+    [InlineData("> [!RESULT]")]
+    [InlineData("> [!RESULT] Text on the marker line")]
+    [InlineData("- > [!RESULT]\n  > Nested in a list")]
+    [InlineData("> [!RESULT]\n> ---")]
+    [InlineData("> [!NOTE]\n> ---")]
+    public void KeepsInvalidResultsAsRegularMarkdown(string markdown)
+    {
+        var html = Render(markdown);
+
+        Assert.DoesNotContain("result-block", html);
+        Assert.DoesNotContain("markdown-alert", html);
+    }
+
+    [Fact]
+    public void AnEmptyLineKeepsASeparatorBelowTheMarker()
+    {
+        Assert.Contains("<p class=\"result-block-title\">Result</p>\n<hr />", Render("> [!RESULT]\n>\n> ---"));
     }
 
     [Fact]

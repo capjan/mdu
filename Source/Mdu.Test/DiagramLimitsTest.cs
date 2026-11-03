@@ -16,10 +16,10 @@ public class DiagramLimitsTest : IDisposable
     }
 
     [Theory]
-    [InlineData("diagrams:\n  maxLinks: 3000", true)]
-    [InlineData("diagrams:\n  maxLinks: 0", true)]
-    [InlineData("diagrams:\n  maxElements: 5000", false)]
-    [InlineData("site_name: Docs", false)]
+    [InlineData("diagrams:\n  limits:\n    links: 3000", true)]
+    [InlineData("diagrams:\n  limits:\n    links: 0", true)]
+    [InlineData("diagrams:\n  limits:\n    elements: 5000", false)]
+    [InlineData("site.name: Docs", false)]
     public void MduYmlSetsTheLimits(string yaml, bool drawn)
     {
         File.WriteAllText(Path.Combine(_root, "mdu.yml"), yaml);
@@ -34,15 +34,34 @@ public class DiagramLimitsTest : IDisposable
     [InlineData("-1")]
     public void InvalidLimitsAreRejected(string value)
     {
-        File.WriteAllText(Path.Combine(_root, "mdu.yml"), $"diagrams:\n  maxLinks: {value}");
+        File.WriteAllText(Path.Combine(_root, "mdu.yml"), $"diagrams:\n  limits:\n    links: {value}");
 
         Assert.Throws<InvalidOperationException>(() => SiteConfigurationReader.Read(_root));
     }
 
     [Fact]
+    public void WarnsAboutRenamedSettings()
+    {
+        File.WriteAllText(Path.Combine(_root, "mdu.yml"), "diagrams:\n  maxLinks: 3000");
+        var original = Console.Error;
+        using var errors = new StringWriter();
+        Console.SetError(errors);
+        try
+        {
+            SiteConfigurationReader.WarnAboutRenamedSettings(_root);
+        }
+        finally
+        {
+            Console.SetError(original);
+        }
+
+        Assert.Contains("'diagrams.maxLinks' is now 'diagrams.limits.links'", errors.ToString());
+    }
+
+    [Fact]
     public void LintKeepsTheDefaultsWhenTheFileIsInvalid()
     {
-        File.WriteAllText(Path.Combine(_root, "mdu.yml"), "diagrams:\n  maxLinks: many");
+        File.WriteAllText(Path.Combine(_root, "mdu.yml"), "diagrams:\n  limits:\n    links: many");
 
         SiteConfigurationReader.TryUseDiagramLimits(_root);
 

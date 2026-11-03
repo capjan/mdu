@@ -66,10 +66,11 @@ MDU follows the same rules as GitHub:
 
 - The marker must be the first line of a block quote and stand alone on that line. Text after the marker, such as `> [!NOTE] Text`, renders a regular block quote.
 - The type is not case-sensitive: `[!NOTE]`, `[!Note]`, and `[!note]` are equivalent.
-- Only `NOTE`, `TIP`, `IMPORTANT`, `WARNING`, and `CAUTION` are alert types. Any other type renders a regular block quote.
+- Only `NOTE`, `TIP`, `IMPORTANT`, `WARNING`, and `CAUTION` are alert types. Any other type renders a regular block quote. MDU adds [`RESULT`](CodeBlocks.md#show-the-result) for the outcome of a code block.
 - The marker must be followed by content. A block quote that contains only the marker remains a regular block quote.
 - Callouts cannot be nested inside lists or other block quotes.
+- A `---` or `===` line directly below the marker turns the marker into a heading. Leave an empty `>` line between them.
 
 ## Styling
 
-MDU uses [Markdig's alert blocks](https://xoofx.github.io/markdig/docs/extensions/alert-blocks/) and renders the same HTML structure as GitHub: a `div` with the classes `markdown-alert` and `markdown-alert-<type>`, for example `markdown-alert-tip`, followed by a `markdown-alert-title` paragraph. The title is shown without an icon, and the colors adapt to the light and dark themes.
+MDU uses [Markdig's alert blocks](https://xoofx.github.io/markdig/docs/extensions/alert-blocks/) and renders the same HTML structure as GitHub: a `div` with the classes `markdown-alert` and `markdown-alert-<type>`, for example `markdown-alert-tip`, followed by a `markdown-alert-title` paragraph. The title is shown without an icon, links and inline code take the color of the callout, and the colors adapt to the light and dark themes.

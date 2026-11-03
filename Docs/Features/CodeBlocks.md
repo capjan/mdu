@@ -38,6 +38,52 @@ If you omit the language identifier or use an unsupported one, the code is rende
 This is plain code.
 ~~~
 
+## Show the result
+
+Show what a piece of code produces directly below it, so readers see cause and effect at one glance. Write a block quote that starts with `[!RESULT]` on the line after the code block:
+
+~~~markdown title="Markdown"
+```bash title="Terminal"
+mdu tree
+```
+> [!RESULT]
+> ```text
+> Documentation
+> ├── Setup
+> └── Usage
+> ```
+~~~
+
+The code and its result become one card:
+
+```bash title="Terminal"
+mdu tree
+```
+> [!RESULT]
+> ```text
+> Documentation
+> ├── Setup
+> └── Usage
+> ```
+
+A result can contain any Markdown, so it also shows what a source renders to. Text appears as it would on the page:
+
+~~~markdown title="Markdown"
+```markdown title="Markdown"
+Press ++ctrl+s++ to **save**.
+```
+> [!RESULT]
+> Press ++ctrl+s++ to **save**.
+~~~
+
+```markdown title="Markdown"
+Press ++ctrl+s++ to **save**.
+```
+> [!RESULT]
+> Press ++ctrl+s++ to **save**.
+
+Your file stays ordinary Markdown: GitHub shows the code block followed by a block quote with the marker as its first line. The rules of [callouts](Callouts.md#rules) apply, so a result has content, its marker stands alone, and it cannot sit inside a list or another block quote. Without a code block above it, a result is a card of its own. A heading in a result looks like a heading but is only an example, so it has no permalink and stays out of **On this Page** and the search sections.
+
 ## Supported languages
 
 Use one of these language identifiers:

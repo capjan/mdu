@@ -1,4 +1,5 @@
-site_name: MDU
-logo:
-  light: assets/mdu-logo-light.svg
-  dark: assets/mdu-logo-dark.svg
+site:
+  name: MDU
+  logo:
+    light: assets/mdu-logo-light.svg
+    dark: assets/mdu-logo-dark.svg

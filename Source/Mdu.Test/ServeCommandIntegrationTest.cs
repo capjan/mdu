@@ -124,7 +124,7 @@ public class ServeCommandIntegrationTest
             Assert.Contains("LastSentinel79", await client.GetStringAsync(url + "Page079.html"));
             File.WriteAllText(home, "# Home\n\nLatestHome");
             await WaitUntilAsync(async () => await PageContainsAsync(client, url, "LatestHome"), process);
-            File.WriteAllText(Path.Combine(docs, "mdu.yml"), "site_name: RebuiltSite\n");
+            File.WriteAllText(Path.Combine(docs, "mdu.yml"), "site.name: RebuiltSite\n");
             await WaitUntilAsync(async () => await PageContainsAsync(client, url, "RebuiltSite"), process);
             File.WriteAllText(Path.Combine(docs, "Page079.md"), "# Page 79\n\nLatestDuringBuild");
             await WaitUntilAsync(async () => await PageContainsAsync(client, url + "Page079.html", "LatestDuringBuild"), process);
@@ -772,7 +772,7 @@ public class ServeCommandIntegrationTest
         Directory.CreateDirectory(shared);
         Directory.CreateDirectory(alternate);
         File.WriteAllText(Path.Combine(docs, "README.md"), "# Home\n\nCPU.\n");
-        File.WriteAllText(Path.Combine(docs, "mdu.yml"), "glossary: ../shared/terms.md\n");
+        File.WriteAllText(Path.Combine(docs, "mdu.yml"), "content.glossary: ../shared/terms.md\n");
         var glossaryPath = Path.Combine(shared, "terms.md");
         var alternateGlossaryPath = Path.Combine(alternate, "terms.md");
         File.WriteAllText(glossaryPath, "*[CPU]: Central processing unit\n");
@@ -792,7 +792,7 @@ public class ServeCommandIntegrationTest
             await WaitUntilAsync(async () => await PageContainsAsync(client, pageUrl,
                 "title=\"General processing unit\""), process);
 
-            File.WriteAllText(Path.Combine(docs, "mdu.yml"), "glossary: ../alternate/terms.md\n");
+            File.WriteAllText(Path.Combine(docs, "mdu.yml"), "content.glossary: ../alternate/terms.md\n");
             await WaitUntilAsync(async () => await PageContainsAsync(client, pageUrl,
                 "title=\"Alternate processing unit\""), process);
 
@@ -800,7 +800,7 @@ public class ServeCommandIntegrationTest
             await WaitUntilAsync(async () => await PageContainsAsync(client, pageUrl,
                 "title=\"Updated alternate processing unit\""), process);
 
-            File.WriteAllText(Path.Combine(docs, "mdu.yml"), "glossary: ../missing/nested/terms.md\n");
+            File.WriteAllText(Path.Combine(docs, "mdu.yml"), "content.glossary: ../missing/nested/terms.md\n");
             await Task.Delay(250);
             var missingGlossaryDirectory = Path.Combine(root, "missing", "nested");
             Directory.CreateDirectory(missingGlossaryDirectory);

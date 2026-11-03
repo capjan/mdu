@@ -67,8 +67,8 @@ public static class DiagramRenderer
 
     private static string? OverLimit(ComponentDiagram diagram)
     {
-        if (_maxElements > 0 && diagram.Elements.Count > _maxElements) return $"{diagram.Elements.Count} elements, over the limit of {_maxElements} (diagrams.maxElements)";
-        if (_maxLinks > 0 && diagram.Links.Count > _maxLinks) return $"{diagram.Links.Count} links, over the limit of {_maxLinks} (diagrams.maxLinks)";
+        if (_maxElements > 0 && diagram.Elements.Count > _maxElements) return $"{diagram.Elements.Count} elements, over the limit of {_maxElements} (diagrams.limits.elements)";
+        if (_maxLinks > 0 && diagram.Links.Count > _maxLinks) return $"{diagram.Links.Count} links, over the limit of {_maxLinks} (diagrams.limits.links)";
         return null;
     }
 

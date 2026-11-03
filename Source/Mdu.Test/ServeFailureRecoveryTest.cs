@@ -94,7 +94,7 @@ public class ServeFailureRecoveryTest
     public async Task InvalidConfigurationKeepsThePreviousPendingPagesUsable()
     {
         await using var preview = new Preview(new() { ["README.md"] = "# Home", ["Guide.md"] = "# Guide\n\nPendingGuide" });
-        preview.Write("mdu.yml", "site_name: [");
+        preview.Write("mdu.yml", "site.name: [");
         Assert.ThrowsAny<YamlDotNet.Core.YamlException>(() => preview.Invoke("RebuildSite"));
         Assert.True(preview.Pending.ContainsKey(Path.Combine(preview.Docs, "Guide.md")));
         Assert.Contains("PendingGuide", await preview.Client.GetStringAsync("Guide.html"));

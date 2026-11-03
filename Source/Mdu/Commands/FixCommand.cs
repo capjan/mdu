@@ -39,6 +39,13 @@ public class FixCommand
             return 1;
         }
 
+        // Fixing with the configuration ignored would treat the configured glossary as a page and rewrite it.
+        if (SiteConfigurationReader.DescribeRenamedSettings(rootPath) is { } renamed)
+        {
+            Console.Error.WriteLine($"{renamed} Update them before running mdu fix.");
+            return 1;
+        }
+
         var pathComparer = MarkdownLinks.PathComparer;
         var migrationChanges = MigrateMkDocsContent(rootPath, settings.IncludeHidden, pathComparer);
         if (migrationChanges < 0) return 1;
@@ -298,7 +305,7 @@ public class FixCommand
             var root = yaml.Documents.FirstOrDefault()?.RootNode;
             if (root is YamlMappingNode mapping)
             {
-                if (mapping.Children.ContainsKey(new YamlScalarNode("glossary"))) return 0;
+                if (SiteConfigurationReader.ReadSettings(mapping, out _).ContainsKey("content.glossary")) return 0;
                 if (mapping.Style == YamlDotNet.Core.Events.MappingStyle.Flow)
                     hasFlowMapping = true;
             }
@@ -321,7 +328,7 @@ public class FixCommand
             return 0;
         }
         var newline = contents.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
-        var glossaryEntry = $"glossary: '{relativePath.Replace("'", "''", StringComparison.Ordinal)}'";
+        var glossaryEntry = $"content.glossary: '{relativePath.Replace("'", "''", StringComparison.Ordinal)}'";
         if (hasFlowMapping)
         {
             var openingBrace = contents.IndexOf('{');
@@ -349,7 +356,7 @@ public class FixCommand
             migratedYaml.Load(new StringReader(contents));
             var migratedRoot = migratedYaml.Documents.FirstOrDefault()?.RootNode;
             if (migratedRoot is not YamlMappingNode migratedMapping ||
-                !migratedMapping.Children.TryGetValue(new YamlScalarNode("glossary"), out var migratedGlossary) ||
+                !SiteConfigurationReader.ReadSettings(migratedMapping, out _).TryGetValue("content.glossary", out var migratedGlossary) ||
                 migratedGlossary is not YamlScalarNode { Value: var migratedGlossaryPath } ||
                 migratedGlossaryPath != relativePath)
             {

@@ -55,7 +55,7 @@ public class FixCommandTest
         try
         {
             if (invalidHtmlAttribution)
-                File.WriteAllText(Path.Combine(root, "mdu.yml"), "attribution: false\n");
+                File.WriteAllText(Path.Combine(root, "mdu.yml"), "site.attribution: false\n");
             File.WriteAllText(Path.Combine(root, "README.md"),
                 "# Docs\n\n[Page](./Guide/README.md#intro)\n\n[Folder](./Guide/)\n\n[Reference][guide]\n\n[guide]: ./Guide/README.md?view=full#intro\n");
             Directory.CreateDirectory(Path.Combine(root, "api"));
@@ -470,7 +470,7 @@ public class FixCommandTest
         var output = Path.Combine(root, "site");
         Directory.CreateDirectory(root);
         File.WriteAllText(Path.Combine(root, "README.md"), "# Docs\n");
-        File.WriteAllText(Path.Combine(root, "mdu.yml"), "site_name: [broken\n");
+        File.WriteAllText(Path.Combine(root, "mdu.yml"), "site.name: [broken\n");
         try
         {
             var command = new RenderCommand(
@@ -503,7 +503,7 @@ public class FixCommandTest
         var output = Path.Combine(root, "site");
         Directory.CreateDirectory(root);
         File.WriteAllText(Path.Combine(root, "README.md"), "# Docs\n");
-        File.WriteAllText(Path.Combine(root, "mdu.yml"), "site_name: [broken\n");
+        File.WriteAllText(Path.Combine(root, "mdu.yml"), "site.name: [broken\n");
         try
         {
             var command = new ServeCommand(
@@ -522,6 +522,38 @@ public class FixCommandTest
 
             Assert.Equal(1, result);
             Assert.False(Directory.Exists(output));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void StopsBeforeAnyChangeWhenTheConfigurationHasRenamedSettings()
+    {
+        var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "includes"));
+        File.WriteAllText(Path.Combine(root, "README.md"), "# Docs\n");
+        File.WriteAllText(Path.Combine(root, "includes", "abbreviations.md"), "*[API]: Application Programming Interface\n");
+        File.WriteAllText(Path.Combine(root, "index.md"), "# Start\n");
+        const string configuration = "glossary: includes/abbreviations.md\n";
+        File.WriteAllText(Path.Combine(root, "mdu.yml"), configuration);
+        File.WriteAllText(Path.Combine(root, "mkdocs.yml"), """
+            markdown_extensions:
+              - pymdownx.snippets:
+                  auto_append:
+                    - includes/abbreviations.md
+            """);
+        try
+        {
+            var command = new FixCommand(CreateGraphBuilder(), new LinterVisitor(new ConsoleLintErrorReceiver()));
+
+            var exitCode = command.Execute(new VisitorSettings { RootPath = root, SearchPattern = "*.md", IncludeHidden = true });
+
+            Assert.Equal(1, exitCode);
+            Assert.Equal(configuration, File.ReadAllText(Path.Combine(root, "mdu.yml")));
+            Assert.True(File.Exists(Path.Combine(root, "index.md")));
         }
         finally
         {
@@ -551,7 +583,7 @@ public class FixCommandTest
 
             Assert.Equal(0, command.Execute(settings));
             var configuration = File.ReadAllText(Path.Combine(root, "mdu.yml"));
-            Assert.Contains("glossary: 'includes/abbreviations.md'", configuration);
+            Assert.Contains("content.glossary: 'includes/abbreviations.md'", configuration);
             Assert.Equal(glossaryContent, File.ReadAllText(glossary));
 
             Assert.Equal(0, command.Execute(settings));
@@ -594,7 +626,7 @@ public class FixCommandTest
                 IncludeHidden = true
             }));
 
-            Assert.Contains("glossary: '../shared/abbreviations.md'", File.ReadAllText(Path.Combine(docs, "mdu.yml")));
+            Assert.Contains("content.glossary: '../shared/abbreviations.md'", File.ReadAllText(Path.Combine(docs, "mdu.yml")));
         }
         finally
         {
@@ -639,7 +671,7 @@ public class FixCommandTest
         Directory.CreateDirectory(Path.Combine(root, "includes"));
         File.WriteAllText(Path.Combine(root, "README.md"), "# Docs\n");
         File.WriteAllText(Path.Combine(root, "includes", "terms.md"), "*[API]: Application Programming Interface\n");
-        File.WriteAllText(Path.Combine(root, "mdu.yml"), "{site_name: Docs}\n");
+        File.WriteAllText(Path.Combine(root, "mdu.yml"), "{site.name: Docs}\n");
         File.WriteAllText(Path.Combine(root, "mkdocs.yml"), """
             markdown_extensions:
               - pymdownx.snippets:
@@ -669,7 +701,7 @@ public class FixCommandTest
         Directory.CreateDirectory(Path.Combine(root, "includes"));
         File.WriteAllText(Path.Combine(root, "README.md"), "# Docs\n");
         File.WriteAllText(Path.Combine(root, "includes", "terms.md"), "*[API]: Application Programming Interface\n");
-        const string configuration = "{site_name: Docs} # {x}\n";
+        const string configuration = "{site.name: Docs} # {x}\n";
         File.WriteAllText(Path.Combine(root, "mdu.yml"), configuration);
         File.WriteAllText(Path.Combine(root, "mkdocs.yml"), """
             markdown_extensions:

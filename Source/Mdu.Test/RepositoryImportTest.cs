@@ -11,6 +11,7 @@ using Mdu.Service.Visitors;
 
 namespace Mdu.Test;
 
+[Collection("Process state")]
 public class RepositoryImportTest
 {
     [Theory]
@@ -185,7 +186,7 @@ public class RepositoryImportTest
         const string backendUrl = "https://github.com/example/backend/tree/main/Docs";
         const string terms = "API, CI and ADR.";
 
-        File.WriteAllText(Path.Combine(docs, "mdu.yml"), "glossary: _includes/abbreviations.md\n");
+        File.WriteAllText(Path.Combine(docs, "mdu.yml"), "content.glossary: _includes/abbreviations.md\n");
         File.WriteAllText(Path.Combine(docs, "_includes", "abbreviations.md"),
             "*[API]: Application Programming Interface\n*[CI]: Continuous Integration\n");
         File.WriteAllText(Path.Combine(docs, "README.md"), $"# Home\n\n{terms}\n");
@@ -195,7 +196,7 @@ public class RepositoryImportTest
         File.WriteAllText(Path.Combine(docs, "Backend.md"),
             $"---\ntitle: Backend\nmdu:\n  import:\n    source: {backendUrl}\n---\n");
 
-        File.WriteAllText(Path.Combine(architectureDocs, "mdu.yml"), "glossary: includes/abbreviations.md\n");
+        File.WriteAllText(Path.Combine(architectureDocs, "mdu.yml"), "content.glossary: includes/abbreviations.md\n");
         File.WriteAllText(Path.Combine(architectureDocs, "includes", "abbreviations.md"),
             "*[CI]: Configuration Item\n*[ADR]: Architecture Decision Record\n");
         File.WriteAllText(Path.Combine(architectureDocs, "includes", "Snippets.md"), "# Snippets\n");
@@ -247,7 +248,7 @@ public class RepositoryImportTest
         const string sourceUrl = "https://github.com/example/repository/tree/main/Docs";
         File.WriteAllText(Path.Combine(docs, "README.md"), $"---\nmdu:\n  import:\n    source: {sourceUrl}\n---\n");
         File.WriteAllText(Path.Combine(repository, "Docs", "README.md"), "# Imported\n");
-        File.WriteAllText(Path.Combine(repository, "Docs", "mdu.yml"), "glossary: includes/missing.md\n");
+        File.WriteAllText(Path.Combine(repository, "Docs", "mdu.yml"), "content.glossary: includes/missing.md\n");
 
         try
         {
@@ -271,7 +272,7 @@ public class RepositoryImportTest
         var fixture = new GlossaryImportFixture();
         var secret = Path.Combine(fixture.Root, "secret.md");
         File.WriteAllText(secret, "*[KEY]: Local secret\n");
-        fixture.WriteImportedConfiguration($"glossary: '{(absolute ? secret : "../../secret.md")}'\n");
+        fixture.WriteImportedConfiguration($"content.glossary: '{(absolute ? secret : "../../secret.md")}'\n");
         try
         {
             var exception = Assert.Throws<InvalidOperationException>(() => fixture.CreateGraph(required: true));
@@ -295,7 +296,7 @@ public class RepositoryImportTest
     public void RejectsAnImportedGlossaryWithoutDefinitionsBeforeWritingTheSite()
     {
         var fixture = new GlossaryImportFixture();
-        fixture.WriteImportedConfiguration("glossary: includes/abbreviations.md\n");
+        fixture.WriteImportedConfiguration("content.glossary: includes/abbreviations.md\n");
         var glossary = fixture.WriteRepositoryFile("Docs/includes/abbreviations.md", "No definitions.\n");
         var site = Path.Combine(fixture.Root, "site");
         try
@@ -320,7 +321,7 @@ public class RepositoryImportTest
     public void TreatsAnUnusableImportedGlossaryAsAbsentOutsideRenderAndServe()
     {
         var fixture = new GlossaryImportFixture();
-        fixture.WriteImportedConfiguration("glossary: [not, a, path]\n");
+        fixture.WriteImportedConfiguration("content.glossary: [not, a, path]\n");
         try
         {
             var root = Assert.Single(fixture.CreateGraph(required: false));
@@ -336,7 +337,7 @@ public class RepositoryImportTest
     public void ExcludesAnExistingUnusableImportedGlossaryOutsideRenderAndServe()
     {
         var fixture = new GlossaryImportFixture();
-        fixture.WriteImportedConfiguration("glossary: includes/abbreviations.md\n");
+        fixture.WriteImportedConfiguration("content.glossary: includes/abbreviations.md\n");
         fixture.WriteRepositoryFile("Docs/includes/abbreviations.md", "No definitions.\n");
         fixture.WriteRepositoryFile("Docs/includes/Snippets.md", "# Snippets\n");
         try
@@ -355,10 +356,32 @@ public class RepositoryImportTest
     }
 
     [Fact]
+    public void WarnsAboutARenamedImportedGlossaryOutsideRenderAndServe()
+    {
+        var fixture = new GlossaryImportFixture();
+        fixture.WriteImportedConfiguration("glossary: includes/abbreviations.md\n");
+        var original = Console.Error;
+        using var errors = new StringWriter();
+        Console.SetError(errors);
+        try
+        {
+            Assert.Null(Assert.Single(fixture.CreateGraph(required: false)).Glossary);
+
+            Assert.Contains(GlossaryImportFixture.SourceUrl, errors.ToString());
+            Assert.Contains("'glossary' setting in mdu.yml is now 'content.glossary'", errors.ToString());
+        }
+        finally
+        {
+            Console.SetError(original);
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
     public void AcceptsAnImportedGlossaryOutsideTheDocsFolderAndIgnoresUnrelatedSettings()
     {
         var fixture = new GlossaryImportFixture();
-        fixture.WriteImportedConfiguration("glossary: ../shared/abbreviations.md\nicons: ''\n");
+        fixture.WriteImportedConfiguration("content.glossary: ../shared/abbreviations.md\ncontent.icons: ''\n");
         fixture.WriteRepositoryFile("shared/abbreviations.md", "*[ADR]: Architecture Decision Record\n");
         try
         {

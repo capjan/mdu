@@ -360,12 +360,13 @@ note right of DB : PostgreSQL
 
 ### Size limits
 
-A component diagram with more than 1000 elements or 2000 links stays a code block, and `mdu lint` warns about it with `MDU023`. Such a diagram is hard to read and can take a long time and a lot of memory to draw. You can change the limits in `mdu.yml`, or set them to `0` for no limit:
+A component diagram with more than 1000 elements or 2000 links stays a code block, and `mdu lint` warns about it with `MDU023`. Such a diagram is hard to read and can take a long time and a lot of memory to draw. You can change the limits in [`mdu.yml`](../Usage/configuration.md#diagrams), or set them to `0` for no limit:
 
-```yaml
+```yaml title="docs/mdu.yml"
 diagrams:
-  maxElements: 3000
-  maxLinks: 6000
+  limits:
+    elements: 3000
+    links: 6000
 ```
 
 ## Context diagrams

@@ -157,7 +157,13 @@ public class GraphBuilder
                                               UnauthorizedAccessException or ArgumentException or InvalidOperationException)
         {
             // Like the site glossary, an existing glossary file is never a page, even when it cannot be used.
-            if (!required) return exists ? new ImportedGlossary(path!, null) : null;
+            if (!required)
+            {
+                // Without a usable setting the file is not known and stays a page, so the reason must not get lost.
+                if (path is null && exception is InvalidOperationException)
+                    Console.Error.WriteLine($"Warning: Ignoring the glossary setting of imported source '{sourceUrl}': {exception.Message}");
+                return exists ? new ImportedGlossary(path!, null) : null;
+            }
             var file = path is null ? string.Empty : $" '{path}'";
             throw new InvalidOperationException(
                 $"Could not read the glossary{file} of imported source '{sourceUrl}': {exception.Message}", exception);

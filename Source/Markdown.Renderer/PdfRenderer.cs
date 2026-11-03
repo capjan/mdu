@@ -202,7 +202,7 @@ internal sealed class PdfLayout
             case "svg": return SvgBlockHeight(element, 470, 260) + 10;
             case "div": case "blockquote":
                 return MinimumStartHeight(element.ChildNodes.Cast<XmlNode>().ToArray(),
-                    indent + (element.LocalName == "blockquote" || HasClass(element, "markdown-alert") ? 12 : 0));
+                    indent + (element.LocalName == "blockquote" || IsAccentBlock(element) ? 12 : 0));
             default: return 18;
         }
     }
@@ -222,8 +222,13 @@ internal sealed class PdfLayout
         return height;
     }
 
-    private static bool KeepsFollowingBlock(XmlElement element) =>
-        IsHeading(element) || HasClass(element, "markdown-alert-title");
+    private static bool KeepsFollowingBlock(XmlElement element) => IsHeading(element) || IsAccentBlockTitle(element);
+
+    private static bool IsAccentBlock(XmlElement element) =>
+        HasClass(element, "markdown-alert") || HasClass(element, "result-block");
+
+    private static bool IsAccentBlockTitle(XmlElement element) =>
+        HasClass(element, "markdown-alert-title") || HasClass(element, "result-block-title");
 
     private List<PdfRun>[] ParagraphLines(XmlElement element, double size, int indent) =>
         WrapRuns(ReadInlineRuns(element.ChildNodes.Cast<XmlNode>(),
@@ -285,7 +290,7 @@ internal sealed class PdfLayout
                 return;
             case "p":
                 WriteParagraph(ReadInlineRuns(element.ChildNodes.Cast<XmlNode>(), PdfTextStyle.Body, _sectionPath),
-                    10.5, indent, 4, 8, keepTogether: HasClass(element, "markdown-alert-title"));
+                    10.5, indent, 4, 8, keepTogether: IsAccentBlockTitle(element));
                 return;
             case "pre":
                 RenderCode(element, indent);
@@ -327,13 +332,14 @@ internal sealed class PdfLayout
                     WriteParagraph([new PdfRun("[The interactive icon search is available in the HTML version.]", PdfTextStyle.Muted)], 9, indent + 8, 4, 8);
                     return;
                 }
-                if (HasClass(element, "markdown-alert"))
+                if (IsAccentBlock(element))
                 {
                     EnsureRoom(MinimumBlockHeight(element, indent));
                     var alertPage = _pages.Count - 1;
                     var alertTop = _y;
                     RenderBlocks(element.ChildNodes.Cast<XmlNode>(), indent + 12);
-                    var accent = HasClass(element, "markdown-alert-tip") ? new PdfColor(26, 127, 90) :
+                    var accent = HasClass(element, "result-block") ? PdfColor.Secondary :
+                        HasClass(element, "markdown-alert-tip") ? new PdfColor(26, 127, 90) :
                         HasClass(element, "markdown-alert-important") ? new PdfColor(137, 68, 171) :
                         HasClass(element, "markdown-alert-warning") ? new PdfColor(154, 91, 0) :
                         HasClass(element, "markdown-alert-caution") ? new PdfColor(201, 37, 45) : PdfColor.Link;

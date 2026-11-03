@@ -14,13 +14,13 @@ continues the paragraph.
 
 This is a second paragraph.
 ~~~
-
-### A section heading
-
-This is one paragraph. A line break in the source
-continues the paragraph.
-
-This is a second paragraph.
+> [!RESULT]
+> ### A section heading
+>
+> This is one paragraph. A line break in the source
+> continues the paragraph.
+>
+> This is a second paragraph.
 
 ## Line breaks
 
@@ -30,11 +30,9 @@ A single newline in the Markdown source continues the same paragraph. To render 
 This line ends here.  
 This line starts below it.
 ~~~
-
-Rendered result:
-
-This line ends here.  
-This line starts below it.
+> [!RESULT]
+> This line ends here.  
+> This line starts below it.
 
 The backslash is an alternative:
 
@@ -42,11 +40,9 @@ The backslash is an alternative:
 This line ends here.\
 This line starts below it.
 ~~~
-
-Rendered result:
-
-This line ends here.\
-This line starts below it.
+> [!RESULT]
+> This line ends here.\
+> This line starts below it.
 
 ## Inline formatting
 
@@ -55,8 +51,8 @@ Use asterisks for emphasis and backticks for inline code. Markdig's emphasis ext
 ~~~markdown title="Markdown"
 *italic*, **bold**, ***bold italic***, ~~deleted~~, H~2~O, x^2^, ==marked==, and `inline code`.
 ~~~
-
-*italic*, **bold**, ***bold italic***, ~~deleted~~, H~2~O, x^2^, ==marked==, and `inline code`.
+> [!RESULT]
+> *italic*, **bold**, ***bold italic***, ~~deleted~~, H~2~O, x^2^, ==marked==, and `inline code`.
 
 ## Lists
 
@@ -70,13 +66,13 @@ Use `-`, `*`, or `+` for unordered lists, and a number followed by a period for 
 1. First step
 2. Second step
 ~~~
-
-- First item
-- Second item
-  - Nested item
-
-1. First step
-2. Second step
+> [!RESULT]
+> - First item
+> - Second item
+>   - Nested item
+>
+> 1. First step
+> 2. Second step
 
 Task lists use `[ ]` for an open item and `[x]` for a completed item:
 
@@ -84,9 +80,9 @@ Task lists use `[ ]` for an open item and `[x]` for a completed item:
 - [x] Write the page
 - [ ] Review the examples
 ~~~
-
-- [x] Write the page
-- [ ] Review the examples
+> [!RESULT]
+> - [x] Write the page
+> - [ ] Review the examples
 
 ## Links
 
@@ -95,8 +91,8 @@ Create a link with a label and a destination. An optional title appears when the
 ~~~markdown title="Markdown"
 [Markdig](https://github.com/xoofx/markdig "Markdig on GitHub")
 ~~~
-
-[Markdig](https://github.com/xoofx/markdig "Markdig on GitHub")
+> [!RESULT]
+> [Markdig](https://github.com/xoofx/markdig "Markdig on GitHub")
 
 ## Block quotes and separators
 
@@ -107,18 +103,19 @@ Start each quoted line with `>`; block quotes can contain other Markdown formatt
 >
 > - It can also contain a list.
 ~~~
-
-> A block quote can contain *emphasis*.
->
-> - It can also contain a list.
+> [!RESULT]
+> > A block quote can contain *emphasis*.
+> >
+> > - It can also contain a list.
 
 Use a line containing three hyphens, asterisks, or underscores to add a horizontal separator:
 
 ~~~markdown title="Markdown"
 ---
 ~~~
-
----
+> [!RESULT]
+>
+> ---
 
 ## Collapsible sections
 
@@ -133,14 +130,14 @@ Wrap content in an HTML `<details>` element to show it only on demand; the `<sum
 
 </details>
 ~~~
-
-<details>
-<summary>Completed projects</summary>
-
-- Project A
-- Project B
-
-</details>
+> [!RESULT]
+> <details>
+> <summary>Completed projects</summary>
+>
+> - Project A
+> - Project B
+>
+> </details>
 
 ## Related features
 

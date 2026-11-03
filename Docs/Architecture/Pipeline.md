@@ -62,7 +62,7 @@ flowchart TD
     PdfLink -->|No| Pages[[Render every page]]
     Pdf --> Pages
     Pages --> Index[Write search-index.json]
-    click Config href "../Usage/render.md#site-configuration"
+    click Config href "../Usage/configuration.md"
     click Tree href "#page-tree"
     click Pages href "Rendering.md"
 ```

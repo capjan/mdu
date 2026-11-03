@@ -5,13 +5,13 @@ navigation.placement: top
 
 # Features
 
-Everything on these pages is written in ordinary Markdown. Each page shows the source and the rendered result side by side, so you can copy what you need.
+Everything on these pages is written in ordinary Markdown. Each page shows the source with the rendered result below it, so you can copy what you need.
 
 ## Write
 
 - [Formatting](Formatting.md) - Headings, emphasis, lists, links, and collapsible sections
 - [Abbreviations](Abbreviations.md) - Page-local and shared glossary tooltips
-- [Code Blocks](CodeBlocks.md) - Syntax highlighting, titles, and copy buttons
+- [Code Blocks](CodeBlocks.md) - Syntax highlighting, titles, copy buttons, and results
 - [Tables](Tables.md) - Column alignment and formatting inside cells
 - [Callouts](Callouts.md) - Notes, tips, and warnings with GitHub's alert syntax
 - [Footnotes](Footnotes.md) - Numbered notes with hover previews

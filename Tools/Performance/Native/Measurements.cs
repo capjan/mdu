@@ -32,6 +32,10 @@ internal static class Measurements
         return result;
     }
 
+    // The synthetic corpora use the compact form, the documentation the nested one.
+    internal static string ChangeSiteName(string configuration, string name) =>
+        Regex.Replace(configuration, "^(site\\.name:|  name:).*$", "$1 " + name, RegexOptions.Multiline);
+
     internal static async Task<JsonObject> Serve(Options options, string name, string dll, int sample)
     {
         var root = Path.Combine(options.Work, "corpora", name);
@@ -102,7 +106,7 @@ internal static class Measurements
                 var text = kind switch
                 {
                     "content" => originals[path].Replace("baseline-content-sentinel", marker, StringComparison.Ordinal),
-                    "config" => Regex.Replace(originals[path], "^site_name:.*$", "site_name: " + marker, RegexOptions.Multiline),
+                    "config" => ChangeSiteName(originals[path], marker),
                     "diagram" => originals[path].Replace("Load", marker, StringComparison.Ordinal),
                     _ => originals[path].Replace("Baseline operation 0", marker, StringComparison.Ordinal)
                 };

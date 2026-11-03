@@ -84,7 +84,7 @@ Mdu --> Site[Static HTML site]
 Mdu --> Pdf[PDF document]
 Ci[CI pipeline<br>GitHub Actions, GitLab CI] -- runs --> Mdu
 click Source href "../Features/README.md"
-click Config href "../Usage/render.md#site-configuration"
+click Config href "../Usage/configuration.md"
 click Git href "../Features/Navigation.md#page-footer"
 click Site href "Rendering.md"
 click Pdf href "../Usage/pdf.md"

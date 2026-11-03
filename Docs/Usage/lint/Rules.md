@@ -99,4 +99,4 @@ The linter also lists pages marked `navigation.visible: false` that no visible p
 
 ## MDU023: DiagramTooLarge
 
-This warning points to a PlantUML component diagram above the [size limits](../../Features/Diagrams.md#size-limits). MDU does not draw such a diagram, and the block stays a code block. Split the diagram or raise the limit in `mdu.yml`; warnings do not make `mdu lint` fail.
+This warning points to a PlantUML component diagram above the [size limits](../../Features/Diagrams.md#size-limits). MDU does not draw such a diagram, and the block stays a code block. Split the diagram or raise [`diagrams.limits`](../configuration.md#diagrams) in `mdu.yml`; warnings do not make `mdu lint` fail.
