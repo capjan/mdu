@@ -49,7 +49,7 @@ public class GraphBuilderHiddenTest
         {
             File.WriteAllText(Path.Combine(root, "README.md"), "# Home\n");
             File.WriteAllText(Path.Combine(root, "Terms.md"), "*[API]: Application Programming Interface\n");
-            File.WriteAllText(Path.Combine(root, "mdu.yml"), "glossary: Terms.md\n");
+            File.WriteAllText(Path.Combine(root, "mdu.yml"), "content.glossary: Terms.md\n");
 
             var graph = new GraphBuilder(new DataPreparationVisitor(new MarkdownDocumentReader()))
                 .CreateGraph(
@@ -72,7 +72,7 @@ public class GraphBuilderHiddenTest
         try
         {
             File.WriteAllText(Path.Combine(root, "README.md"), "# Home\n");
-            File.WriteAllText(Path.Combine(root, "mdu.yml"), "glossary: [invalid\n");
+            File.WriteAllText(Path.Combine(root, "mdu.yml"), "content.glossary: [invalid\n");
 
             var graph = new GraphBuilder(new DataPreparationVisitor(new MarkdownDocumentReader()))
                 .CreateGraph(new VisitorSettings { RootPath = root, SearchPattern = "*.md", IncludeHidden = true });

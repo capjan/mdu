@@ -15,19 +15,17 @@ The HTML specification is maintained by the W3C.
 *[HTML]: Hyper Text Markup Language
 *[W3C]: World Wide Web Consortium
 ~~~
-
-<div class="result-block">
-<p>The <abbr title="Hyper Text Markup Language">HTML</abbr> specification is maintained by the <abbr title="World Wide Web Consortium">W3C</abbr>.</p>
-</div>
+> [!RESULT]
+> The HTML specification is maintained by the W3C.
 
 Definitions follow Markdig's matching rules. Code remains unchanged. A definition on a page takes precedence over the shared glossary for that page only.
 
 ## Shared glossary
 
-Set `glossary` in `mdu.yml` to a Markdown file path relative to the documentation root:
+Set `content.glossary` in [`mdu.yml`](../Usage/configuration.md) to a Markdown file path relative to the documentation root:
 
 ```yaml title="docs/mdu.yml"
-glossary: includes/abbreviations.md
+content.glossary: includes/abbreviations.md
 ```
 
 Use the same definition syntax in that file:

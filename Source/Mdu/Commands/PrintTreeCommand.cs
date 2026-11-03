@@ -29,6 +29,7 @@ public class PrintTreeCommand
             return 1;
         }
 
+        SiteConfigurationReader.WarnAboutRenamedSettings(rootPath);
         Mdu.Model.MarkdownFile[] graph;
         try
         {

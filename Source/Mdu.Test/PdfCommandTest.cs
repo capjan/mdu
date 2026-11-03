@@ -110,7 +110,7 @@ public class PdfCommandTest
         Directory.CreateDirectory(docsPath);
         File.WriteAllText(Path.Combine(docsPath, "README.md"), "# Manual\n\nPDF output works.");
         if (invalidHtmlAttribution)
-            File.WriteAllText(Path.Combine(docsPath, "mdu.yml"), "attribution: false\n");
+            File.WriteAllText(Path.Combine(docsPath, "mdu.yml"), "site.attribution: false\n");
 
         try
         {

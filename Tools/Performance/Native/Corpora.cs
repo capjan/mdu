@@ -1,26 +1,36 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 
 namespace Mdu.Performance;
 
 internal static class Corpora
 {
+    // Frozen documentation from before the settings were renamed, such as `git archive 611b84a Docs`, must still serve.
+    private static void UpdateFrozenConfiguration(string path)
+    {
+        if (!File.Exists(path)) return;
+        var configuration = File.ReadAllText(path).Replace("site_name:", "site.name:", StringComparison.Ordinal);
+        File.WriteAllText(path, Regex.Replace(configuration, "^(logo|favicon|colors):", "site.$1:", RegexOptions.Multiline));
+    }
+
     internal static JsonObject Generate(Options options)
     {
         var corpora = Path.Combine(options.Work, "corpora");
         if (Directory.Exists(corpora)) Directory.Delete(corpora, recursive: true);
         var small = Path.Combine(corpora, "small");
         Copy(Path.Combine(options.Repo, "Docs/Architecture"), small);
-        Write(Path.Combine(small, "mdu.yml"), "site_name: Baseline\n");
+        Write(Path.Combine(small, "mdu.yml"), "site.name: Baseline\n");
         Fixtures(small);
         var docs = Path.Combine(corpora, "docs");
         Copy(Path.Combine(options.Repo, "Docs"), docs);
+        UpdateFrozenConfiguration(Path.Combine(docs, "mdu.yml"));
         foreach (var file in Directory.EnumerateFiles(docs, "*.md", SearchOption.AllDirectories))
             File.WriteAllText(file, File.ReadAllText(file).Replace("mdu:pdf", "https://example.invalid/pdf-disabled", StringComparison.Ordinal));
         Fixtures(docs);
         var large = Path.Combine(corpora, "large");
-        Write(Path.Combine(large, "mdu.yml"), "site_name: Baseline\n");
+        Write(Path.Combine(large, "mdu.yml"), "site.name: Baseline\n");
         Write(Path.Combine(large, "README.md"), "# Mixed synthetic documentation\n\n" +
             string.Join('\n', Enumerable.Range(0, 10).Select(i => $"[Section {i}](section-{i}/README.md)")));
         for (var group = 0; group < 10; group++)

@@ -134,7 +134,7 @@ public sealed class SearchIndexBuilder
         typeof(HtmlEntityInline), typeof(LineBreakInline), typeof(AutolinkInline), typeof(Table), typeof(TableRow),
         typeof(Markdig.Extensions.Tables.TableCell), typeof(AlertBlock), typeof(KeysInline), typeof(EmojiShortcodeInline), typeof(TaskList),
         typeof(IconInline), typeof(MathInline), typeof(FootnoteLink), typeof(FootnoteGroup), typeof(Footnote),
-        typeof(FootnoteLinkReferenceDefinition), typeof(HeadingLinkReferenceDefinition)
+        typeof(FootnoteLinkReferenceDefinition), typeof(HeadingLinkReferenceDefinition), typeof(ResultBlock)
     ];
 
     private static bool IsSupportedNode(MarkdownObject node) => node is CodeBlock ||
@@ -173,7 +173,7 @@ public sealed class SearchIndexBuilder
         var parts = new List<SearchPart> { new() };
         void Read(MarkdownObject node)
         {
-            if (node is HeadingBlock heading)
+            if (node is HeadingBlock heading && heading.GetAttributes().Id is not null)
             {
                 var text = new StringBuilder();
                 var attributes = heading.GetAttributes();
@@ -189,9 +189,10 @@ public sealed class SearchIndexBuilder
                 if (IsSearchableCodeBlock(code)) AddCode(parts[^1].Code, GetCode(code));
                 parts[^1].Text.Append(' ');
             }
-            else if (node is ParagraphBlock paragraph)
+            else if (node is ParagraphBlock or HeadingBlock)
             {
-                if (paragraph.Inline is not null) ReadInline(paragraph.Inline, parts[^1].Text, parts[^1].Code);
+                // A heading without an id belongs to a result: there is no section to link to, so it reads as text.
+                if (((LeafBlock)node).Inline is { } inline) ReadInline(inline, parts[^1].Text, parts[^1].Code);
                 parts[^1].Text.Append(' ');
             }
             else if (node is ContainerBlock container)
@@ -199,6 +200,10 @@ public sealed class SearchIndexBuilder
                 if (node is AlertBlock alert)
                 {
                     parts[^1].Text.Append(GitHubAlertExtension.GetTitle(alert.Kind.ToString())).Append(' ');
+                }
+                else if (node is ResultBlock)
+                {
+                    parts[^1].Text.Append(ResultBlock.Title).Append(' ');
                 }
                 foreach (var child in container) Read(child);
                 parts[^1].Text.Append(' ');

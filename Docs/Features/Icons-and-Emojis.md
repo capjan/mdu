@@ -103,10 +103,10 @@ docs/
 Built by :acme-logo: on :acme-cloud-server:
 ```
 
-This is the same layout as the custom icons of [Material for MkDocs](https://squidfunk.github.io/mkdocs-material/setup/changing-the-logo-and-icons/#additional-icons), so the shortcodes work there too. To keep the icons in another folder, set it in [`mdu.yml`](../Usage/render.md#site-configuration):
+This is the same layout as the custom icons of [Material for MkDocs](https://squidfunk.github.io/mkdocs-material/setup/changing-the-logo-and-icons/#additional-icons), so the shortcodes work there too. To keep the icons in another folder, set it in [`mdu.yml`](../Usage/configuration.md):
 
 ```yaml title="docs/mdu.yml"
-icons: assets/icons
+content.icons: assets/icons
 ```
 
 Your icons work everywhere the built-in icons do, including dashboards, diagrams, the icon search, and PDF files. `mdu serve` picks up new and changed icons in a folder inside the documentation without a restart.

@@ -111,6 +111,18 @@ public class PdfRendererTest
     }
 
     [Theory]
+    [InlineData(45)]
+    [InlineData(47)]
+    [InlineData(49)]
+    public void KeepsResultTitleAndTextTogether(int fillerLines)
+    {
+        var result = Layout(Filler(fillerLines) + "\n\n> [!RESULT]\n> ResultBody");
+
+        Assert.Equal(PageContaining(result, "Result"), PageContaining(result, "ResultBody"));
+        AssertContentWithinMargins(result);
+    }
+
+    [Theory]
     [InlineData(45, 4)]
     [InlineData(47, 6)]
     [InlineData(49, 3)]

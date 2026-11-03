@@ -21,7 +21,7 @@ public class RenderCommandGlossaryTest
         try
         {
             File.WriteAllText(Path.Combine(root, "README.md"), "# Home\n");
-            File.WriteAllText(Path.Combine(root, "mdu.yml"), "attribution: false\n");
+            File.WriteAllText(Path.Combine(root, "mdu.yml"), "site.attribution: false\n");
             var command = new RenderCommand(
                 new GraphBuilder(new DataPreparationVisitor(new MarkdownDocumentReader())),
                 new CountNodesVisitor<MarkdownFile>(),
@@ -38,7 +38,7 @@ public class RenderCommandGlossaryTest
             });
 
             Assert.Equal(1, result);
-            Assert.Contains("Could not read site configuration or glossary: The 'attribution' setting", errors.ToString());
+            Assert.Contains("Could not read site configuration or glossary: The 'site.attribution' setting", errors.ToString());
             Assert.False(Directory.Exists(Path.Combine(root, "site")));
         }
         finally
@@ -56,7 +56,7 @@ public class RenderCommandGlossaryTest
         var output = Path.Combine(root, "site");
         Directory.CreateDirectory(glossaryDirectory);
         File.WriteAllText(Path.Combine(root, "README.md"), "# Home\n\nAPI\n");
-        File.WriteAllText(Path.Combine(root, "mdu.yml"), "glossary: includes/abbreviations.md\n");
+        File.WriteAllText(Path.Combine(root, "mdu.yml"), "content.glossary: includes/abbreviations.md\n");
         File.WriteAllText(Path.Combine(glossaryDirectory, "abbreviations.md"),
             "*[API]: Application Programming Interface\n");
 

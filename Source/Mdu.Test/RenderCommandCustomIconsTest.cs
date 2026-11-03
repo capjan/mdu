@@ -38,7 +38,7 @@ public sealed class RenderCommandCustomIconsTest : IDisposable
     [Fact]
     public void RendersIconsOfTheConfiguredIconsFolder()
     {
-        WriteFile("mdu.yml", "icons: assets/icons\n");
+        WriteFile("mdu.yml", "content.icons: assets/icons\n");
         WriteFile("assets/icons/acme/logo.svg", """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M1 1h22"/></svg>""");
         WriteFile("README.md", "# Home\n\n:acme-logo:\n");
 
@@ -50,7 +50,7 @@ public sealed class RenderCommandCustomIconsTest : IDisposable
     [Fact]
     public void FailsWhenTheConfiguredIconsFolderIsMissing()
     {
-        WriteFile("mdu.yml", "icons: assets/icons\n");
+        WriteFile("mdu.yml", "content.icons: assets/icons\n");
         WriteFile("README.md", "# Home\n");
 
         Assert.Equal(1, Render());
@@ -76,7 +76,7 @@ public sealed class RenderCommandCustomIconsTest : IDisposable
     [Fact]
     public void ReadsTheIconsSetting()
     {
-        WriteFile("mdu.yml", "icons: assets/icons\n");
+        WriteFile("mdu.yml", "content.icons: assets/icons\n");
 
         var configuration = SiteConfigurationReader.Read(_root);
 

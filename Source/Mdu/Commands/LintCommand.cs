@@ -34,6 +34,7 @@ public class LintCommand
 
         // JSON output must stay a single document.
         if (format != LintFormat.Json) Console.WriteLine("Running Linter");
+        SiteConfigurationReader.WarnAboutRenamedSettings(rootPath);
         Mdu.Model.MarkdownFile[] graph;
         try
         {

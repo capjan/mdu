@@ -52,7 +52,7 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException or YamlException)
         {
-            Console.Error.WriteLine($"Could not load the custom icons: {exception.Message}");
+            Console.Error.WriteLine($"Could not read the site configuration or custom icons: {exception.Message}");
             return 1;
         }
         MarkdownFile[] graph;

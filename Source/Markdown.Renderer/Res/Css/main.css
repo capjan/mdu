@@ -1811,6 +1811,19 @@ blockquote {
     color: var(--alert-accent);
 }
 
+/* Links take the color of their callout. The tinted underline tells them from inline code and body text. A link with a class styles itself. */
+.markdown-alert a:not(:where([class], .diagram a)) {
+    color: var(--alert-accent);
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, var(--alert-accent) 40%, transparent);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.18em;
+}
+
+.markdown-alert a:not(:where([class], .diagram a)):hover {
+    text-decoration-color: currentColor;
+}
+
 .markdown-alert > :last-child {
     margin-bottom: 0;
 }
@@ -2292,33 +2305,65 @@ pre code {
     text-align: center;
 }
 
-.code-block-titled + .diagram,
-.code-block-titled + .result-block {
-    padding: 0.75rem 1.25rem;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: var(--surface-code-block);
-    --diagram-surface: var(--surface-code-block);
+/* A code block and its result are one card: same border, same caption bar, and the result on the page background. */
+.code-block:has(+ .result-block),
+.code-block-titled:has(+ .diagram) {
+    margin-bottom: 0;
+    border-bottom: 0;
+    border-bottom-right-radius: 0;
+    border-bottom-left-radius: 0;
 }
 
-.code-block-titled + .diagram::before,
-.code-block-titled + .result-block::before {
+.result-block,
+.code-block-titled + .diagram {
+    padding: 0 1.25rem 0.85rem;
+    border: 1px solid var(--code-block-border);
+    border-radius: 8px;
+    background: var(--page-background);
+    --diagram-surface: var(--page-background);
+}
+
+.code-block + .result-block,
+.code-block-titled + .diagram {
+    margin-top: 0;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+}
+
+.result-block > .result-block-title,
+.code-block-titled + .diagram::before {
     display: block;
-    margin-bottom: 0.5rem;
+    margin: 0 -1.25rem 0.85rem;
+    padding: 0.5rem 1.25rem;
+    border-bottom: 1px solid var(--code-block-border);
+    border-radius: 7px 7px 0 0;
+    background: var(--surface-code-block);
     color: var(--text-secondary);
-    content: "Result";
     font-size: 0.75rem;
     font-weight: 500;
     line-height: 1.5;
     text-align: left;
 }
 
-.result-block > :first-child {
-    margin-top: 0;
+.code-block-titled + .diagram::before {
+    content: "Result";
+}
+
+.code-block + .result-block > .result-block-title,
+.code-block-titled + .diagram::before {
+    border-radius: 0;
 }
 
 .result-block > :last-child {
     margin-bottom: 0;
+}
+
+/* Command output fills the card instead of nesting a second box in it. */
+.result-block > .result-block-title + .code-block:last-child {
+    margin: -0.85rem -1.25rem;
+    border: 0;
+    border-radius: 0 0 7px 7px;
+    background: transparent;
 }
 
 .diagram svg {

@@ -84,7 +84,7 @@ public class LinterVisitorTest
                 var warning = Assert.Single(warnings);
                 Assert.Equal(3, warning.LineNumber);
                 Assert.Equal(RuleCodes.DiagramTooLarge, CodeOf(warning));
-                Assert.Contains("2001 links, over the limit of 2000 (diagrams.maxLinks)", warning.Message);
+                Assert.Contains("2001 links, over the limit of 2000 (diagrams.limits.links)", warning.Message);
             });
     }
 

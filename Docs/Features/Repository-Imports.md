@@ -25,7 +25,7 @@ Edit links on imported pages point to the matching file in the source repository
 
 ## Abbreviations in imported documentation
 
-If the imported folder has an `mdu.yml` with a [`glossary`](Abbreviations.md#shared-glossary), MDU treats that file as the glossary of the import, not as a page. Its definitions apply to the imported pages. The glossary of the importing site still applies there, and on a conflict the imported definition wins:
+If the imported folder has an `mdu.yml` with a [`content.glossary`](Abbreviations.md#shared-glossary), MDU treats that file as the glossary of the import, not as a page. Its definitions apply to the imported pages. The glossary of the importing site still applies there, and on a conflict the imported definition wins:
 
 | Abbreviation | Site glossary | Imported glossary | Meaning on imported pages |
 | --- | --- | --- | --- |
@@ -35,7 +35,7 @@ If the imported folder has an `mdu.yml` with a [`glossary`](Abbreviations.md#sha
 
 Pages outside the import, including local pages placed below it and other imports, do not see the imported definitions. Definitions on a page still take precedence over both glossaries. An imported folder without a glossary uses the site glossary.
 
-The glossary must be a file inside the imported repository; it may lie outside the imported folder. `mdu render` and `mdu serve` stop when the glossary of an import is missing, outside the repository, or has no definitions. Other commands then treat the import as having no glossary.
+The glossary must be a file inside the imported repository; it may lie outside the imported folder. `mdu render` and `mdu serve` stop when the glossary of an import is missing, outside the repository, has no definitions, or is still set with the old `glossary` name. Other commands then treat the import as having no glossary.
 
 ## Requirements
 

@@ -44,10 +44,16 @@ flowchart LR
 
 A lint error names the file, line, rule, and problem:
 
-```text
-/project/docs/Overview.md:7: MDU004 LocalLinkExists: Local link target './intro.md' does not exist.
-Linter detected 1 error.
+```bash
+mdu lint
 ```
+> [!RESULT]
+> ```text
+> /project/docs/Overview.md:7: MDU004 LocalLinkExists: Local link target './intro.md' does not exist.
+> Linter detected 1 error.
+> ```
+
+Once the pages stand, give the site your name, logo, and colors with an optional [`mdu.yml`](configuration.md).
 
 ## Commands
 
