@@ -10,7 +10,7 @@ navigation.order: 3
 mdu render
 ```
 
-By default, MDU reads the only `docs` folder and writes to `site`. To use different folders, pass the input and output paths after `render`, for example `mdu render ./content ./public/docs`. The generated site consists of static HTML, CSS, and JavaScript that you can host on any web server or CDN.
+By default, MDU reads the only `docs` folder and writes to `site`. To use different folders, pass the input and output paths after `render`, for example `mdu render ./content ./public/docs`. The generated site consists of static HTML, CSS, and JavaScript that you can host on any web server or CDN. MDU does not check external links; build separately generated sites with their own generator and verify the assembled publication before deployment.
 
 If the sources are on GitHub or GitLab, pass the edit URL of your docs folder with `--editPageRoot`. Every page then gets an edit link, and the header shows a [repository button](../Usage/render.md#repository-button):
 
