@@ -15,6 +15,7 @@
         <AssemblyName>mdu</AssemblyName>
         <Authors>Jan Ruhlaender</Authors>
         <Description>MDU (Markdown Documentation Utility) for linting and rendering Markdown documentation</Description>
+        <PackageIcon>mdu-nuget-icon.png</PackageIcon>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <RepositoryUrl>https://github.com/capjan/mdu</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
@@ -29,6 +30,7 @@
 
     <ItemGroup>
         <None Include="PACKAGE.md" Pack="true" PackagePath="\README.md" />
+        <None Include="Assets\mdu-nuget-icon.png" Pack="true" PackagePath="\" />
         <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
         <None Include="..\StaticCode.Icons\THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="\" />
         <None Include="..\StaticCode.Icons\Res\dashboard-icons.LICENSE" Pack="true" PackagePath="licenses" />
