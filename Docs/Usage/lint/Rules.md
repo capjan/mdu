@@ -91,8 +91,6 @@ A same-page link may differ from a heading id in letter case only; MDU points it
 
 Fix the fragment, or add an explicit id to the heading when existing links must keep their spelling.
 
-If the target page cannot be rendered to collect its anchors, MDU skips its fragment check without reporting an `MDU022` diagnostic. A successful lint run therefore does not prove that every fragment was checked. External URLs are not fetched, and fragments in separately generated HTML sites need a check of the assembled publication.
-
 ## Informational output
 
 The linter also lists pages marked `navigation.visible: false` that no visible page links to. These orphaned pages are informational; they do not have a rule code and do not affect the exit code.

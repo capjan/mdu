@@ -34,20 +34,6 @@ mdu render ./ProjectDocs ./public/docs
 mdu render ./docs ./site --pattern "*.markdown" --editPageRoot "https://github.com/example/project/edit/main/docs"
 ```
 
-## Local assets and raw HTML
-
-MDU copies linked local files inside the documentation root and preserves their relative paths. It also reads quoted `src`, `href`, and `poster` attributes from raw HTML, such as an embedded demo:
-
-```html title="Raw HTML in a Markdown page"
-<iframe src="assets/demo/index.html" title="Interactive demo"></iframe>
-```
-
-For a page at `docs/Guide.md`, put the demo at `docs/assets/demo/index.html`. Rendering produces `site/Guide.html` and `site/assets/demo/index.html`, so the same relative URL works in both locations. Raw HTML URLs are not rewritten: `../assets/demo/index.html` would point one directory higher. Check these paths when moving from a generator that publishes `Guide.md` at `Guide/index.html`. MDU writes `README.md` as `index.html` in the same directory.
-
-When a linked `.html` or `.htm` file refers to more local files through these attributes, MDU follows those references too. This includes scripts, stylesheets and images directly referenced by the HTML. HTML comments and HTML examples inside Markdown code are ignored. External URLs are not downloaded.
-
-This copying does not discover CSS `url()`/`@import`, JavaScript module imports, or URLs constructed at runtime. Files that are not reached through supported links are not copied. For a complete site built by another generator, see [Publishing independently generated sites](../Publish/Custom.md#publishing-independently-generated-sites).
-
 ## Site configuration
 
 An optional `mdu.yml` in the documentation folder sets the site name, light and dark logos, theme colors, and an optional shared glossary. If no favicon files are specified, MDU uses the light and dark logo files as favicons. MDU copies the referenced files into the output folder. A square logo mark is most legible in a browser tab; MDU uses the logo file as-is. See [Abbreviations](../Features/Abbreviations.md) for local and shared glossary definitions.
