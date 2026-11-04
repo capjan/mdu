@@ -544,6 +544,7 @@ public sealed class ServeCommand
             .Where(change => change.Kind == FileChangeKind.Rescan ||
                              !IsGeneratedOutputPath(change.Path) &&
                              (change.OldPath is null || !IsGeneratedOutputPath(change.OldPath)))
+            .Where(change => !IsCopyOfAssetCurrent(change))
             .ToArray();
         if (relevantChanges.Length == 0) return;
 
@@ -790,6 +791,33 @@ public sealed class ServeCommand
     private static bool IsDirectoryChange(FileChange change) =>
         Directory.Exists(change.Path) ||
         change.OldPath is not null && !Path.HasExtension(change.Path) && !Path.HasExtension(change.OldPath);
+
+    // On macOS, File.Copy clones the file, and a clone of a recently written source reports a change of that source.
+    // Copying the asset again in response would report the next change, so such an event must not cause another copy.
+    private bool IsCopyOfAssetCurrent(FileChange change)
+    {
+        if (change.Kind is not (FileChangeKind.Changed or FileChangeKind.Created) || _pages.ContainsKey(change.Path))
+            return false;
+
+        var outputs = new List<string>();
+        if (_configurationAssets.Contains(change.Path)) outputs.Add(GetAssetOutputPath(change.Path));
+        if (_pagesByAsset.TryGetValue(change.Path, out var dependentPages))
+        {
+            foreach (var pagePath in dependentPages)
+            {
+                if (!_pages.TryGetValue(pagePath, out var page)) continue;
+                if (GetAssetOutputPath(page, change.Path) is { } output) outputs.Add(output);
+            }
+        }
+        if (outputs.Count == 0) return false;
+
+        var source = new FileInfo(change.Path);
+        return source.Exists && outputs.All(output => HasSameLengthAndWriteTime(source, new FileInfo(output)));
+    }
+
+    // File.Copy keeps the write time of the source.
+    private static bool HasSameLengthAndWriteTime(FileInfo source, FileInfo copy) =>
+        copy.Exists && copy.Length == source.Length && copy.LastWriteTimeUtc == source.LastWriteTimeUtc;
 
     private void CopyOrRemoveAsset(MarkdownFile page, string assetPath)
     {
