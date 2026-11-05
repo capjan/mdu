@@ -338,6 +338,8 @@
         const states = images.map((image) => [image, Boolean(viewerImage(image))]);
         for (const [image, opens] of states) showOpens(image, opens);
     };
+    new MutationObserver(() => refresh([...content.querySelectorAll("img")]))
+        .observe(document.documentElement, { attributes: true, attributeFilter: ["data-color-scheme"] });
     // A change of the shown size, such as in a narrower window or an opened section, can change the answer.
     const sizes = new ResizeObserver((entries) => refresh(entries.map((entry) => entry.target)));
     for (const image of content.querySelectorAll("img")) {

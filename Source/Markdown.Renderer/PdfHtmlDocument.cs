@@ -9,6 +9,7 @@ internal static class PdfHtmlDocument
 {
     private static readonly string[] LightImageThemeMarkers = ["#only-light", "#gh-light-mode-only"];
     private static readonly string[] DarkImageThemeMarkers = ["#only-dark", "#gh-dark-mode-only"];
+    private static readonly string[] ImageThemeMarkers = [.. LightImageThemeMarkers, .. DarkImageThemeMarkers];
 
     internal static XmlDocument Parse(string html)
     {
@@ -30,21 +31,22 @@ internal static class PdfHtmlDocument
             if (node is not IElement element) continue;
             if (element.LocalName == "img" && element.GetAttribute("src") is { } originalSource)
             {
+                var paragraph = FindAncestor(element, "p");
                 if (TryRemoveImageThemeMarker(originalSource, DarkImageThemeMarkers, out var source))
                 {
                     var link = element.ParentElement is { LocalName: "a" } parentLink ? parentLink : null;
-                    if (link?.GetAttribute("href") == originalSource) link.SetAttribute("href", source!);
+                    RemoveImageThemeMarkerFromLink(link);
                     element.Remove();
                     if (link is not null && link.Children.Length == 0 && string.IsNullOrWhiteSpace(link.TextContent))
                         link.Remove();
+                    RemoveEmptyParagraph(paragraph);
                     continue;
                 }
 
                 if (TryRemoveImageThemeMarker(originalSource, LightImageThemeMarkers, out source))
                 {
                     element.SetAttribute("src", source!);
-                    if (element.ParentElement is { LocalName: "a" } link && link.GetAttribute("href") == originalSource)
-                        link.SetAttribute("href", source!);
+                    RemoveImageThemeMarkerFromLink(element.ParentElement is { LocalName: "a" } link ? link : null);
                 }
             }
 
@@ -52,11 +54,30 @@ internal static class PdfHtmlDocument
         }
     }
 
-    private static bool TryRemoveImageThemeMarker(string source, string[] markers, out string? cleanSource)
+    private static void RemoveImageThemeMarkerFromLink(IElement? link)
+    {
+        if (link?.GetAttribute("href") is { } href && TryRemoveImageThemeMarker(href, ImageThemeMarkers, out var source))
+            link.SetAttribute("href", source!);
+    }
+
+    private static IElement? FindAncestor(IElement element, string localName)
+    {
+        for (var ancestor = element.ParentElement; ancestor is not null; ancestor = ancestor.ParentElement)
+            if (ancestor.LocalName == localName) return ancestor;
+        return null;
+    }
+
+    private static void RemoveEmptyParagraph(IElement? paragraph)
+    {
+        if (paragraph is { Children.Length: 0 } && string.IsNullOrWhiteSpace(paragraph.TextContent))
+            paragraph.Remove();
+    }
+
+    private static bool TryRemoveImageThemeMarker(string? source, string[] markers, out string? cleanSource)
     {
         foreach (var marker in markers)
         {
-            if (!source.EndsWith(marker, StringComparison.Ordinal)) continue;
+            if (source?.EndsWith(marker, StringComparison.Ordinal) != true) continue;
             cleanSource = source[..^marker.Length];
             return true;
         }

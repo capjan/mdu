@@ -25,18 +25,25 @@ public class ThemeImageTest
     {
         var css = Resources.CssContent();
 
-        Assert.Contains(":root[data-theme=\"light\"]", css);
-        Assert.Contains(":root[data-theme=\"dark\"]", css);
+        Assert.Contains(":root[data-color-scheme=\"light\"]", css);
+        Assert.Contains(":root[data-color-scheme=\"dark\"]", css);
         Assert.Contains(":root[data-theme=\"auto\"]", css);
-        Assert.Contains("@media (prefers-color-scheme: light)", css);
         Assert.Contains("@media (prefers-color-scheme: dark)", css);
         Assert.DoesNotContain("display: initial", css);
         foreach (var marker in new[] { "only-light", "only-dark", "gh-light-mode-only", "gh-dark-mode-only" })
-        {
             Assert.Contains($"img[src$=\"#{marker}\"]", css);
-            Assert.Contains($"a:has(> img[src$=\"#{marker}\"])", css);
-            Assert.Contains($".dashboard-icon:has(> img[src$=\"#{marker}\"])", css);
-        }
+        Assert.Contains(":is(a, .dashboard-icon):has(> img[src$=\"#only-light\"], > img[src$=\"#gh-light-mode-only\"])", css);
+        Assert.Contains(":is(a, .dashboard-icon):has(> img[src$=\"#only-dark\"], > img[src$=\"#gh-dark-mode-only\"])", css);
+    }
+
+    [Fact]
+    public void ResolvesTheSystemColorSchemeForImageVariants()
+    {
+        var html = Resources.HtmlTemplateContent();
+
+        Assert.Contains("const systemTheme = matchMedia(\"(prefers-color-scheme: dark)\")", html);
+        Assert.Contains("root.dataset.colorScheme", html);
+        Assert.Contains("systemTheme.addEventListener(\"change\", updateColorScheme)", html);
     }
 
     [Fact]
@@ -48,12 +55,14 @@ public class ThemeImageTest
             ![GitHub light logo](github-light.svg#gh-light-mode-only)
             ![GitHub dark logo](github-dark.svg#gh-dark-mode-only)
             ![Regular logo](regular.svg)
+            [![Light link logo](logo.png#only-light)](logo-large.png#only-light)
             """);
         var document = PdfHtmlDocument.Parse(html);
         var sources = document.SelectNodes("//img")!.Cast<System.Xml.XmlElement>()
             .Select(image => image.GetAttribute("src"));
 
-        Assert.Equal(["light.svg", "github-light.svg", "regular.svg"], sources);
+        Assert.Equal(["light.svg", "github-light.svg", "regular.svg", "logo.png"], sources);
+        Assert.Single(document.SelectNodes("//a[@href='logo-large.png']")!);
     }
 
     [Fact]
@@ -74,5 +83,15 @@ public class ThemeImageTest
         Assert.Equal(["raw-light.svg"], sources);
         Assert.Empty(document.SelectNodes("//a[@href='https://example.com']")!);
         Assert.Empty(document.SelectNodes("//a[@href='raw-dark.svg#gh-dark-mode-only']")!);
+    }
+
+    [Fact]
+    public void PdfRemovesParagraphsThatOnlyContainedDarkImages()
+    {
+        var html = new HtmlRenderer().RenderPdfMarkdownFragment("![Dark logo](dark.svg#only-dark)");
+
+        var document = PdfHtmlDocument.Parse(html);
+
+        Assert.Empty(document.SelectNodes("//p")!);
     }
 }
