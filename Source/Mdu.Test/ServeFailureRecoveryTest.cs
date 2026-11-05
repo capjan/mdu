@@ -162,9 +162,40 @@ public class ServeFailureRecoveryTest
         Assert.Equal("image-version-3", File.ReadAllText(imageCopy));
         Assert.True(preview.Revision > revision);
 
+        // A second save in the same timestamp tick keeps the length and write time, but not the content.
+        var copiedAt = File.GetLastWriteTimeUtc(imageCopy);
+        preview.Write("image.svg", "image-version-4");
+        File.SetLastWriteTimeUtc(Path.Combine(preview.Docs, "image.svg"), copiedAt);
+        preview.ProcessBatch("image.svg");
+        Assert.Equal("image-version-4", File.ReadAllText(imageCopy));
+
         preview.Write("logo.svg", "logo-version-2");
         preview.ProcessBatch("logo.svg");
         Assert.Equal("logo-version-2", File.ReadAllText(logoCopy));
+    }
+
+    [Fact]
+    public async Task SpecificationEventsUpdateThePageEvenWhenTheirCopyIsCurrent()
+    {
+        static string Specification(string title) =>
+            "{\"openapi\":\"3.1.0\",\"info\":{\"title\":\"" + title + "\",\"version\":\"1\"},\"paths\":{}}";
+        await using var preview = new Preview(new()
+        {
+            ["README.md"] = "# Orders\n\n[Download](orders.json)\n\n```openapi\norders.json\n```",
+            ["orders.json"] = Specification("Orders One")
+        });
+        preview.StartProcessing();
+        await preview.WaitFor(async () => (await preview.Status()).Contains("\"building\":false"));
+        bool Shows(string text) => Directory.EnumerateFiles(preview.Site, "*.html", SearchOption.AllDirectories)
+            .Any(file => File.ReadAllText(file).Contains(text));
+        Assert.True(Shows("Orders One"));
+
+        // A later save can reach the copy before its own event arrives; the page must still render it.
+        preview.Write("orders.json", Specification("Orders Two"));
+        File.Copy(Path.Combine(preview.Docs, "orders.json"), Path.Combine(preview.Site, "orders.json"), true);
+        preview.ProcessBatch("orders.json");
+        await preview.WaitFor(async () => (await preview.Status()).Contains("\"building\":false"));
+        Assert.True(Shows("Orders Two"));
     }
 
     private static string Hex(string value) => Convert.ToHexString(System.Text.Encoding.ASCII.GetBytes(value));

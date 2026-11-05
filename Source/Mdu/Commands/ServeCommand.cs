@@ -794,9 +794,10 @@ public sealed class ServeCommand
 
     // On macOS, File.Copy clones the file, and a clone of a recently written source reports a change of that source.
     // Copying the asset again in response would report the next change, so such an event must not cause another copy.
+    // A file with another role, such as a specification that a page renders, keeps its event even when its copy is current.
     private bool IsCopyOfAssetCurrent(FileChange change)
     {
-        if (change.Kind is not (FileChangeKind.Changed or FileChangeKind.Created) || _pages.ContainsKey(change.Path))
+        if (change.Kind is not (FileChangeKind.Changed or FileChangeKind.Created) || HasRoleBesidesAsset(change))
             return false;
 
         var outputs = new List<string>();
@@ -811,13 +812,45 @@ public sealed class ServeCommand
         }
         if (outputs.Count == 0) return false;
 
-        var source = new FileInfo(change.Path);
-        return source.Exists && outputs.All(output => HasSameLengthAndWriteTime(source, new FileInfo(output)));
+        return outputs.All(output => HasSameContent(change.Path, output));
     }
 
-    // File.Copy keeps the write time of the source.
-    private static bool HasSameLengthAndWriteTime(FileInfo source, FileInfo copy) =>
-        copy.Exists && copy.Length == source.Length && copy.LastWriteTimeUtc == source.LastWriteTimeUtc;
+    private bool HasRoleBesidesAsset(FileChange change) =>
+        _pages.ContainsKey(change.Path) ||
+        PathComparer.Equals(change.Path, Path.Combine(_rootPath, "mdu.yml")) ||
+        _glossaryPath is not null && IsGlossaryPathChange(change, _glossaryPath) ||
+        IsIconsChange(change.Path, Path.Combine(_rootPath, SiteConfigurationReader.DefaultIconsFolder)) ||
+        _openApiSpecsByPage.Values.Any(specifications => specifications.Contains(change.Path, PathComparer)) ||
+        _pages.Values.Any(page => page.ImportMarkerPath is not null &&
+                                  PathComparer.Equals(Path.GetFullPath(page.ImportMarkerPath), change.Path));
+
+    // Timestamps can be too coarse to tell two saves apart, so only the content decides.
+    private static bool HasSameContent(string sourcePath, string copyPath)
+    {
+        try
+        {
+            var source = new FileInfo(sourcePath);
+            var copy = new FileInfo(copyPath);
+            if (!source.Exists || !copy.Exists || source.Length != copy.Length) return false;
+
+            using var sourceStream = source.OpenRead();
+            using var copyStream = copy.OpenRead();
+            var sourceBuffer = new byte[81920];
+            var copyBuffer = new byte[sourceBuffer.Length];
+            while (true)
+            {
+                var read = sourceStream.ReadAtLeast(sourceBuffer, sourceBuffer.Length, throwOnEndOfStream: false);
+                if (copyStream.ReadAtLeast(copyBuffer, read, throwOnEndOfStream: false) != read) return false;
+                if (read == 0) return true;
+                if (!sourceBuffer.AsSpan(0, read).SequenceEqual(copyBuffer.AsSpan(0, read))) return false;
+            }
+        }
+        catch (IOException)
+        {
+            // A file that is still being written counts as changed.
+            return false;
+        }
+    }
 
     private void CopyOrRemoveAsset(MarkdownFile page, string assetPath)
     {
