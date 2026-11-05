@@ -120,6 +120,84 @@ public class ServeFailureRecoveryTest
         Assert.Contains("href=\"index-orders-spec-2.html\"", await preview.Client.GetStringAsync("index-orders.html"));
     }
 
+    [Fact]
+    public async Task AssetEventsWithoutAChangeNeitherCopyNorReload()
+    {
+        await using var preview = new Preview(new()
+        {
+            ["README.md"] = "# Home\n\n![Image](image.svg)",
+            ["image.svg"] = "image-v1",
+            ["logo.svg"] = "logo-v1",
+            ["mdu.yml"] = "site:\n  logo: logo.svg\n"
+        });
+        preview.StartProcessing();
+        await preview.WaitFor(async () => (await preview.Status()).Contains("\"building\":false"));
+        var imageCopy = Path.Combine(preview.Site, "image.svg");
+        var logoCopy = Path.Combine(preview.Site, "logo.svg");
+        Assert.Equal("image-v1", File.ReadAllText(imageCopy));
+        Assert.Equal("logo-v1", File.ReadAllText(logoCopy));
+
+        // Copying a recently written asset reports a change of its source on macOS, which must not start another copy.
+        var revision = preview.Revision;
+        var imageCopied = File.GetCreationTimeUtc(imageCopy);
+        var html = File.GetLastWriteTimeUtc(Path.Combine(preview.Site, "index.html"));
+        preview.ProcessBatch("image.svg", "logo.svg");
+        Assert.Equal(revision, preview.Revision);
+        Assert.Equal(imageCopied, File.GetCreationTimeUtc(imageCopy));
+        Assert.Equal(html, File.GetLastWriteTimeUtc(Path.Combine(preview.Site, "index.html")));
+
+        preview.Write("image.svg", "image-version-2");
+        preview.ProcessBatch("image.svg");
+        Assert.Equal("image-version-2", File.ReadAllText(imageCopy));
+        Assert.True(preview.Revision > revision);
+
+        revision = preview.Revision;
+        preview.ProcessBatch("image.svg");
+        Assert.Equal(revision, preview.Revision);
+
+        // Restoring an older file of the same length is a change, too.
+        preview.Write("image.svg", "image-version-3");
+        File.SetLastWriteTimeUtc(Path.Combine(preview.Docs, "image.svg"), DateTime.UtcNow.AddDays(-1));
+        preview.ProcessBatch("image.svg");
+        Assert.Equal("image-version-3", File.ReadAllText(imageCopy));
+        Assert.True(preview.Revision > revision);
+
+        // A second save in the same timestamp tick keeps the length and write time, but not the content.
+        var copiedAt = File.GetLastWriteTimeUtc(imageCopy);
+        preview.Write("image.svg", "image-version-4");
+        File.SetLastWriteTimeUtc(Path.Combine(preview.Docs, "image.svg"), copiedAt);
+        preview.ProcessBatch("image.svg");
+        Assert.Equal("image-version-4", File.ReadAllText(imageCopy));
+
+        preview.Write("logo.svg", "logo-version-2");
+        preview.ProcessBatch("logo.svg");
+        Assert.Equal("logo-version-2", File.ReadAllText(logoCopy));
+    }
+
+    [Fact]
+    public async Task SpecificationEventsUpdateThePageEvenWhenTheirCopyIsCurrent()
+    {
+        static string Specification(string title) =>
+            "{\"openapi\":\"3.1.0\",\"info\":{\"title\":\"" + title + "\",\"version\":\"1\"},\"paths\":{}}";
+        await using var preview = new Preview(new()
+        {
+            ["README.md"] = "# Orders\n\n[Download](orders.json)\n\n```openapi\norders.json\n```",
+            ["orders.json"] = Specification("Orders One")
+        });
+        preview.StartProcessing();
+        await preview.WaitFor(async () => (await preview.Status()).Contains("\"building\":false"));
+        bool Shows(string text) => Directory.EnumerateFiles(preview.Site, "*.html", SearchOption.AllDirectories)
+            .Any(file => File.ReadAllText(file).Contains(text));
+        Assert.True(Shows("Orders One"));
+
+        // A later save can reach the copy before its own event arrives; the page must still render it.
+        preview.Write("orders.json", Specification("Orders Two"));
+        File.Copy(Path.Combine(preview.Docs, "orders.json"), Path.Combine(preview.Site, "orders.json"), true);
+        preview.ProcessBatch("orders.json");
+        await preview.WaitFor(async () => (await preview.Status()).Contains("\"building\":false"));
+        Assert.True(Shows("Orders Two"));
+    }
+
     private static string Hex(string value) => Convert.ToHexString(System.Text.Encoding.ASCII.GetBytes(value));
 
     // Control the real watcher channel directly so both edits enter one batch without filesystem timing assumptions.
@@ -171,6 +249,7 @@ public class ServeFailureRecoveryTest
 
         public void Write(string path, string content) => File.WriteAllText(Path.Combine(Docs, path), content);
         public Task<string> Status() => Client.GetStringAsync("__mdu/status");
+        public long Revision => (long)typeof(PreviewServer).GetField("_revision", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(_server)!;
         public void StartProcessing() => _processing = (Task)Invoke("ProcessChangesAsync", _reader, _server, _stop.Token)!;
         public void Change(params string[] paths)
         {
