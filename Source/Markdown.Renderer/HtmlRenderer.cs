@@ -18,8 +18,6 @@ namespace Markdown.Renderer;
 
 public partial class HtmlRenderer
 {
-    private static readonly string[] LightImageThemeMarkers = ["#only-light", "#gh-light-mode-only"];
-    private static readonly string[] DarkImageThemeMarkers = ["#only-dark", "#gh-dark-mode-only"];
     private static readonly Regex TemplateTokenRegex = TemplateTokenRegexPattern();
 
     [GeneratedRegex(@"%%(?<name>[A-Z_]+)%%", RegexOptions.Compiled)]
@@ -254,45 +252,12 @@ public partial class HtmlRenderer
 
     public string RenderMarkdownFragment(string markdown) => RenderFragment(ParseMarkdown(markdown));
 
-    /// <summary>Renders PDF content without hidden regions or dark image variants.</summary>
+    /// <summary>Renders PDF content without regions excluded from PDF output.</summary>
     internal string RenderPdfMarkdownFragment(string markdown)
     {
         var document = ParseMarkdown(markdown);
         PdfHiddenContent.Remove(document);
-        PreparePdfImageVariants(document);
         return RenderFragment(document);
-    }
-
-    private static void PreparePdfImageVariants(MarkdownDocument document)
-    {
-        foreach (var image in document.Descendants<LinkInline>().Where(link => link.IsImage).ToArray())
-        {
-            if (TryRemoveImageThemeMarker(image.Url, DarkImageThemeMarkers, out _))
-            {
-                image.Remove();
-                continue;
-            }
-
-            if (!TryRemoveImageThemeMarker(image.Url, LightImageThemeMarkers, out var source)) continue;
-            var originalSource = image.Url;
-            image.Url = source;
-            if (image.Parent is LinkInline { IsImage: false } link &&
-                string.Equals(link.Url, originalSource, StringComparison.Ordinal))
-                link.Url = source;
-        }
-    }
-
-    private static bool TryRemoveImageThemeMarker(string? url, string[] markers, out string? source)
-    {
-        foreach (var marker in markers)
-        {
-            if (url?.EndsWith(marker, StringComparison.Ordinal) != true) continue;
-            source = url[..^marker.Length];
-            return true;
-        }
-
-        source = url;
-        return false;
     }
 
     /// <summary>Returns whether the first level-one heading, which usually provides the page title, is hidden in PDF output.</summary>

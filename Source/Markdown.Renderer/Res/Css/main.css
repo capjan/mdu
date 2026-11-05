@@ -2891,13 +2891,9 @@ img {
     img[src$="#only-dark"],
     img[src$="#gh-dark-mode-only"],
     a:has(> img[src$="#only-dark"]),
-    a:has(> img[src$="#gh-dark-mode-only"])
-),
-:root[data-theme="auto"] .markdown-content :is(
-    img[src$="#only-dark"],
-    img[src$="#gh-dark-mode-only"],
-    a:has(> img[src$="#only-dark"]),
-    a:has(> img[src$="#gh-dark-mode-only"])
+    a:has(> img[src$="#gh-dark-mode-only"]),
+    .dashboard-icon:has(> img[src$="#only-dark"]),
+    .dashboard-icon:has(> img[src$="#gh-dark-mode-only"])
 ) {
     display: none;
 }
@@ -2906,9 +2902,24 @@ img {
     img[src$="#only-light"],
     img[src$="#gh-light-mode-only"],
     a:has(> img[src$="#only-light"]),
-    a:has(> img[src$="#gh-light-mode-only"])
+    a:has(> img[src$="#gh-light-mode-only"]),
+    .dashboard-icon:has(> img[src$="#only-light"]),
+    .dashboard-icon:has(> img[src$="#gh-light-mode-only"])
 ) {
     display: none;
+}
+
+@media (prefers-color-scheme: light) {
+    :root[data-theme="auto"] .markdown-content :is(
+        img[src$="#only-dark"],
+        img[src$="#gh-dark-mode-only"],
+        a:has(> img[src$="#only-dark"]),
+        a:has(> img[src$="#gh-dark-mode-only"]),
+        .dashboard-icon:has(> img[src$="#only-dark"]),
+        .dashboard-icon:has(> img[src$="#gh-dark-mode-only"])
+    ) {
+        display: none;
+    }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -2916,18 +2927,11 @@ img {
         img[src$="#only-light"],
         img[src$="#gh-light-mode-only"],
         a:has(> img[src$="#only-light"]),
-        a:has(> img[src$="#gh-light-mode-only"])
+        a:has(> img[src$="#gh-light-mode-only"]),
+        .dashboard-icon:has(> img[src$="#only-light"]),
+        .dashboard-icon:has(> img[src$="#gh-light-mode-only"])
     ) {
         display: none;
-    }
-
-    :root[data-theme="auto"] .markdown-content :is(
-        img[src$="#only-dark"],
-        img[src$="#gh-dark-mode-only"],
-        a:has(> img[src$="#only-dark"]),
-        a:has(> img[src$="#gh-dark-mode-only"])
-    ) {
-        display: initial;
     }
 }
 

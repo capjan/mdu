@@ -14,6 +14,7 @@
     // `images.zoom: false` in the front matter; the closest class on an image or around it wins.
     const pageZoom = document.currentScript?.dataset.imageZoom !== "off";
     const allowsZoom = (image) => {
+        if (image.getClientRects().length === 0) return false;
         const setting = image.closest(".image-zoom-on, .image-zoom-off");
         return setting ? setting.matches(".image-zoom-on") : pageZoom && canGrow(image);
     };

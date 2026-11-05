@@ -111,6 +111,12 @@ public class ImageLightboxTest
     }
 
     [Fact]
+    public void DoesNotOfferTheViewerForHiddenImages()
+    {
+        Assert.Contains("image.getClientRects().length === 0", Resources.ImageLightboxScriptContent());
+    }
+
+    [Fact]
     public void UsesTheSharedFocusRuleForViewerButtons()
     {
         var css = Resources.CssContent();

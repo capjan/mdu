@@ -28,11 +28,14 @@ public class ThemeImageTest
         Assert.Contains(":root[data-theme=\"light\"]", css);
         Assert.Contains(":root[data-theme=\"dark\"]", css);
         Assert.Contains(":root[data-theme=\"auto\"]", css);
+        Assert.Contains("@media (prefers-color-scheme: light)", css);
         Assert.Contains("@media (prefers-color-scheme: dark)", css);
+        Assert.DoesNotContain("display: initial", css);
         foreach (var marker in new[] { "only-light", "only-dark", "gh-light-mode-only", "gh-dark-mode-only" })
         {
             Assert.Contains($"img[src$=\"#{marker}\"]", css);
             Assert.Contains($"a:has(> img[src$=\"#{marker}\"])", css);
+            Assert.Contains($".dashboard-icon:has(> img[src$=\"#{marker}\"])", css);
         }
     }
 
@@ -46,13 +49,30 @@ public class ThemeImageTest
             ![GitHub dark logo](github-dark.svg#gh-dark-mode-only)
             ![Regular logo](regular.svg)
             """);
+        var document = PdfHtmlDocument.Parse(html);
+        var sources = document.SelectNodes("//img")!.Cast<System.Xml.XmlElement>()
+            .Select(image => image.GetAttribute("src"));
 
-        Assert.Contains("src=\"light.svg\"", html);
-        Assert.Contains("src=\"github-light.svg\"", html);
-        Assert.Contains("src=\"regular.svg\"", html);
-        Assert.DoesNotContain("dark.svg", html);
-        Assert.DoesNotContain("gh-dark-mode-only", html);
-        Assert.DoesNotContain("only-light", html);
-        Assert.DoesNotContain("gh-light-mode-only", html);
+        Assert.Equal(["light.svg", "github-light.svg", "regular.svg"], sources);
+    }
+
+    [Fact]
+    public void PdfOmitsDarkMarkdownLinksAndFiltersThemeVariantsInRawHtml()
+    {
+        var html = new HtmlRenderer().RenderPdfMarkdownFragment("""
+            [![Dark Markdown logo](markdown-dark.svg#only-dark)](https://example.com)
+
+            <a href="raw-dark.svg#gh-dark-mode-only"><img alt="Dark HTML logo" src="raw-dark.svg#gh-dark-mode-only"></a>
+
+            <img alt="Light HTML logo" src="raw-light.svg#gh-light-mode-only">
+            """);
+
+        var document = PdfHtmlDocument.Parse(html);
+        var sources = document.SelectNodes("//img")!.Cast<System.Xml.XmlElement>()
+            .Select(image => image.GetAttribute("src"));
+
+        Assert.Equal(["raw-light.svg"], sources);
+        Assert.Empty(document.SelectNodes("//a[@href='https://example.com']")!);
+        Assert.Empty(document.SelectNodes("//a[@href='raw-dark.svg#gh-dark-mode-only']")!);
     }
 }
