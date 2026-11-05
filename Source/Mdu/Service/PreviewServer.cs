@@ -17,6 +17,7 @@ public sealed class PreviewServer : IDisposable
         {
             [".bmp"] = "image/bmp",
             [".css"] = "text/css; charset=utf-8",
+            [".avif"] = "image/avif",
             [".gif"] = "image/gif",
             [".html"] = "text/html; charset=utf-8",
             [".json"] = "application/json; charset=utf-8",

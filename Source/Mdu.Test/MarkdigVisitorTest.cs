@@ -110,13 +110,15 @@ public class MarkdigVisitorTest
         var guideFilePath = Path.Combine(docsPath, "Guide", "README.md");
         var setupImagePath = Path.Combine(docsPath, "Setup", "_assets", "photo.svg");
         var imagePath = Path.Combine(docsPath, "Guide", "photo.webp");
+        var avifImagePath = Path.Combine(docsPath, "Guide", "photo.avif");
         File.WriteAllText(setupFilePath,
             "# Setup\n\n![Photo](./Setup/_assets/photo.svg)\n\n[JSON](./Setup/_assets/output.json)\n\n[PDF](./Setup/_assets/Safety%20Data.pdf)");
         File.WriteAllText(setupImagePath, "<svg></svg>");
         File.WriteAllText(Path.Combine(docsPath, "Setup", "_assets", "output.json"), "{}");
         File.WriteAllText(Path.Combine(docsPath, "Setup", "_assets", "Safety Data.pdf"), "pdf");
-        File.WriteAllText(guideFilePath, "# Guide\n\n![Photo](./photo.webp)");
+        File.WriteAllText(guideFilePath, "# Guide\n\n![Photo](./photo.webp)\n\n![AVIF photo](./photo.avif)");
         File.WriteAllBytes(imagePath, [0x52, 0x49, 0x46, 0x46]);
+        File.WriteAllBytes(avifImagePath, [0x00, 0x00, 0x00, 0x1C, 0x66, 0x74, 0x79, 0x70, 0x61, 0x76, 0x69, 0x66]);
 
         try
         {
@@ -153,6 +155,7 @@ public class MarkdigVisitorTest
             Assert.Contains("name=\"description\" content=\"Guide metadata\"", guideHtml);
             Assert.Contains("class=\"icon\"", guideHtml);
             Assert.True(File.Exists(Path.Combine(outputPath, "Guide", "photo.webp")));
+            Assert.True(File.Exists(Path.Combine(outputPath, "Guide", "photo.avif")));
             Assert.True(File.Exists(Path.Combine(outputPath, "Setup", "_assets", "photo.svg")));
             Assert.True(File.Exists(Path.Combine(outputPath, "Setup", "_assets", "output.json")));
             Assert.True(File.Exists(Path.Combine(outputPath, "Setup", "_assets", "Safety Data.pdf")));

@@ -8,6 +8,35 @@ namespace Mdu.Test;
 public class ServeCommandIntegrationTest
 {
     [Fact]
+    public async Task ServesLinkedAvifImagesWithTheCorrectContentType()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mdu-serve-avif-{Guid.NewGuid():N}");
+        var docs = Path.Combine(root, "docs");
+        var site = Path.Combine(root, "site");
+        Directory.CreateDirectory(docs);
+        File.WriteAllText(Path.Combine(docs, "README.md"), "# Home\n\n![Photo](photo.avif)");
+        var imageBytes = new byte[] { 0x00, 0x00, 0x00, 0x1C, 0x66, 0x74, 0x79, 0x70, 0x61, 0x76, 0x69, 0x66 };
+        File.WriteAllBytes(Path.Combine(docs, "photo.avif"), imageBytes);
+        var (process, port) = await StartServerOnFreePortAsync(docs, site);
+        using var _ = process;
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+        var url = $"http://127.0.0.1:{port}/";
+        try
+        {
+            await WaitUntilAsync(async () => await PageContainsAsync(client, url, "photo.avif"), process);
+            using var response = await client.GetAsync(url + "photo.avif");
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal("image/avif", response.Content.Headers.ContentType?.MediaType);
+            Assert.Equal(imageBytes, await response.Content.ReadAsByteArrayAsync());
+        }
+        finally
+        {
+            StopServer(process);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task RenameThenRecreateSavesDoNotRebuildTheSiteDuringTheShortMissingFileWindow()
     {
         var root = Path.Combine(Path.GetTempPath(), $"mdu-serve-delayed-save-{Guid.NewGuid():N}");
