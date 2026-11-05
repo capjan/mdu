@@ -1,6 +1,6 @@
 # Images
 
-MDU renders images with standard Markdown syntax. Local image files are copied into the site with their relative paths, and every image opens in a larger view when clicked.
+MDU renders images with standard Markdown syntax. Local image files are copied into the site with their relative paths, and images that can be shown larger open in a viewer when clicked unless you [turn this off](#turn-off-the-viewer).
 
 ## Syntax
 
@@ -24,5 +24,39 @@ Keep local image files inside the documentation folder and link to them with a r
 ## In the rendered site
 
 - Images scale down to the page width and keep their proportions, so wide images fit small screens.
-- Click an image to open a larger view. Close it with its close button, by clicking the backdrop, or with ++esc++.
+- Click an image with a zoom cursor to open it in a full-window viewer that shows the whole image. If such an image has alt text, it is also a tab stop, so ++enter++ opens it. Close it with its close button, by clicking beside the image, or with ++esc++.
+- An image larger than the window can be zoomed and panned. Zoom by scrolling vertically with the mouse wheel or trackpad, with a pinch, the toolbar, or ++plus++ and ++minus++; click the image to zoom in on that spot and click again to fit it back. Drag, scroll sideways, or use the arrow keys to pan. ++0++ fits the image to the window and ++1++ shows its actual size.
+- A pixel image already shown at its full size does not open the viewer and has no zoom cursor, because the viewer could not show it larger. Add `{.image-zoom-on}` to open it anyway. SVG images grow up to three times their size and can always be zoomed, because they stay sharp.
 - An image that links to another page keeps its link; an image that links to its own file opens the larger view.
+- Images that should not open the viewer, such as logos or layout graphics, can [turn it off](#turn-off-the-viewer).
+
+## Turn off the viewer
+
+The viewer is on by default. Choose the smallest scope that fits:
+
+| Scope | Markdown |
+| --- | --- |
+| A whole page | `images.zoom: false` in the front matter |
+| One image | `{.image-zoom-off}` after the image |
+| One image on a page without the viewer | `{.image-zoom-on}` after the image |
+
+Set `images.zoom` in a page's front matter to turn off the viewer for every image on the page:
+
+```yaml title="Front matter"
+---
+images.zoom: false
+---
+```
+
+The nested form `images: { zoom: false }` works as well. `mdu lint` reports any other value than `true` or `false` as [`MDU024`](../Usage/lint/Rules.md#mdu024-invalidimagezoom), and also `images: false` without `zoom`. Other `images` values, such as a list of pictures, are left alone.
+
+Add a class to an image to decide for that image alone. The class wins over the page setting:
+
+```markdown title="Markdown"
+![Company logo](images/logo.svg){.image-zoom-off}
+
+![Architecture overview](images/overview.png){.image-zoom-on}
+```
+
+- An element around an image can carry the class too, such as `<figure class="image-zoom-off">`. The closest class to the image counts.
+- Renderers without attribute support, such as GitHub, show `{.image-zoom-off}` as text. Use an HTML `<img>` with the class if the page must stay readable there.

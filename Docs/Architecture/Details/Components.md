@@ -87,7 +87,7 @@ Reads what MDU needs to know about a page without rendering it: the YAML front m
 
 ## Markdown.Linter
 
-Contains the rule codes `MDU001`–`MDU023` and the validators that need only one page and the file system:
+Contains the rule codes `MDU001`–`MDU024` and the validators that need only one page and the file system:
 
 | Validator | Rule |
 | --- | --- |

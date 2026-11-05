@@ -445,6 +445,16 @@ public class LinterVisitorTest
     }
 
     [Fact]
+    public void InvalidImageZoomIsRejected()
+    {
+        WithPage("Overview.md", "# Overview", "Overview", 0, errors =>
+        {
+            var error = Assert.Single(errors);
+            Assert.Equal(RuleCodes.InvalidImageZoom, CodeOf(error));
+        }, frontMatter: "---\nimages.zoom: off\n---");
+    }
+
+    [Fact]
     public void ExpandedIsRejectedOnTopNavigationRoot()
     {
         var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));

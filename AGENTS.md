@@ -35,7 +35,7 @@ Every focusable element in the rendered site shows keyboard focus the same way, 
 - Default: `outline: 2px solid var(--link); outline-offset: 3px;` on `:focus-visible`, in the shared focus rule at the top of the site styles in `Source/Markdown.Renderer/Res/Css/main.css`.
 - Rounding: the outline follows the element's own `border-radius`. If the element has no radius, add a `border-radius` on `:focus-visible` that matches the element's shape: 6px for sidebar and top-bar links and the site brand, 2px for inline text links (`.markdown-content a`, `.page-meta a`). Pills keep their own radius, such as the search button and the page pagination links.
 - Inset ring: where an ancestor clips overflow (any element with `overflow` other than `visible`, such as the top navigation bar or the on-this-page list), use `outline-offset: -2px` so the ring is not cut off on any side.
-- Never remove an outline without a visible replacement, and never style `:focus` where `:focus-visible` is meant.
+- Never remove an outline without a visible replacement, and never style `:focus` where `:focus-visible` is meant. The one exception is the image viewer's stage (`.image-lightbox-stage`): it is not in the tab order and only takes focus when the viewer opens by pointer or is clicked, where browsers would otherwise draw a ring around the whole window. Opening by keyboard focuses the close button instead.
 - Check a new or changed control by tabbing to it with the keyboard in a served page, not by reading the CSS alone.
 
 ## Working in this repository

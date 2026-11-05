@@ -79,24 +79,7 @@ public static class Dashboard
     /// </summary>
     public static DashboardOptions? ReadFrontMatter(string? frontMatter)
     {
-        if (string.IsNullOrWhiteSpace(frontMatter)) return null;
-
-        var lines = frontMatter.Split('\n').Select(line => line.TrimEnd('\r')).ToList();
-        if (lines.Count > 0 && lines[0].Trim() == "---") lines.RemoveAt(0);
-        if (lines.Count > 0 && lines[^1].Trim() == "---") lines.RemoveAt(lines.Count - 1);
-
-        YamlMappingNode? root;
-        try
-        {
-            var stream = new YamlStream();
-            stream.Load(new StringReader(string.Join('\n', lines)));
-            root = stream.Documents.FirstOrDefault()?.RootNode as YamlMappingNode;
-        }
-        catch (YamlDotNet.Core.YamlException)
-        {
-            return null;
-        }
-
+        var root = FrontMatterYaml.ReadMapping(frontMatter);
         if (root is null || !string.Equals(ReadScalar(root, "layout")?.Trim(), Layout, StringComparison.OrdinalIgnoreCase))
             return null;
 

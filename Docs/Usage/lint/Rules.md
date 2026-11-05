@@ -34,6 +34,7 @@ navigation:
 | `MDU021` | `DuplicateFootnote` | Warning | A footnote label is defined only once per page. | — |
 | `MDU022` | `LocalFragmentExists` | Error | A link fragment matches an anchor on the target page. | — |
 | `MDU023` | `DiagramTooLarge` | Warning | A PlantUML component diagram stays within the size limits. |
+| `MDU024` | `InvalidImageZoom` | Error | `images.zoom` in the front matter is `true` or `false`, and `images` itself is not a boolean. | — |
 
 ## MDU001: HeadingRequired
 
@@ -100,3 +101,9 @@ The linter also lists pages marked `navigation.visible: false` that no visible p
 ## MDU023: DiagramTooLarge
 
 This warning points to a PlantUML component diagram above the [size limits](../../Features/Diagrams.md#size-limits). MDU does not draw such a diagram, and the block stays a code block. Split the diagram or raise [`diagrams.limits`](../configuration.md#diagrams) in `mdu.yml`; warnings do not make `mdu lint` fail.
+
+## MDU024: InvalidImageZoom
+
+The [`images.zoom`](../../Features/Images.md#turn-off-the-viewer) front matter setting takes `true` or `false`. With YAML-style values such as `off` or `no`, the image viewer would stay on, so this error points to the page.
+
+`images: false` and `images: true` are reported as well, because they look like this setting without `zoom`. Write `images.zoom: false` instead. Other values of `images`, such as a list of pictures, are not reported.

@@ -886,6 +886,7 @@ public sealed class ServeCommand
         };
         currentFiles.UnionWith(_pdfCommand.GeneratedSitePdfPaths);
         currentFiles.UnionWith(_renderer.IconSearchAssets);
+        currentFiles.UnionWith(_renderer.ImageZoomAssets);
 
         foreach (var page in _pages.Values)
         {

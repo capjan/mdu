@@ -22,7 +22,7 @@ Everything on these pages is written in ordinary Markdown. Each page shows the s
 - [Diagrams](Diagrams.md) - Mermaid, PlantUML, and context diagrams as static SVG
 - [Math](Math.md) - GitHub-compatible formulas as static SVG
 - [Icons and Emojis](Icons-and-Emojis.md) - Thousands of icons, colored logos, and emoji shortcodes
-- [Images](Images.md) - Local and remote images with a lightbox
+- [Images](Images.md) - Local and remote images with a zoomable viewer
 - [Media Links](MediaLinks.md) - Direct MP4 playback and YouTube and Vimeo players that load only with consent
 - [Hero Banner](Hero.md) - Try theme-aware animated backgrounds, live controls, and your own shaders
 
