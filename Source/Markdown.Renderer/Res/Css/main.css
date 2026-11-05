@@ -2887,6 +2887,50 @@ img {
     height: auto;
 }
 
+:root[data-theme="light"] .markdown-content :is(
+    img[src$="#only-dark"],
+    img[src$="#gh-dark-mode-only"],
+    a:has(> img[src$="#only-dark"]),
+    a:has(> img[src$="#gh-dark-mode-only"])
+),
+:root[data-theme="auto"] .markdown-content :is(
+    img[src$="#only-dark"],
+    img[src$="#gh-dark-mode-only"],
+    a:has(> img[src$="#only-dark"]),
+    a:has(> img[src$="#gh-dark-mode-only"])
+) {
+    display: none;
+}
+
+:root[data-theme="dark"] .markdown-content :is(
+    img[src$="#only-light"],
+    img[src$="#gh-light-mode-only"],
+    a:has(> img[src$="#only-light"]),
+    a:has(> img[src$="#gh-light-mode-only"])
+) {
+    display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root[data-theme="auto"] .markdown-content :is(
+        img[src$="#only-light"],
+        img[src$="#gh-light-mode-only"],
+        a:has(> img[src$="#only-light"]),
+        a:has(> img[src$="#gh-light-mode-only"])
+    ) {
+        display: none;
+    }
+
+    :root[data-theme="auto"] .markdown-content :is(
+        img[src$="#only-dark"],
+        img[src$="#gh-dark-mode-only"],
+        a:has(> img[src$="#only-dark"]),
+        a:has(> img[src$="#gh-dark-mode-only"])
+    ) {
+        display: initial;
+    }
+}
+
 .table-wrapper {
     min-width: 0;
     max-width: 100%;

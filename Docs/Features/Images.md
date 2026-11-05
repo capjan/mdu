@@ -15,6 +15,19 @@ Add alternative text in square brackets and the image URL in parentheses. An opt
 
 The alternative text describes the image to people who use assistive technology, so write it for every image.
 
+## Light and dark variants
+
+Add `#only-light` or `#only-dark` to the end of each image URL to show a different image for each theme. Use the same alternative text for both variants:
+
+~~~markdown title="Markdown"
+![Application configuration](images/config-light.png#only-light)
+![Application configuration](images/config-dark.png#only-dark)
+~~~
+
+MDU shows the matching image when a reader selects light or dark mode. In automatic mode, it follows the reader's system appearance. The GitHub-compatible markers `#gh-light-mode-only` and `#gh-dark-mode-only` work too. Other Markdown viewers may show both variants.
+
+For PDF output, MDU keeps only the light variant. Images appear as alternative text in PDFs.
+
 ## Local images
 
 Keep local image files inside the documentation folder and link to them with a relative path from the Markdown file. For example, a page can refer to an image in its own `images` subfolder as `images/page.png`.

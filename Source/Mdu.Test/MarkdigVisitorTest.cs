@@ -109,11 +109,13 @@ public class MarkdigVisitorTest
         var setupFilePath = Path.Combine(docsPath, "Setup.md");
         var guideFilePath = Path.Combine(docsPath, "Guide", "README.md");
         var setupImagePath = Path.Combine(docsPath, "Setup", "_assets", "photo.svg");
+        var setupDarkImagePath = Path.Combine(docsPath, "Setup", "_assets", "photo-dark.svg");
         var imagePath = Path.Combine(docsPath, "Guide", "photo.webp");
         var avifImagePath = Path.Combine(docsPath, "Guide", "photo.avif");
         File.WriteAllText(setupFilePath,
-            "# Setup\n\n![Photo](./Setup/_assets/photo.svg)\n\n[JSON](./Setup/_assets/output.json)\n\n[PDF](./Setup/_assets/Safety%20Data.pdf)");
+            "# Setup\n\n![Photo](./Setup/_assets/photo.svg#only-light)\n![Photo](./Setup/_assets/photo-dark.svg#only-dark)\n\n[JSON](./Setup/_assets/output.json)\n\n[PDF](./Setup/_assets/Safety%20Data.pdf)");
         File.WriteAllText(setupImagePath, "<svg></svg>");
+        File.WriteAllText(setupDarkImagePath, "<svg></svg>");
         File.WriteAllText(Path.Combine(docsPath, "Setup", "_assets", "output.json"), "{}");
         File.WriteAllText(Path.Combine(docsPath, "Setup", "_assets", "Safety Data.pdf"), "pdf");
         File.WriteAllText(guideFilePath, "# Guide\n\n![Photo](./photo.webp)\n\n![AVIF photo](./photo.avif)");
@@ -157,6 +159,9 @@ public class MarkdigVisitorTest
             Assert.True(File.Exists(Path.Combine(outputPath, "Guide", "photo.webp")));
             Assert.True(File.Exists(Path.Combine(outputPath, "Guide", "photo.avif")));
             Assert.True(File.Exists(Path.Combine(outputPath, "Setup", "_assets", "photo.svg")));
+            Assert.True(File.Exists(Path.Combine(outputPath, "Setup", "_assets", "photo-dark.svg")));
+            Assert.Contains("src=\"./Setup/_assets/photo.svg#only-light\"", setupHtml);
+            Assert.Contains("src=\"./Setup/_assets/photo-dark.svg#only-dark\"", setupHtml);
             Assert.True(File.Exists(Path.Combine(outputPath, "Setup", "_assets", "output.json")));
             Assert.True(File.Exists(Path.Combine(outputPath, "Setup", "_assets", "Safety Data.pdf")));
             Assert.Contains("../Setup.html", File.ReadAllText(Path.Combine(outputPath, "Setup", "index.html")));
