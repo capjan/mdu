@@ -106,6 +106,7 @@ public partial class HtmlRenderer
     private readonly LinkReplacer _linkReplacer = new LinkReplacer();
     private string? _basePath;
     private IReadOnlyList<string> _iconSearchAssets = Array.Empty<string>();
+    private IReadOnlyList<string> _imageZoomAssets = Array.Empty<string>();
     private SiteConfiguration _siteConfiguration = new();
 
     public HtmlRenderer()
@@ -175,12 +176,14 @@ public partial class HtmlRenderer
     /// The icon search files written to the base path because a rendered page contains an icon search.
     /// </summary>
     public IReadOnlyList<string> IconSearchAssets => _iconSearchAssets;
+    public IReadOnlyList<string> ImageZoomAssets => _imageZoomAssets;
 
     public void PrepareBasePath(string basePath, SiteConfiguration? siteConfiguration = null)
     {
         _basePath = basePath;
         _siteConfiguration = siteConfiguration ?? new SiteConfiguration();
         _iconSearchAssets = Array.Empty<string>();
+        _imageZoomAssets = Array.Empty<string>();
         var cssFolder = GetEnsuredCssFolderPath(basePath);
         var cssFilePath = Path.Combine(cssFolder, "main.css");
 
@@ -305,7 +308,8 @@ public partial class HtmlRenderer
         DashboardOptions? dashboard = null,
         IReadOnlyDictionary<string, string>? pdfDownloadUrls = null,
         IReadOnlyDictionary<string, string>? pdfDownloadNames = null,
-        GlossaryScope? glossaryScope = null)
+        GlossaryScope? glossaryScope = null,
+        bool imageZoom = true)
     {
         var prefix = string.Concat(Enumerable.Repeat("../", nestingDeep));
         var cssFileLink = prefix + "css/main.css";
@@ -322,6 +326,8 @@ public partial class HtmlRenderer
         var heroScripts = hasHero ? Hero.ScriptsFor(renderedMarkdown) : string.Empty;
         // Only rendered phase controls need the playback script, not diagrams without phases or invalid ones.
         var hasIsometricDiagram = renderedMarkdown.Contains(DiagramRenderer.IsometricPhaseControlsMarker, StringComparison.Ordinal);
+        var imageZoomScript = ImageZoom.ScriptFor(renderedMarkdown, imageZoom, prefix);
+        if (imageZoomScript.Length > 0) EnsureImageZoomAssets();
         renderedMarkdown = MediaLinkEmbedder.ReplaceStandaloneLinks(renderedMarkdown, out var mediaProviders);
         var pageHero = hasHero ? Hero.ExtractFullWidth(ref renderedMarkdown) : string.Empty;
         renderedMarkdown = InsertFootnotesTitle(renderedMarkdown);
@@ -425,6 +431,7 @@ public partial class HtmlRenderer
                 + (hasHero ? $"<script>{heroScripts}</script>{Environment.NewLine}" : string.Empty)
                 + (dashboard is null ? string.Empty : $"<script>{Dashboard.Script}</script>{Environment.NewLine}")
                 + (hasIsometricDiagram ? $"<script>{Resources.IsometricDiagramScriptContent()}</script>{Environment.NewLine}" : string.Empty)
+                + imageZoomScript
         };
         await WriteTemplate(writer, values).ConfigureAwait(false);
     }
@@ -456,6 +463,12 @@ public partial class HtmlRenderer
     {
         if (_basePath is null || _iconSearchAssets.Count > 0) return;
         _iconSearchAssets = IconSearch.WriteAssetsTo(_basePath);
+    }
+
+    private void EnsureImageZoomAssets()
+    {
+        if (_basePath is null || _imageZoomAssets.Count > 0) return;
+        _imageZoomAssets = ImageZoom.WriteAssetsTo(_basePath);
     }
 
     private static string RenderSiteBrand(string prefix, SiteConfiguration configuration, string pageHeading)

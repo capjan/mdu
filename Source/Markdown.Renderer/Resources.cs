@@ -16,4 +16,5 @@ public static class Resources
     public static string DashboardCssContent() => R.GetStringByName("Markdown.Renderer.Res.Css.dashboard.css");
     public static string DashboardScriptContent() => R.GetStringByName("Markdown.Renderer.Res.Js.dashboard.js");
     public static string IsometricDiagramScriptContent() => R.GetStringByName("Markdown.Renderer.Res.Js.isometric-diagram.js");
+    public static string ImageLightboxScriptContent() => R.GetStringByName("Markdown.Renderer.Res.Js.image-lightbox.js");
 }

@@ -1,6 +1,7 @@
 using System.Globalization;
 using Mdu.Service.PageTree;
 using Markdown.Document;
+using Markdown.Renderer;
 using Mdu.Model;
 using YamlDotNet.Core;
 using YamlDotNet.RepresentationModel;
@@ -64,39 +65,13 @@ public class DataPreparationVisitor: IVisitor<MarkdownFile>
 
             var navigationTitle = ReadScalar(metadata, "navigation.title");
 
-            YamlNode? orderNode = null;
-            YamlNode? visibleNode = null;
-            YamlNode? expandedNode = null;
-            YamlNode? placementNode = null;
             if (navigation is not null)
-            {
                 navigationTitle = ReadScalar(navigation, "title") ?? navigationTitle;
-                if (navigation.Children.TryGetValue(new YamlScalarNode("order"), out var nestedOrderNode))
-                    orderNode = nestedOrderNode;
-                if (navigation.Children.TryGetValue(new YamlScalarNode("visible"), out var nestedVisibleNode))
-                    visibleNode = nestedVisibleNode;
-                if (navigation.Children.TryGetValue(new YamlScalarNode("expanded"), out var nestedExpandedNode))
-                    expandedNode = nestedExpandedNode;
-                if (navigation.Children.TryGetValue(new YamlScalarNode("placement"), out var nestedPlacementNode))
-                    placementNode = nestedPlacementNode;
-            }
 
-            if (orderNode is null && metadata.Children.TryGetValue(new YamlScalarNode("navigation.order"), out var compactOrderNode))
-            {
-                orderNode = compactOrderNode;
-            }
-            if (visibleNode is null && metadata.Children.TryGetValue(new YamlScalarNode("navigation.visible"), out var compactVisibleNode))
-            {
-                visibleNode = compactVisibleNode;
-            }
-            if (expandedNode is null && metadata.Children.TryGetValue(new YamlScalarNode("navigation.expanded"), out var compactExpandedNode))
-            {
-                expandedNode = compactExpandedNode;
-            }
-            if (placementNode is null && metadata.Children.TryGetValue(new YamlScalarNode("navigation.placement"), out var compactPlacementNode))
-            {
-                placementNode = compactPlacementNode;
-            }
+            var orderNode = FrontMatterYaml.FindSetting(metadata, "navigation", "order");
+            var visibleNode = FrontMatterYaml.FindSetting(metadata, "navigation", "visible");
+            var expandedNode = FrontMatterYaml.FindSetting(metadata, "navigation", "expanded");
+            var placementNode = FrontMatterYaml.FindSetting(metadata, "navigation", "placement");
 
             int? order = null;
             if (orderNode is YamlScalarNode orderValue &&

@@ -718,31 +718,6 @@
     const content = document.querySelector(".markdown-content");
     if (!content) return;
 
-    let lightbox;
-    const openLightbox = (image) => {
-        if (!lightbox) {
-            lightbox = document.createElement("dialog");
-            lightbox.className = "image-lightbox";
-            lightbox.innerHTML = '<button type="button" aria-label="Close image">×</button><img alt="">';
-            lightbox.addEventListener("click", (event) => {
-                if (event.target === lightbox || event.target.closest("button")) lightbox.close();
-            });
-            document.body.append(lightbox);
-        }
-        const preview = lightbox.querySelector("img");
-        preview.src = image.currentSrc || image.src;
-        preview.alt = image.alt;
-        lightbox.showModal();
-    };
-    content.addEventListener("click", (event) => {
-        const image = event.target.closest("img");
-        if (!image) return;
-        const link = image.closest("a");
-        if (link && link.href !== image.src && link.href !== image.currentSrc) return;
-        event.preventDefault();
-        openLightbox(image);
-    });
-
     const clearFootnoteHighlights = () => {
         content.querySelectorAll("a.footnote-ref.is-highlighted, .footnotes > ol > li.is-active").forEach((item) => {
             item.classList.remove("is-highlighted", "is-active");

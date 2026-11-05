@@ -434,6 +434,8 @@ body {
 .media-settings-toggle:focus-visible,
 .search-dialog button:focus-visible,
 .search-dialog input:focus-visible,
+.image-lightbox button:focus-visible,
+.image-lightbox-trigger:focus-visible,
 .media-settings-dialog button:focus-visible,
 .media-settings-dialog input:focus-visible,
 .search-result:focus-visible,
@@ -455,7 +457,8 @@ body {
     outline-offset: -2px;
 }
 
-.page-meta a:focus-visible {
+.page-meta a:focus-visible,
+.image-lightbox-trigger:focus-visible {
     border-radius: 2px;
 }
 
@@ -4567,42 +4570,216 @@ th, td {
     }
 }
 
+.image-zoomable {
+    cursor: zoom-in;
+}
+
 .image-lightbox {
+    --link: #6cb6ff;
     position: fixed;
     inset: 0;
-    place-items: center;
-    max-width: min(96vw, 1400px);
-    max-height: 96vh;
-    padding: 3rem 1rem 1rem;
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    background: var(--surface-header);
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    color: #f5f5f7;
+    color-scheme: dark;
+    touch-action: none;
 }
 
 .image-lightbox[open] {
     display: grid;
 }
 
-.image-lightbox::backdrop {
-    background: rgb(0 0 0 / 78%);
+.image-lightbox[open]::backdrop,
+.image-lightbox[open] > * {
+    animation: image-lightbox-fade 140ms ease-out;
 }
 
-.image-lightbox img {
-    max-width: 92vw;
-    max-height: 84vh;
-    object-fit: contain;
+/* Without a scrollbar the gutter would stay free beside the viewer, where it takes no clicks. */
+html:has(.image-lightbox[open]) {
+    overflow: hidden;
+    scrollbar-gutter: auto;
+}
+
+.image-lightbox::backdrop {
+    background: rgb(12 12 14 / 92%);
+}
+
+@keyframes image-lightbox-fade {
+    from {
+        opacity: 0;
+    }
+}
+
+/* The exception in AGENTS.md: it only takes focus from the pointer, and opening by keyboard focuses the close button. */
+.image-lightbox-stage:focus-visible {
+    outline: none;
+}
+
+.image-lightbox-stage {
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.image-lightbox-stage img {
+    position: absolute;
+    top: 0;
+    left: 0;
+    max-width: none;
+    margin: 0;
+    border-radius: 4px;
+    box-shadow: 0 12px 48px rgb(0 0 0 / 45%);
+    -webkit-user-drag: none;
+}
+
+.image-lightbox-stage.is-loading img {
+    visibility: hidden;
+}
+
+.image-lightbox-stage.is-animating img {
+    transition: width 160ms ease-out, height 160ms ease-out, transform 160ms ease-out;
+}
+
+.image-lightbox-stage.is-zoomable img {
+    cursor: zoom-in;
+}
+
+.image-lightbox-stage.is-zoomed img {
+    cursor: zoom-out;
+}
+
+.image-lightbox-stage.is-pannable,
+.image-lightbox-stage.is-pannable img {
+    cursor: grab;
+}
+
+.image-lightbox-stage.is-panning,
+.image-lightbox-stage.is-panning img {
+    cursor: grabbing;
+}
+
+.image-lightbox-caption {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    max-width: calc(100% - 5rem);
+    margin: 0;
+    padding: 0 14px;
+    overflow: hidden;
+    border-radius: 999px;
+    color: #e5e5ea;
+    font-size: 0.875rem;
+    line-height: 38px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.image-lightbox-caption,
+.image-lightbox-close,
+.image-lightbox-tools {
+    border: 1px solid rgb(255 255 255 / 14%);
+    background: rgb(38 38 42 / 88%);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
 }
 
 .image-lightbox button {
-    position: absolute;
-    top: 0.5rem;
-    right: 0.75rem;
-    border: 0;
-    background: transparent;
-    color: var(--text-primary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    color: inherit;
     font: inherit;
-    font-size: 2rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
     cursor: pointer;
+}
+
+.image-lightbox button svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentcolor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.6;
+}
+
+.image-lightbox button:hover {
+    background-color: rgb(255 255 255 / 12%);
+}
+
+.image-lightbox button[aria-disabled="true"] {
+    background-color: transparent;
+    color: rgb(255 255 255 / 32%);
+    cursor: default;
+}
+
+.image-lightbox-close {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+}
+
+.image-lightbox-tools {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 999px;
+    transform: translateX(-50%);
+}
+
+.image-lightbox-tools[hidden] {
+    display: none;
+}
+
+.image-lightbox-tools button {
+    width: 34px;
+    height: 34px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+}
+
+.image-lightbox-level {
+    min-width: 3.25rem;
+    color: #e5e5ea;
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+}
+
+.image-lightbox-tools [data-zoom="fit"] {
+    margin-left: 7px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .image-lightbox[open]::backdrop,
+    .image-lightbox[open] > * {
+        animation: none;
+    }
+
+    .image-lightbox-stage.is-animating img {
+        transition: none;
+    }
 }
 
 @media (max-width: 760px) {

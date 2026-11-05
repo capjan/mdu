@@ -364,29 +364,9 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
     private static bool IsPdfVisible(string frontMatter)
     {
         if (!frontMatter.Contains("pdf", StringComparison.Ordinal)) return true;
-        var lines = frontMatter.Split('\n').Select(line => line.TrimEnd('\r')).ToList();
-        if (lines.Count > 0 && lines[0].Trim() == "---") lines.RemoveAt(0);
-        if (lines.Count > 0 && lines[^1].Trim() == "---") lines.RemoveAt(lines.Count - 1);
+        if (FrontMatterYaml.ReadMapping(frontMatter) is not { } metadata) return true;
 
-        try
-        {
-            var yaml = new YamlStream();
-            yaml.Load(new StringReader(string.Join(Environment.NewLine, lines)));
-            if (yaml.Documents.Count == 0 || yaml.Documents[0].RootNode is not YamlMappingNode metadata)
-                return true;
-
-            YamlNode? visibleNode = null;
-            if (metadata.Children.TryGetValue(new YamlScalarNode("pdf"), out var pdfNode) && pdfNode is YamlMappingNode pdf &&
-                pdf.Children.TryGetValue(new YamlScalarNode("visible"), out var nestedVisibleNode))
-                visibleNode = nestedVisibleNode;
-            if (visibleNode is null && metadata.Children.TryGetValue(new YamlScalarNode("pdf.visible"), out var compactVisibleNode))
-                visibleNode = compactVisibleNode;
-
-            return visibleNode is not YamlScalarNode scalar || !bool.TryParse(scalar.Value, out var visible) || visible;
-        }
-        catch (YamlException)
-        {
-            return true;
-        }
+        return FrontMatterYaml.FindSetting(metadata, "pdf", "visible") is not YamlScalarNode scalar ||
+               !bool.TryParse(scalar.Value, out var visible) || visible;
     }
 }

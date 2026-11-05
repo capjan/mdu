@@ -134,6 +134,7 @@ public class LinterVisitor: IVisitor<MarkdownFile>
         ReportLargeDiagrams(markdownFilePath, markdownAnalysis);
         ReportLegacySidebarMetadata(entity);
         ReportInvalidNavigationMetadata(entity);
+        ReportInvalidImageZoom(entity);
         foreach (var issue in MarkdownCompatibility.FindIssues(markdownContent))
             ErrorReceiver.Add(markdownFilePath, issue.LineNumber, $"{issue.Code}: {issue.Message}");
 
@@ -310,6 +311,12 @@ public class LinterVisitor: IVisitor<MarkdownFile>
         catch (YamlException)
         {
         }
+    }
+
+    private void ReportInvalidImageZoom(MarkdownFile page)
+    {
+        if (Markdown.Renderer.ImageZoom.FindProblem(page.FrontMatter) is not { } problem) return;
+        ErrorReceiver.Add(page.FileInfo.FullName, 1, $"{RuleCodes.InvalidImageZoom}: {problem}");
     }
 
     private void ReportInvalidNavigationMetadata(MarkdownFile page)

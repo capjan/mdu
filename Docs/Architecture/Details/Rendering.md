@@ -102,8 +102,10 @@ The generated pages are self-contained static HTML. Small inline scripts add:
 - light and dark themes, with an automatic mode that follows the operating system;
 - the collapsible sidebar, top navigation tabs, and a drawer on narrow screens;
 - client-side search with links to the matching section and highlighted hits;
-- copy buttons for code blocks, image lightboxes, and footnote previews;
+- copy buttons for code blocks and footnote previews;
 - the consent dialog for embedded videos.
+
+The image viewer is the shared file `js/image-lightbox.js`. Pages with images load it, unless the page turns the viewer off and no image turns it back on. The build writes the file only when a page loads it.
 
 Theme colors from `mdu.yml` become CSS custom properties. Secondary colors, lines, and hover backgrounds are mixed from them in CSS, so a custom palette stays consistent.
 

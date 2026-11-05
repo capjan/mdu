@@ -169,7 +169,8 @@ public class MarkdigVisitor : BaseVisitor
                     Dashboard.ReadFrontMatter(entity.FrontMatter),
                     pdfDownloadUrls,
                     pdfDownloadNames,
-                    GetGlossaryScope(entity)).GetAwaiter().GetResult();
+                    GetGlossaryScope(entity),
+                    ImageZoom.ReadFrontMatter(entity.FrontMatter)).GetAwaiter().GetResult();
 
             File.Move(temporaryPath, outputFileName, true);
             WriteAliasPage(entity, outputFileName);
@@ -280,7 +281,8 @@ public class MarkdigVisitor : BaseVisitor
                         pdfUrl,
                         pdfDownloadUrls: pdfDownloadUrls,
                         pdfDownloadNames: pdfDownloadNames,
-                        glossaryScope: GetGlossaryScope(entity)).GetAwaiter().GetResult();
+                        glossaryScope: GetGlossaryScope(entity),
+                        imageZoom: ImageZoom.ReadFrontMatter(entity.FrontMatter)).GetAwaiter().GetResult();
 
                 File.Move(temporaryPath, specOutputPath, true);
                 generatedPagePaths.Add(specOutputPath);
