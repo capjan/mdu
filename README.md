@@ -69,6 +69,8 @@ mdu render                   # build the site into ./site
 
 Prefer a standalone executable or Docker? See the [installation guide](https://capjan.github.io/mdu/Setup/).
 
+Need a Confluence mirror? `mdu publish confluence` publishes an edit-protected page tree to a single Data Center space. See the [setup, safety requirements, and CI examples](Docs/Publish/Confluence.md).
+
 ## Explore the documentation
 
 <table>

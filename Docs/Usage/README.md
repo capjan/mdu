@@ -66,6 +66,7 @@ Once the pages stand, give the site your name, logo, and colors with an optional
 | [render](render.md) | `mdu render [path] [outpath]` | Write a static HTML site. Alias: `r` |
 | [serve](serve.md) | `mdu serve [path] [outpath]` | Serve a local preview that updates on changes |
 | [pdf](pdf.md) | `mdu pdf [path] [outpath]` | Write one PDF file |
+| [publish confluence](../Publish/Confluence.md) | `mdu publish confluence [path]` | Publish an edit-protected Confluence Data Center mirror |
 | [page move](page.md#move-pages-and-folders) | `mdu page move <source> <target>` | Move a page or folder and update every link to it. Alias: `page mv` |
 | [page links](page.md#find-links-to-a-file) | `mdu page links <file>` | List the links that point to a file |
 
@@ -85,7 +86,7 @@ mdu serve --port 8080
 
 ## Common options
 
-`tree`, `lint`, `fix`, `render`, `serve`, and `pdf` share these options:
+`tree`, `lint`, `fix`, `render`, `serve`, `pdf`, and `publish confluence` share these options:
 
 | Option | Effect |
 | --- | --- |
