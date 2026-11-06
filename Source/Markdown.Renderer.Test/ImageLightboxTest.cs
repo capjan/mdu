@@ -1,3 +1,6 @@
+using System.Diagnostics;
+using System.Text.RegularExpressions;
+
 namespace Markdown.Renderer.Test;
 
 public class ImageLightboxTest
@@ -110,6 +113,130 @@ public class ImageLightboxTest
         Assert.Matches(@"\.image-zoomable\s*\{\s*cursor:\s*zoom-in;\s*\}", Resources.CssContent());
     }
 
+    [BrowserFact]
+    public async Task DoesNotMakeThemeHiddenImagesFocusableInARealBrowser()
+    {
+        var browser = FindBrowser() ?? throw new InvalidOperationException("The browser test was not skipped when Chrome or Chromium was unavailable.");
+        var themeScript = Regex.Match(Resources.HtmlTemplateContent(), @"<script>\s*(?<code>.*?)\s*</script>", RegexOptions.Singleline)
+            .Groups["code"].Value;
+        Assert.NotEmpty(themeScript);
+
+        var directory = Path.Combine(Path.GetTempPath(), "mdu-image-lightbox-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var page = Path.Combine(directory, "index.html");
+            var html = """
+                <!doctype html>
+                <html data-theme="auto"><head><style>
+                """ + Resources.CssContent() + """
+                </style></head><body>
+                <script>
+                    window.fakeSystemTheme = {
+                        matches: false,
+                        change: null,
+                        addEventListener(event, callback) { this.change = callback; }
+                    };
+                    window.matchMedia = () => window.fakeSystemTheme;
+                </script>
+                <script>
+                """ + themeScript + """
+                </script>
+                <main class="markdown-content">
+                    <img id="hidden" alt="Dark image" class="image-zoom-on" width="100" height="100" src="dark.svg#only-dark">
+                    <img id="visible" alt="Light image" class="image-zoom-on" width="100" height="100" src="light.svg#only-light">
+                </main>
+                <script>
+                """ + Resources.ImageLightboxScriptContent() + """
+                </script>
+                <script>
+                    const dark = document.getElementById("hidden");
+                    const light = document.getElementById("visible");
+                    const record = (scheme, hidden, visible) => {
+                        document.body.dataset[`${scheme}HiddenDisplay`] = getComputedStyle(hidden).display;
+                        document.body.dataset[`${scheme}HiddenTrigger`] = String(hidden.classList.contains("image-lightbox-trigger"));
+                        document.body.dataset[`${scheme}VisibleTrigger`] = String(visible.classList.contains("image-lightbox-trigger"));
+                        document.body.dataset[`${scheme}HiddenTabIndex`] = String(hidden.tabIndex);
+                        document.body.dataset[`${scheme}VisibleTabIndex`] = String(visible.tabIndex);
+                        document.activeElement?.blur();
+                        hidden.focus();
+                        document.body.dataset[`${scheme}HiddenFocused`] = String(document.activeElement === hidden);
+                        visible.focus();
+                        document.body.dataset[`${scheme}VisibleFocused`] = String(document.activeElement === visible);
+                    };
+                    const waitFor = (condition, done, attempts = 80) => {
+                        if (condition()) return done();
+                        if (attempts === 0) {
+                            document.body.dataset.browserTest = "timeout";
+                            return;
+                        }
+                        setTimeout(() => waitFor(condition, done, attempts - 1), 20);
+                    };
+                    waitFor(
+                        () => document.documentElement.dataset.colorScheme === "light" &&
+                            getComputedStyle(dark).display === "none" && !dark.classList.contains("image-lightbox-trigger") &&
+                            light.classList.contains("image-lightbox-trigger"),
+                        () => {
+                            record("light", dark, light);
+                            fakeSystemTheme.matches = true;
+                            fakeSystemTheme.change();
+                            waitFor(
+                                () => document.documentElement.dataset.colorScheme === "dark" &&
+                                    getComputedStyle(light).display === "none" && !light.classList.contains("image-lightbox-trigger") &&
+                                    dark.classList.contains("image-lightbox-trigger"),
+                                () => {
+                                    record("dark", light, dark);
+                                    document.body.dataset.browserTest = "complete";
+                                });
+                        });
+                </script>
+                </body></html>
+                """;
+            await File.WriteAllTextAsync(page, html);
+
+            var start = new ProcessStartInfo(browser) { RedirectStandardOutput = true };
+            foreach (var argument in new[]
+                     {
+                         "--headless=new", "--no-sandbox", "--disable-gpu", "--no-first-run",
+                         "--user-data-dir=" + Path.Combine(directory, "profile"), "--virtual-time-budget=5000",
+                         "--dump-dom", new Uri(page).AbsoluteUri
+                     })
+                start.ArgumentList.Add(argument);
+            using var process = Process.Start(start)!;
+            var outputTask = process.StandardOutput.ReadToEndAsync();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            try
+            {
+                await process.WaitForExitAsync(timeout.Token);
+            }
+            catch
+            {
+                if (!process.HasExited) process.Kill(entireProcessTree: true);
+                throw;
+            }
+            var output = await outputTask;
+
+            Assert.Equal(0, process.ExitCode);
+            var body = Regex.Match(output, @"<body\b[^>]*>").Value;
+            string Attribute(string name) => Regex.Match(body, $@"\bdata-{Regex.Escape(name)}=""([^""]*)""").Groups[1].Value;
+            Assert.Equal("complete", Attribute("browser-test"));
+            foreach (var scheme in new[] { "light", "dark" })
+            {
+                Assert.Equal("none", Attribute($"{scheme}-hidden-display"));
+                Assert.True(Attribute($"{scheme}-hidden-trigger") == "false", $"Unexpected {scheme} theme image state: {body}");
+                Assert.Equal("true", Attribute($"{scheme}-visible-trigger"));
+                Assert.Equal("-1", Attribute($"{scheme}-hidden-tab-index"));
+                Assert.Equal("0", Attribute($"{scheme}-visible-tab-index"));
+                Assert.Equal("false", Attribute($"{scheme}-hidden-focused"));
+                Assert.Equal("true", Attribute($"{scheme}-visible-focused"));
+            }
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     [Fact]
     public void UsesTheSharedFocusRuleForViewerButtons()
     {
@@ -118,5 +245,34 @@ public class ImageLightboxTest
 
         Assert.Contains(".image-lightbox button:focus-visible", sharedFocusRule);
         Assert.Contains(".image-lightbox-trigger:focus-visible", sharedFocusRule);
+    }
+
+    internal static string? FindBrowser()
+    {
+        var configured = Environment.GetEnvironmentVariable("MDU_TEST_BROWSER");
+        if (!string.IsNullOrWhiteSpace(configured)) return CanLaunch(configured) ? configured : null;
+
+        configured = Environment.GetEnvironmentVariable("MDU_BENCHMARK_BROWSER");
+        if (!string.IsNullOrWhiteSpace(configured) && CanLaunch(configured)) return configured;
+
+        string[] candidates = OperatingSystem.IsMacOS()
+            ? ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"]
+            : OperatingSystem.IsWindows()
+                ? [Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Google/Chrome/Application/chrome.exe")]
+                : ["google-chrome", "chromium", "chromium-browser"];
+        return candidates.FirstOrDefault(CanLaunch);
+    }
+
+    private static bool CanLaunch(string executable) =>
+        File.Exists(executable) || Environment.GetEnvironmentVariable("PATH")?.Split(Path.PathSeparator)
+            .Any(directory => File.Exists(Path.Combine(directory, executable))) == true;
+}
+
+public sealed class BrowserFactAttribute : FactAttribute
+{
+    public BrowserFactAttribute()
+    {
+        if (ImageLightboxTest.FindBrowser() is null)
+            Skip = "Chrome or Chromium is required for this browser test.";
     }
 }

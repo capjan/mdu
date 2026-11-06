@@ -14,6 +14,7 @@
     // `images.zoom: false` in the front matter; the closest class on an image or around it wins.
     const pageZoom = document.currentScript?.dataset.imageZoom !== "off";
     const allowsZoom = (image) => {
+        if (image.getClientRects().length === 0) return false;
         const setting = image.closest(".image-zoom-on, .image-zoom-off");
         return setting ? setting.matches(".image-zoom-on") : pageZoom && canGrow(image);
     };
@@ -337,6 +338,8 @@
         const states = images.map((image) => [image, Boolean(viewerImage(image))]);
         for (const [image, opens] of states) showOpens(image, opens);
     };
+    new MutationObserver(() => refresh([...content.querySelectorAll("img")]))
+        .observe(document.documentElement, { attributes: true, attributeFilter: ["data-color-scheme"] });
     // A change of the shown size, such as in a narrower window or an opened section, can change the answer.
     const sizes = new ResizeObserver((entries) => refresh(entries.map((entry) => entry.target)));
     for (const image of content.querySelectorAll("img")) {

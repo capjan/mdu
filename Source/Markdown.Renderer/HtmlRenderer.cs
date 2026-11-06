@@ -252,7 +252,7 @@ public partial class HtmlRenderer
 
     public string RenderMarkdownFragment(string markdown) => RenderFragment(ParseMarkdown(markdown));
 
-    /// <summary>Renders a fragment without the headings and regions that are marked as hidden in PDF output.</summary>
+    /// <summary>Renders PDF content without regions excluded from PDF output.</summary>
     internal string RenderPdfMarkdownFragment(string markdown)
     {
         var document = ParseMarkdown(markdown);
