@@ -113,11 +113,10 @@ public class ImageLightboxTest
         Assert.Matches(@"\.image-zoomable\s*\{\s*cursor:\s*zoom-in;\s*\}", Resources.CssContent());
     }
 
-    [Fact]
+    [BrowserFact]
     public async Task DoesNotMakeThemeHiddenImagesFocusableInARealBrowser()
     {
-        var browser = FindBrowser();
-        if (browser is null) return;
+        var browser = FindBrowser() ?? throw new InvalidOperationException("The browser test was not skipped when Chrome or Chromium was unavailable.");
         var themeScript = Regex.Match(Resources.HtmlTemplateContent(), @"<script>\s*(?<code>.*?)\s*</script>", RegexOptions.Singleline)
             .Groups["code"].Value;
         Assert.NotEmpty(themeScript);
@@ -248,9 +247,12 @@ public class ImageLightboxTest
         Assert.Contains(".image-lightbox-trigger:focus-visible", sharedFocusRule);
     }
 
-    private static string? FindBrowser()
+    internal static string? FindBrowser()
     {
-        var configured = Environment.GetEnvironmentVariable("MDU_TEST_BROWSER") ?? Environment.GetEnvironmentVariable("MDU_BENCHMARK_BROWSER");
+        var configured = Environment.GetEnvironmentVariable("MDU_TEST_BROWSER");
+        if (!string.IsNullOrWhiteSpace(configured)) return CanLaunch(configured) ? configured : null;
+
+        configured = Environment.GetEnvironmentVariable("MDU_BENCHMARK_BROWSER");
         if (!string.IsNullOrWhiteSpace(configured) && CanLaunch(configured)) return configured;
 
         string[] candidates = OperatingSystem.IsMacOS()
@@ -264,4 +266,13 @@ public class ImageLightboxTest
     private static bool CanLaunch(string executable) =>
         File.Exists(executable) || Environment.GetEnvironmentVariable("PATH")?.Split(Path.PathSeparator)
             .Any(directory => File.Exists(Path.Combine(directory, executable))) == true;
+}
+
+public sealed class BrowserFactAttribute : FactAttribute
+{
+    public BrowserFactAttribute()
+    {
+        if (ImageLightboxTest.FindBrowser() is null)
+            Skip = "Chrome or Chromium is required for this browser test.";
+    }
 }

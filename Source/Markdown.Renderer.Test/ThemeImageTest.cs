@@ -28,6 +28,8 @@ public class ThemeImageTest
         Assert.Contains(":root[data-color-scheme=\"light\"]", css);
         Assert.Contains(":root[data-color-scheme=\"dark\"]", css);
         Assert.Contains(":root[data-theme=\"auto\"]", css);
+        Assert.Contains(":root[data-theme=\"auto\"]:not([data-color-scheme])", css);
+        Assert.Contains("@media (prefers-color-scheme: light)", css);
         Assert.Contains("@media (prefers-color-scheme: dark)", css);
         Assert.DoesNotContain("display: initial", css);
         foreach (var marker in new[] { "only-light", "only-dark", "gh-light-mode-only", "gh-dark-mode-only" })
