@@ -5,6 +5,15 @@ namespace Markdown.Renderer.Test;
 
 public class RendererTest
 {
+    private static string TemplateWithScripts()
+    {
+        var html = Resources.HtmlTemplateContent();
+        foreach (var name in SiteAssets.TemplateScripts)
+            html = html.Replace("%%SCRIPT_" + name.Replace('-', '_').ToUpperInvariant() + "%%",
+                "<script>" + Resources.ScriptContent(name) + "</script>", StringComparison.Ordinal);
+        return html;
+    }
+
     [Fact]
     public async Task InitializesHeaderAndNavigationBeforeRenderingThePageContent()
     {
@@ -31,7 +40,7 @@ public class RendererTest
     [Fact]
     public void RendersAnAccessibleSidebarResizer()
     {
-        var html = Resources.HtmlTemplateContent();
+        var html = TemplateWithScripts();
         var css = Resources.CssContent();
 
         Assert.Contains("id=\"sidebar-resizer\" role=\"separator\" aria-label=\"Resize sidebar\"", html);
@@ -59,7 +68,7 @@ public class RendererTest
     [Fact]
     public void PreservesThePreferredSidebarWidthAcrossViewportChanges()
     {
-        var html = Resources.HtmlTemplateContent();
+        var html = TemplateWithScripts();
         Assert.Contains("observedWidths.get(entry.target) !== Math.round(entry.borderBoxSize[0].inlineSize)", html);
         Assert.DoesNotContain("window.addEventListener(\"resize\", () => {", html);
         Assert.Contains("panel.preferred = clampedWidth;", html);
@@ -102,7 +111,7 @@ public class RendererTest
     public void UsesRemainingContentWidthAndReservesSpaceForTheTableOfContents()
     {
         var css = Resources.CssContent();
-        var html = Resources.HtmlTemplateContent();
+        var html = TemplateWithScripts();
 
         Assert.DoesNotContain("--content-max-width", css);
         Assert.Contains("grid-template-columns: minmax(0, 1fr);", css);
@@ -119,7 +128,7 @@ public class RendererTest
     [Fact]
     public void RestoresLayoutPreferencesBeforeRenderingTheBody()
     {
-        var html = Resources.HtmlTemplateContent();
+        var html = TemplateWithScripts();
         var body = html.IndexOf("<body", StringComparison.Ordinal);
         Assert.True(html.IndexOf("for (const panel of [panels.sidebar, panels.toc])", StringComparison.Ordinal) < body);
         Assert.True(html.IndexOf("mdu-toc-collapsed", StringComparison.Ordinal) < body);
@@ -143,7 +152,7 @@ public class RendererTest
     [Fact]
     public void InitializesNavigationGroupsOnlyOnceAndPreservesBrowserShortcuts()
     {
-        var html = Resources.HtmlTemplateContent();
+        var html = TemplateWithScripts();
         Assert.Equal(1, html.Split("querySelectorAll(\".site-nav-toggle\")").Length - 1);
         Assert.Contains("if (event.altKey || event.metaKey || event.ctrlKey) return;", html);
         Assert.Contains("if (moved) {", html);
@@ -380,7 +389,8 @@ public class RendererTest
             });
             await renderer.WriteHtml(sw, "test", "", 0, "# Test", "");
 
-            var html = sb.ToString();
+            Assert.Contains("href=\"_mdu/css/theme.css?v=", sb.ToString());
+            var html = File.ReadAllText(Path.Combine(outputPath, "_mdu", "css", "theme.css"));
             Assert.Contains(":root,:root[data-theme=\"light\"]{--page-background:#123456;--surface-header:#123456;", html);
             Assert.Contains(":root[data-theme=\"dark\"]{--page-background:#654321;--surface-header:#654321;", html);
             Assert.Contains("@media(prefers-color-scheme:dark){:root[data-theme=\"auto\"]{--page-background:#654321;--surface-header:#654321;", html);
@@ -407,7 +417,8 @@ public class RendererTest
             });
             await renderer.WriteHtml(sw, "test", "", 0, "# Test", "");
 
-            var html = sb.ToString();
+            Assert.Contains("href=\"_mdu/css/theme.css?v=", sb.ToString());
+            var html = File.ReadAllText(Path.Combine(outputPath, "_mdu", "css", "theme.css"));
             Assert.Contains("--text-secondary:color-mix(in oklab,var(--text-primary) 63%,var(--page-background))", html);
             Assert.Contains("--border:color-mix(in oklab,var(--text-primary) 16%,var(--page-background))", html);
             Assert.Contains("--nav-hover:color-mix(in oklab,var(--link) 16%,var(--page-background))", html);

@@ -8,6 +8,79 @@ namespace Mdu.Test;
 public class ServeCommandIntegrationTest
 {
     [Fact]
+    public async Task ReusesSharedAssetsForContentEditsAndRefreshesNavigationForTitleChanges()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "mdu-serve-shared-" + Guid.NewGuid().ToString("N"));
+        var docs = Path.Combine(root, "docs");
+        var site = Path.Combine(root, "site");
+        Directory.CreateDirectory(docs);
+        File.WriteAllText(Path.Combine(docs, "README.md"), "# Home\n");
+        var page = Path.Combine(docs, "Other.md");
+        File.WriteAllText(page, "# Original title\n\nBefore edit\n");
+        var (process, port) = await StartServerOnFreePortAsync(docs, site);
+        using var _ = process;
+        using var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/"), Timeout = TimeSpan.FromSeconds(5) };
+        try
+        {
+            await WaitUntilAsync(async () => (await client.GetStringAsync("__mdu/status")).Contains("\"building\":false"), process);
+            var assets = Directory.GetFiles(Path.Combine(site, "_mdu", "js"))
+                .ToDictionary(path => path, File.GetLastWriteTimeUtc);
+            Assert.Contains(Path.Combine(site, "_mdu", "js", "navigation.js"), assets.Keys);
+            var navigationVersion = new System.Text.RegularExpressions.Regex("js/navigation\\.js\\?v=([0-9a-f]{12})");
+            var originalVersion = navigationVersion.Match(File.ReadAllText(Path.Combine(site, "index.html"))).Groups[1].Value;
+            Assert.NotEmpty(originalVersion);
+            File.WriteAllText(page, "# Original title\n\nAfter content edit\n");
+            await WaitUntilAsync(async () => await PageContainsAsync(client, new Uri(client.BaseAddress, "Other.html").ToString(), "After content edit"), process);
+            foreach (var (path, timestamp) in assets) Assert.Equal(timestamp, File.GetLastWriteTimeUtc(path));
+
+            File.WriteAllText(page, "# Renamed title\n\nAfter title edit\n");
+            await WaitUntilAsync(async () => (await client.GetStringAsync("_mdu/js/navigation.js")).Contains("Renamed title"), process);
+            Assert.Contains("Renamed title", await client.GetStringAsync("_mdu/sitemap.html"));
+            Assert.DoesNotContain("Original title", await client.GetStringAsync("_mdu/js/navigation.js"));
+            var renamedVersion = navigationVersion.Match(await client.GetStringAsync("index.html")).Groups[1].Value;
+            Assert.NotEqual(originalVersion, renamedVersion);
+        }
+        finally
+        {
+            StopServer(process);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task RemovesSharedFeatureAssetsThatNoPageUsesAnyMore()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "mdu-serve-stale-assets-" + Guid.NewGuid().ToString("N"));
+        var docs = Path.Combine(root, "docs");
+        var site = Path.Combine(root, "site");
+        Directory.CreateDirectory(docs);
+        File.WriteAllText(Path.Combine(docs, "README.md"), "# Home\n");
+        // The hero is on a page that renders after the initial preview page.
+        var banner = Path.Combine(docs, "Banner.md");
+        File.WriteAllText(banner, "# Banner\n\n```hero\neffect: beach\ntitle: Welcome\n```\n");
+        var (process, port) = await StartServerOnFreePortAsync(docs, site);
+        using var _ = process;
+        using var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/"), Timeout = TimeSpan.FromSeconds(5) };
+        try
+        {
+            await WaitUntilAsync(async () => (await client.GetStringAsync("__mdu/status")).Contains("\"building\":false"), process);
+            Assert.True(File.Exists(Path.Combine(site, "_mdu", "css", "hero.css")));
+            File.WriteAllText(banner, "# Banner\n\nNo hero any more\n");
+            // A configuration change rebuilds the site and reconciles its generated files.
+            File.WriteAllText(Path.Combine(docs, "mdu.yml"), "site.name: Changed\n");
+            await WaitUntilAsync(async () => await PageContainsAsync(client, new Uri(client.BaseAddress, "Banner.html").ToString(), "No hero any more"), process);
+            await WaitUntilAsync(async () => (await client.GetStringAsync("__mdu/status")).Contains("\"building\":false"), process);
+            Assert.False(File.Exists(Path.Combine(site, "_mdu", "css", "hero.css")));
+            Assert.True(File.Exists(Path.Combine(site, "_mdu", "js", "navigation.js")));
+        }
+        finally
+        {
+            StopServer(process);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task ServesLinkedAvifImagesWithTheCorrectContentType()
     {
         var root = Path.Combine(Path.GetTempPath(), $"mdu-serve-avif-{Guid.NewGuid():N}");

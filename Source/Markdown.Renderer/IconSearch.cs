@@ -47,16 +47,26 @@ public static class IconSearch
     }
 
     // The index is created again only when the custom icon sets change.
-    private static byte[] GetIndex()
+    private static byte[] GetIndex() => GetCachedIndex().Index;
+
+    private static CachedIndex GetCachedIndex()
     {
         var sets = IconCatalog.Sets;
-        if (_index is { } cached && ReferenceEquals(cached.Sets, sets)) return cached.Index;
+        if (_index is { } cached && ReferenceEquals(cached.Sets, sets)) return cached;
         var index = CreateIndex(sets);
-        _index = new CachedIndex(sets, index);
-        return index;
+        var version = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(index))[..12];
+        return _index = new CachedIndex(sets, index, version);
     }
 
-    private sealed record CachedIndex(IReadOnlyList<IconSet> Sets, byte[] Index);
+    private static readonly Lazy<string> ScriptVersion = new(() => SiteAssets.Version(Resources.IconSearchScriptContent()));
+
+    /// <summary>
+    /// Query of the script URL: the script's own version, plus the index version that the script passes on
+    /// when it loads the index, because a relative index URL does not inherit the script's query.
+    /// </summary>
+    internal static string AssetQuery() => $"?v={ScriptVersion.Value}&i={GetCachedIndex().Version}";
+
+    private sealed record CachedIndex(IReadOnlyList<IconSet> Sets, byte[] Index, string Version);
 
     private static byte[] CreateIndex(IReadOnlyList<IconSet> sets)
     {

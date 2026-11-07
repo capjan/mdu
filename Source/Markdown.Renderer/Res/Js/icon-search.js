@@ -3,7 +3,11 @@
     if (widgets.length === 0) return;
 
     const pageSize = 120;
-    const indexUrl = new URL("icon-search-index.json", document.currentScript.src);
+    const scriptUrl = new URL(document.currentScript.src);
+    const indexUrl = new URL("icon-search-index.json", scriptUrl);
+    // Keep the index cache-busted together with the script that requests it.
+    const indexVersion = scriptUrl.searchParams.get("i");
+    if (indexVersion) indexUrl.searchParams.set("v", indexVersion);
     const numberFormat = new Intl.NumberFormat("en");
     const toSvg = (viewBox, body, className) =>
         `<svg${className ? ` class="${className}"` : ""} xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}" aria-hidden="true" focusable="false">${body}</svg>`;

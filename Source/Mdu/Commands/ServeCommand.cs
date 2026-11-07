@@ -247,6 +247,8 @@ public sealed class ServeCommand
             foreach (var path in specificationPages) _pendingOutputs[path] = page;
         }
         _searchIndexBuilder.WriteIndex(_outputPath);
+        // Replace the shared navigation only after every step that can still fail, right before pages render.
+        rendererVisitor.PrepareNavigation();
         var initialPage = _pendingOutputs.GetValueOrDefault(Path.Combine(_outputPath, "index.html")) ??
             _pendingOutputs.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase)
                 .Select(entry => entry.Value).FirstOrDefault();
@@ -311,6 +313,8 @@ public sealed class ServeCommand
         if (_pendingPages.Count != 0 || _rebuildAfterFailure) return;
         _pendingVisitor = null;
         _pendingOutputs.Clear();
+        // Pages completed after the initial reconciliation can publish further shared assets.
+        _generatedFiles.UnionWith(_renderer.SiteAssetPaths);
         if (_pendingPdfs.Count != 0 || !_siteCompletionPending) return;
         _siteCompletionPending = false;
         _server?.SetBuilding(false);
@@ -887,6 +891,7 @@ public sealed class ServeCommand
         currentFiles.UnionWith(_pdfCommand.GeneratedSitePdfPaths);
         currentFiles.UnionWith(_renderer.IconSearchAssets);
         currentFiles.UnionWith(_renderer.ImageZoomAssets);
+        currentFiles.UnionWith(_renderer.SiteAssetPaths);
 
         foreach (var page in _pages.Values)
         {
@@ -958,7 +963,8 @@ public sealed class ServeCommand
         var pageDirectory = Path.GetDirectoryName(page.SiteRelativePath ?? Path.GetRelativePath(_rootPath, page.FileInfo.FullName)) ?? string.Empty;
         var relativeAssetPath = Path.GetRelativePath(sourceDirectory, assetPath);
         var outputPath = Path.GetFullPath(Path.Combine(_outputPath, pageDirectory, relativeAssetPath));
-        return IsInsideDirectory(_outputPath, outputPath) ? outputPath : null;
+        // Never copy over or remove files that mdu generates in its reserved folder.
+        return IsInsideDirectory(_outputPath, outputPath) && !ReservedOutput.Contains(_outputPath, outputPath) ? outputPath : null;
     }
 
     private string GetPageKey(MarkdownFile page)

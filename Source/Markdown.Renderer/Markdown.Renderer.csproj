@@ -34,6 +34,7 @@
       <None Remove="Res\Js\image-lightbox.js" />
       <EmbeddedResource Include="Res\Js\isometric-diagram.js" />
       <EmbeddedResource Include="Res\Js\image-lightbox.js" />
+      <EmbeddedResource Include="Res\Js\theme.js;Res\Js\panels-init.js;Res\Js\header-init.js;Res\Js\navigation-controls.js;Res\Js\tables.js;Res\Js\panels.js;Res\Js\scroll-navigation.js;Res\Js\code-copy.js;Res\Js\content-previews.js;Res\Js\navigation.js" />
     </ItemGroup>
 
     <ItemGroup>

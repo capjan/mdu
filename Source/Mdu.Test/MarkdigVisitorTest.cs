@@ -146,12 +146,12 @@ public class MarkdigVisitorTest
 
             var setupHtml = File.ReadAllText(Path.Combine(outputPath, "Setup.html"));
             var guideHtml = File.ReadAllText(Path.Combine(outputPath, "Guide", "index.html"));
-            Assert.Contains("href=\"css/main.css\"", setupHtml);
+            Assert.Contains("href=\"css/main.css?v=", setupHtml);
             Assert.Contains("data-search-index=\"search-index.json\"", setupHtml);
-            Assert.Contains("src=\"js/search.js\"", setupHtml);
-            Assert.Contains("href=\"../css/main.css\"", guideHtml);
+            Assert.Contains("src=\"js/search.js", setupHtml);
+            Assert.Contains("href=\"../css/main.css?v=", guideHtml);
             Assert.Contains("data-search-index=\"../search-index.json\"", guideHtml);
-            Assert.Contains("src=\"../js/search.js\"", guideHtml);
+            Assert.Contains("src=\"../js/search.js", guideHtml);
             Assert.Contains(">.NET</a>", guideHtml);
             Assert.Contains("<title>Overview</title>", guideHtml);
             Assert.Contains("name=\"description\" content=\"Guide metadata\"", guideHtml);

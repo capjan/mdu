@@ -164,7 +164,8 @@ internal static class Measurements
             var validation = Validate(output);
             var usage = await child.Finish(stop: true);
             cancellation.Cancel();
-            try { await readerTask; } catch (OperationCanceledException) { }
+            // Stopping the server may end the event stream before cancellation is observed.
+            try { await readerTask; } catch (Exception e) when (e is OperationCanceledException or HttpIOException) { }
             usage["workload"] = name;
             usage["command"] = "serve";
             usage["sample"] = sample;
