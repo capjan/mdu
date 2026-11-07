@@ -13,4 +13,6 @@ public class NavigationItem
     public bool IsInCurrentTopSection { get; set; }
     public bool IsAncestorOfCurrentTopSection { get; set; }
     public int TopNavigationDepth { get; set; }
+    /// <summary>Site-root URL of the top navigation entry that owns this item, used by the shared navigation.</summary>
+    public string? TopNavigationOwnerUrl { get; set; }
 }

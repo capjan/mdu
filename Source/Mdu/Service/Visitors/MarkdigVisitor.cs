@@ -64,6 +64,28 @@ public class MarkdigVisitor : BaseVisitor
 
     public void PrepareSearchIndex() => _navigationRoots.Visit(new SearchPreparationVisitor(this));
 
+    public void PrepareNavigation()
+    {
+        var sitemap = Path.GetFullPath(Path.Combine(_outPath, "_mdu", "sitemap.html"));
+        if (_pageOutputPaths.Contains(sitemap))
+            throw new InvalidOperationException(
+                $"'{Path.GetRelativePath(_outPath, sitemap)}' is reserved for the generated sitemap. Rename the page that renders to it.");
+        var first = _navigationRoots.FirstOrDefault();
+        if (first is null)
+        {
+            _htmlFoundation.PrepareNavigation([]);
+            return;
+        }
+        // Built from the site root, so item URLs are site-root relative and match the entries by position.
+        var items = BuildNavigation(first, Path.Combine(_outPath, "index.html"));
+        var urls = new Dictionary<MarkdownFile, string>();
+        for (var i = 0; i < items.Count; i++) urls.TryAdd(_navigationEntries[i].Page, items[i].Url);
+        for (var i = 0; i < items.Count; i++)
+            if (_topNavigationItems[_navigationEntries[i].Page] is { } owner && urls.TryGetValue(owner, out var ownerUrl))
+                items[i].TopNavigationOwnerUrl = ownerUrl;
+        _htmlFoundation.PrepareNavigation(items);
+    }
+
     public void InvalidatePreparedPage(MarkdownFile page) => _preparedPages.Remove(page);
 
     public IReadOnlyList<string> GetPreparedSpecificationPagePaths(MarkdownFile page) =>

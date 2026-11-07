@@ -22,6 +22,8 @@ Unsupported diagram syntax remains readable as a code block. Feature-specific sy
 
 Local JavaScript adds search, theme selection, navigation controls, and interactions such as copy buttons. An external video player is loaded only after the reader consents. Published pages do not depend on the local preview server.
 
+Navigation, scripts, and styles are shared between pages to keep the output small. Without JavaScript, breadcrumbs, previous/next links, and the static sitemap linked at the end of each page remain available.
+
 ## PDF output
 
 PDF generation reuses the same content interpretation and navigation order. It removes explicitly hidden content, lays out pages, and preserves links where supported. Browser-only interactions are omitted.

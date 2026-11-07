@@ -105,6 +105,9 @@ public partial class HtmlRenderer
     private readonly Dictionary<Glossary, GlossaryScope> _glossaryScopes = new();
     private readonly LinkReplacer _linkReplacer = new LinkReplacer();
     private string? _basePath;
+    private SiteAssets _siteAssets = new(null);
+    private bool _sharedNavigation;
+    private string? _navigationVersion;
     private IReadOnlyList<string> _iconSearchAssets = Array.Empty<string>();
     private IReadOnlyList<string> _imageZoomAssets = Array.Empty<string>();
     private SiteConfiguration _siteConfiguration = new();
@@ -181,6 +184,8 @@ public partial class HtmlRenderer
     public void PrepareBasePath(string basePath, SiteConfiguration? siteConfiguration = null)
     {
         _basePath = basePath;
+        _siteAssets = new SiteAssets(basePath);
+        _sharedNavigation = false;
         _siteConfiguration = siteConfiguration ?? new SiteConfiguration();
         _iconSearchAssets = Array.Empty<string>();
         _imageZoomAssets = Array.Empty<string>();
@@ -189,6 +194,20 @@ public partial class HtmlRenderer
 
         WriteCssFileTo(cssFilePath);
     }
+
+    public void PrepareNavigation(IReadOnlyList<NavigationItem> items)
+    {
+        if (_basePath is null) return;
+        _navigationVersion = SiteNavigation.WriteTo(_basePath, items);
+        _sharedNavigation = true;
+    }
+
+    /// <summary>Shared runtime, style and navigation files published for the current site generation.</summary>
+    public IEnumerable<string> SiteAssetPaths => _basePath is null
+        ? []
+        : _siteAssets.PublishedPaths.Concat(_sharedNavigation
+            ? [Path.Combine(_basePath, "js", "navigation.js"), Path.Combine(_basePath, SiteNavigation.SitemapPath)]
+            : []);
 
     private MarkdownDocument ParseMarkdown(string markdown, string? pdfDownloadUrl = null,
         IReadOnlyDictionary<string, string>? pdfDownloadUrls = null,
@@ -323,7 +342,8 @@ public partial class HtmlRenderer
         if (hasIconSearch) EnsureIconSearchAssets();
         var renderedMarkdown = dashboard is null ? document.ToHtml(pipeline) : Dashboard.Render(document, pipeline, dashboard);
         var hasHero = renderedMarkdown.Contains(" data-hero-scene=\"", StringComparison.Ordinal);
-        var heroScripts = hasHero ? Hero.ScriptsFor(renderedMarkdown) : string.Empty;
+        var heroScripts = hasHero ? string.Concat(Hero.ScriptNamesFor(renderedMarkdown)
+            .Select(name => _siteAssets.Script(name, () => Resources.ScriptContent(name), prefix))) : string.Empty;
         // Only rendered phase controls need the playback script, not diagrams without phases or invalid ones.
         var hasIsometricDiagram = renderedMarkdown.Contains(DiagramRenderer.IsometricPhaseControlsMarker, StringComparison.Ordinal);
         var imageZoomScript = ImageZoom.ScriptFor(renderedMarkdown, imageZoom, prefix);
@@ -386,7 +406,7 @@ public partial class HtmlRenderer
             ["SITE_NAME"] = HtmlEncoder.Default.Encode(_siteConfiguration.SiteName),
             ["SITE_BRAND"] = RenderSiteBrand(prefix, _siteConfiguration, pageHeading),
             ["FAVICON_LINK"] = RenderFavicon(prefix, _siteConfiguration),
-            ["SITE_THEME_STYLE"] = RenderThemeStyles(_siteConfiguration),
+            ["SITE_THEME_STYLE"] = _siteAssets.Styles("theme", () => RenderThemeStyles(_siteConfiguration), prefix),
             ["SEARCH_SCRIPT_LINK"] = HtmlEncoder.Default.Encode(searchScriptLink),
             ["SEARCH_INDEX_LINK"] = HtmlEncoder.Default.Encode(searchIndexLink),
             ["TOC_LAYOUT_CLASS"] = dashboard is null ? " has-on-this-page" : string.Empty,
@@ -394,7 +414,9 @@ public partial class HtmlRenderer
             ["IS_DASHBOARD"] = dashboard is null ? "false" : "true",
             ["TOC_CONTROLS"] = dashboard is null && tocHeadings.Count > 0 ? "aria-controls=\"on-this-page\"" : string.Empty,
             ["HEADER_LAYOUT_CLASS"] = hasWideSidebar ? " has-wide-sidebar" : string.Empty,
-            ["NAVIGATION_ITEMS"] = RenderNavigationItems(model.NavigationItems),
+            ["NAVIGATION_ITEMS"] = _sharedNavigation
+                ? SiteNavigation.Reference(model.NavigationItems, prefix, _navigationVersion!)
+                : SiteNavigation.RenderItems(model.NavigationItems),
             ["TOP_NAVIGATION_ITEMS"] = RenderTopNavigationItems(model.TopNavigationItems),
             ["SIDEBAR_SECTION_TITLE"] = currentTopNavigationItem is not null && hasWideSidebar && !hasUnassignedSidebarPages
                 ? $"<div class=\"site-nav-section-title\">{HtmlEncoder.Default.Encode(currentTopNavigationItem.Title)}</div>"
@@ -412,11 +434,12 @@ public partial class HtmlRenderer
             ["MEDIA_SETTINGS_DIALOG"] = MediaLinkEmbedder.RenderSettingsDialog(providersForSettings),
             ["MARKDOWN"] = model.RenderedMarkdown,
             ["PAGE_HERO"] = pageHero,
-            ["PAGE_STYLES"] = (hasHero ? $"<style>{Hero.Styles}</style>" : string.Empty)
-                + (dashboard is null ? string.Empty : $"<style>{Dashboard.Styles}</style>"),
+            ["PAGE_STYLES"] = (hasHero ? _siteAssets.Styles("hero", () => Hero.Styles, prefix) : string.Empty)
+                + (dashboard is null ? string.Empty : _siteAssets.Styles("dashboard", () => Dashboard.Styles, prefix)),
             ["PAGE_BREADCRUMBS"] = dashboard is null ? breadcrumbMarkup : string.Empty,
             ["PAGE_TOC"] = dashboard is null ? RenderOnThisPage(tocHeadings) : string.Empty,
-            ["PAGE_FOOTER"] = RenderPageFooter(model.NavigationItems, editPageLink, !editLinkInserted, lastModified) + dashboardFootnotes,
+            ["PAGE_FOOTER"] = RenderPageFooter(model.NavigationItems, editPageLink, !editLinkInserted, lastModified) + dashboardFootnotes
+                + (_sharedNavigation ? $"<p class=\"page-meta\"><a href=\"{HtmlEncoder.Default.Encode(prefix + SiteNavigation.SitemapPath)}\">Sitemap</a></p>" : string.Empty),
             ["ATTRIBUTION"] = _siteConfiguration.AttributionVisible
                 ? "<footer class=\"made-with-mdu\">Made with <a href=\"https://capjan.github.io/mdu/index.html\" target=\"_blank\" rel=\"noopener noreferrer\">MDU</a></footer>"
                 : string.Empty,
@@ -426,13 +449,16 @@ public partial class HtmlRenderer
                 (hasIconSearch
                     ? $"<script defer src=\"{HtmlEncoder.Default.Encode(prefix + "js/" + IconSearch.ScriptFileName)}\"></script>{Environment.NewLine}"
                     : string.Empty)
-                + (providersForSettings.Count > 0 ? $"<script>{MediaLinkEmbedder.Script}</script>{Environment.NewLine}" : string.Empty)
-                + (hasOpenApiInteractiveContent ? $"<script>{OpenApiResponseScript}</script>{Environment.NewLine}" : string.Empty)
-                + (hasHero ? $"<script>{heroScripts}</script>{Environment.NewLine}" : string.Empty)
-                + (dashboard is null ? string.Empty : $"<script>{Dashboard.Script}</script>{Environment.NewLine}")
-                + (hasIsometricDiagram ? $"<script>{Resources.IsometricDiagramScriptContent()}</script>{Environment.NewLine}" : string.Empty)
+                + (providersForSettings.Count > 0 ? _siteAssets.Script("media", () => MediaLinkEmbedder.Script, prefix) : string.Empty)
+                + (hasOpenApiInteractiveContent ? _siteAssets.Script("openapi", () => OpenApiResponseScript, prefix) : string.Empty)
+                + heroScripts
+                + (dashboard is null ? string.Empty : _siteAssets.Script("dashboard", () => Dashboard.Script, prefix))
+                + (hasIsometricDiagram ? _siteAssets.Script("isometric-diagram", Resources.IsometricDiagramScriptContent, prefix) : string.Empty)
                 + imageZoomScript
         };
+        foreach (var name in SiteAssets.TemplateScripts)
+            values["SCRIPT_" + name.Replace('-', '_').ToUpperInvariant()] =
+                _siteAssets.Script(name, () => Resources.ScriptContent(name), prefix);
         await WriteTemplate(writer, values).ConfigureAwait(false);
     }
 
@@ -511,14 +537,14 @@ public partial class HtmlRenderer
         var light = GetPaletteVariables(configuration.Light);
         var dark = GetPaletteVariables(configuration.Dark);
         if (light.Length == 0 && dark.Length == 0) return string.Empty;
-        var css = new StringBuilder("<style>\n");
+        var css = new StringBuilder();
         if (light.Length > 0) css.Append(":root,:root[data-theme=\"light\"]{").Append(light).Append("}\n");
         if (dark.Length > 0)
         {
             css.Append(":root[data-theme=\"dark\"]{").Append(dark).Append("}\n")
                 .Append("@media(prefers-color-scheme:dark){:root[data-theme=\"auto\"]{").Append(dark).Append("}}\n");
         }
-        return css.Append("</style>").ToString();
+        return css.ToString();
     }
 
     private static string GetPaletteVariables(SitePalette? palette)
@@ -658,66 +684,6 @@ public partial class HtmlRenderer
             }
 
             return -1;
-        }
-    }
-
-    private static string RenderNavigationItems(IReadOnlyList<NavigationItem> navigationItems)
-    {
-        var output = new StringBuilder();
-        var index = 0;
-        RenderItems(0);
-        return output.ToString();
-
-        void RenderItems(int depth)
-        {
-            while (index < navigationItems.Count && navigationItems[index].Depth == depth)
-            {
-                var itemIndex = index++;
-                var item = navigationItems[itemIndex];
-                var hasChildren = index < navigationItems.Count && navigationItems[index].Depth > depth;
-                var hasToggle = hasChildren && depth > 0;
-                var indentDepth = Math.Max(0, item.Depth - 1);
-                var encodedTitle = HtmlEncoder.Default.Encode(item.Title);
-                var encodedUrl = HtmlEncoder.Default.Encode(item.Url);
-                var childrenId = $"site-nav-children-{itemIndex}";
-                var expanded = !hasToggle || item.IsExpandedByDefault;
-                var itemIndent = new string(' ', 16 + depth * 8);
-                var rowIndent = itemIndent + "    ";
-                var contentIndent = rowIndent + "    ";
-
-                var itemClass = item.IsTopNavigationItem ? "site-nav-item top-navigation-entry" : "site-nav-item";
-                if (item.IsCurrentSection) itemClass += " is-current-section";
-                if (item.IsOutsideTopNavigationSection) itemClass += " is-outside-top-navigation-section";
-                if (item.IsInCurrentTopSection) itemClass += " is-in-current-top-section";
-                if (item.IsAncestorOfCurrentTopSection) itemClass += " is-top-navigation-ancestor";
-                output.Append(itemIndent).AppendLine($"<li class=\"{itemClass}\" style=\"--indent-depth: {indentDepth}; --wide-indent-depth: {Math.Max(0, item.TopNavigationDepth)}\">");
-                var rowClass = item.IsCurrent ? " is-current" : item.IsCurrentSection ? " is-current-section" : string.Empty;
-                var currentValue = item.IsCurrent ? "page" : item.IsCurrentSection ? "location" : "false";
-                output.Append(rowIndent).AppendLine($"<div class=\"site-nav-row{rowClass}\">");
-                if (hasToggle)
-                {
-                    var label = expanded ? "Collapse" : "Expand";
-                    var expandedValue = expanded ? "true" : "false";
-                    output.Append(contentIndent).AppendLine($"<button class=\"site-nav-toggle\" type=\"button\" aria-expanded=\"{expandedValue}\" aria-controls=\"{childrenId}\" aria-label=\"{label} {encodedTitle}\"><svg viewBox=\"0 0 12 12\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M3 2l4 4-4 4\"></path></svg></button>");
-                }
-                else if (depth > 0)
-                {
-                    output.Append(contentIndent).AppendLine("<span class=\"site-nav-toggle-spacer\" aria-hidden=\"true\"></span>");
-                }
-
-                output.Append(contentIndent).AppendLine($"<a class=\"site-nav-link{(item.IsCurrent ? " is-current" : item.IsCurrentSection ? " is-current-section" : string.Empty)}\" href=\"{encodedUrl}\" aria-current=\"{currentValue}\">{encodedTitle}</a>");
-                output.Append(rowIndent).AppendLine("</div>");
-
-                if (hasChildren)
-                {
-                    var childClass = item.IsTopNavigationItem ? "site-nav-list site-nav-children top-navigation-children" : "site-nav-list site-nav-children";
-                    output.Append(rowIndent).AppendLine($"<ul class=\"{childClass}\" id=\"{childrenId}\"{(expanded ? string.Empty : " hidden")}>");
-                    RenderItems(depth + 1);
-                    output.Append(rowIndent).AppendLine("</ul>");
-                }
-
-                output.Append(itemIndent).AppendLine("</li>");
-            }
         }
     }
 

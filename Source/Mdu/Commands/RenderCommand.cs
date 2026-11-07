@@ -126,6 +126,7 @@ public class RenderCommand
         string editPageRoot)
     {
         var rendererVisitor = new MarkdigVisitor(rootPath, outPath, _renderer, editPageRoot, _searchIndexBuilder, graph);
+        rendererVisitor.PrepareNavigation();
         
         graph.Visit(rendererVisitor);
     }

@@ -41,7 +41,7 @@ public class ThemeImageTest
     [Fact]
     public void ResolvesTheSystemColorSchemeForImageVariants()
     {
-        var html = Resources.HtmlTemplateContent();
+        var html = Resources.ScriptContent("theme");
 
         Assert.Contains("const systemTheme = matchMedia(\"(prefers-color-scheme: dark)\")", html);
         Assert.Contains("root.dataset.colorScheme", html);

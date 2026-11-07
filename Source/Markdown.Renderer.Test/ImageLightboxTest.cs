@@ -117,8 +117,7 @@ public class ImageLightboxTest
     public async Task DoesNotMakeThemeHiddenImagesFocusableInARealBrowser()
     {
         var browser = FindBrowser() ?? throw new InvalidOperationException("The browser test was not skipped when Chrome or Chromium was unavailable.");
-        var themeScript = Regex.Match(Resources.HtmlTemplateContent(), @"<script>\s*(?<code>.*?)\s*</script>", RegexOptions.Singleline)
-            .Groups["code"].Value;
+        var themeScript = Resources.ScriptContent("theme");
         Assert.NotEmpty(themeScript);
 
         var directory = Path.Combine(Path.GetTempPath(), "mdu-image-lightbox-" + Guid.NewGuid().ToString("N"));

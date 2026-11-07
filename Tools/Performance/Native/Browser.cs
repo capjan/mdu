@@ -162,8 +162,42 @@ internal sealed class Browser : IAsyncDisposable
         await Command("Input.dispatchKeyEvent", new JsonObject { ["type"] = "keyUp", ["key"] = "Tab", ["code"] = "Tab", ["windowsVirtualKeyCode"] = 9 });
         await Check("document.activeElement.matches(':focus-visible')&&getComputedStyle(document.activeElement).outlineStyle!=='none'", "visible keyboard focus");
         await Check("!!document.getElementById('stable-anchor')&&[...document.querySelectorAll('.markdown-content a')].some(a=>a.getAttribute('href')==='index.html')", "anchor and relative navigation");
+        await Check("document.querySelector('.site-sidebar .site-nav-link[aria-current=page]')?.href===location.href", "shared navigation current page");
+        await Act("document.getElementById('theme-toggle').click()");
+        await Check("document.documentElement.dataset.theme==='light'", "shared theme control");
+        await Act("document.querySelector('.toc-link[href=\"#stable-anchor\"]').click()");
+        await Check("location.hash==='#stable-anchor'", "shared TOC behavior");
+        await Command("Browser.grantPermissions", new JsonObject
+        {
+            ["origin"] = new Uri(url).GetLeftPart(UriPartial.Authority),
+            ["permissions"] = new JsonArray("clipboardReadWrite", "clipboardSanitizedWrite")
+        });
+        await Act("document.querySelector('.code-block-copy').click()");
+        await Check("document.querySelector('.code-block-copy').classList.contains('is-copied')", "shared code copy handler");
+        await Act("if(document.getElementById('navigation-toggle').getAttribute('aria-expanded')!=='true')document.getElementById('navigation-toggle').click();[...document.querySelectorAll('.site-sidebar .site-nav-link')].find(link=>link.getClientRects().length)?.focus()");
+        await Command("Input.dispatchKeyEvent", new JsonObject { ["type"] = "keyDown", ["key"] = "Tab", ["code"] = "Tab", ["windowsVirtualKeyCode"] = 9 });
+        await Command("Input.dispatchKeyEvent", new JsonObject { ["type"] = "keyUp", ["key"] = "Tab", ["code"] = "Tab", ["windowsVirtualKeyCode"] = 9 });
+        await Check("!!document.activeElement.closest('.site-sidebar')&&document.activeElement.matches(':focus-visible')&&getComputedStyle(document.activeElement).outlineStyle==='solid'", "shared navigation keyboard focus");
+        await Act("document.getElementById('navigation-toggle').click();document.querySelector('.page-meta a[href$=\"_mdu/sitemap.html\"]').focus()");
+        await Command("Input.dispatchKeyEvent", new JsonObject { ["type"] = "keyDown", ["key"] = "Tab", ["code"] = "Tab", ["windowsVirtualKeyCode"] = 9, ["modifiers"] = 8 });
+        await Command("Input.dispatchKeyEvent", new JsonObject { ["type"] = "keyUp", ["key"] = "Tab", ["code"] = "Tab", ["windowsVirtualKeyCode"] = 9, ["modifiers"] = 8 });
+        await Command("Input.dispatchKeyEvent", new JsonObject { ["type"] = "keyDown", ["key"] = "Tab", ["code"] = "Tab", ["windowsVirtualKeyCode"] = 9 });
+        await Command("Input.dispatchKeyEvent", new JsonObject { ["type"] = "keyUp", ["key"] = "Tab", ["code"] = "Tab", ["windowsVirtualKeyCode"] = 9 });
+        await Check("document.activeElement.getAttribute('href')?.endsWith('_mdu/sitemap.html')&&document.activeElement.matches(':focus-visible')&&getComputedStyle(document.activeElement).outlineStyle==='solid'", "sitemap keyboard focus");
         var capture = await Command("Page.captureScreenshot", new JsonObject { ["format"] = "png" });
         await File.WriteAllBytesAsync(screenshot, Convert.FromBase64String(capture["data"]!.GetValue<string>()));
+        await Command("Emulation.setScriptExecutionDisabled", new JsonObject { ["value"] = true });
+        try
+        {
+            await Navigate(url + "measure.html");
+            await Check("document.querySelectorAll('.site-sidebar .site-nav-link').length===1&&document.querySelector('.page-meta a[href$=\"_mdu/sitemap.html\"]')?.getClientRects().length>0", "static navigation fallback without JavaScript");
+            await Navigate(url + "_mdu/sitemap.html");
+            await Check("document.querySelectorAll('.site-nav-link').length>1&&[...document.querySelectorAll('.site-nav-link')].every(link=>link.getClientRects().length>0)&&!document.querySelector('button,[hidden]')", "complete sitemap without JavaScript");
+        }
+        finally
+        {
+            await Command("Emulation.setScriptExecutionDisabled", new JsonObject { ["value"] = false });
+        }
     }
 
     private async Task<JsonObject> Command(string method, JsonObject? parameters = null)

@@ -27,16 +27,16 @@ public static class Hero
     public static string Styles => Resources.HeroCssContent();
     public static string Script => Resources.HeroBeachScriptContent() + Resources.HeroEffectsScriptContent() + Resources.HeroScriptContent();
 
-    public static string ScriptsFor(string renderedHeroes)
+    internal static IEnumerable<string> ScriptNamesFor(string renderedHeroes)
     {
         var playground = renderedHeroes.Contains("class=\"hero-playground-template\"", StringComparison.Ordinal);
-        return (playground || renderedHeroes.Contains("data-hero-scene=\"beach\"", StringComparison.Ordinal)
-                ? Resources.HeroBeachScriptContent() : string.Empty)
-            + (playground || new[] { "connections", "flow", "voronoi" }.Any(effect =>
-                renderedHeroes.Contains($"data-hero-scene=\"{effect}\"", StringComparison.Ordinal))
-                ? Resources.HeroEffectsScriptContent() : string.Empty)
-            + Resources.HeroScriptContent()
-            + (playground ? Resources.HeroPlaygroundScriptContent() : string.Empty);
+        if (playground || renderedHeroes.Contains("data-hero-scene=\"beach\"", StringComparison.Ordinal))
+            yield return "hero-beach";
+        if (playground || new[] { "connections", "flow", "voronoi" }.Any(effect =>
+            renderedHeroes.Contains($"data-hero-scene=\"{effect}\"", StringComparison.Ordinal)))
+            yield return "hero-effects";
+        yield return "hero";
+        if (playground) yield return "hero-playground";
     }
 
     public static string Render(string configuration)

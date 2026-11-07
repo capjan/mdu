@@ -66,16 +66,20 @@ Because a diagram that cannot be rendered stays a code block, a page never break
 
 ## Page assets
 
-Every page links the shared `css/main.css`. Everything else is added only to the pages that need it:
+Every page links the shared `css/main.css` and local runtime scripts. `SiteAssets` writes each script or stylesheet once per site generation; feature-specific files are added only when a page needs them. Pages reference these files with a content version (`js/navigation.js?v=…`), so after a deployment browsers and CDNs do not combine new pages with cached old navigation or scripts. Scripts execute at the same positions in the document as their inline counterparts, preserving early theme and layout initialization.
 
 | Asset | Added when |
 | --- | --- |
 | `js/search.js` and `search-index.json` | Always; the search runs directly in the browser |
 | Icon search script and index in `js/` | A page contains an `icon-search` block |
-| Hero styles and shared WebGL runtime, inline | A page contains a `hero` block |
-| Beach or abstract Hero effects, inline | A banner uses that effect group; playgrounds include both |
-| Hero playground controls, inline | A banner has `playground: true` |
-| Media consent script, inline | A page contains a standalone YouTube or Vimeo link |
+| `js/navigation.js` and `_mdu/sitemap.html` | Once for the site's navigation tree |
+| Hero styles in `css/` and shared WebGL runtime in `js/` | A page contains a `hero` block |
+| Beach or abstract Hero effects in `js/` | A banner uses that effect group; playgrounds include both |
+| Hero playground controls in `js/` | A banner has `playground: true` |
+| Dashboard styles and script | A page uses the dashboard layout |
+| OpenAPI and isometric interaction scripts | A page contains the corresponding interactive content |
+| Media consent script in `js/` | The site contains a supported media provider |
+| `css/theme.css` | Custom theme colors are configured |
 | Logo and favicon assets from `mdu.yml` | A logo or favicon is configured |
 
 A rendered site looks like this:
@@ -87,7 +91,11 @@ site/
 ├── css/
 │   └── main.css
 ├── js/
-│   └── search.js
+│   ├── search.js
+│   ├── navigation.js
+│   └── …
+├── _mdu/
+│   └── sitemap.html
 ├── assets/
 │   └── logo.svg
 └── Usage/
@@ -97,13 +105,17 @@ site/
 
 ## In the browser
 
-The generated pages are self-contained static HTML. Small inline scripts add:
+The generated site consists of static HTML and shared local assets. Small local scripts add:
 
 - light and dark themes, with an automatic mode that follows the operating system;
 - the collapsible sidebar, top navigation tabs, and a drawer on narrow screens;
 - client-side search with links to the matching section and highlighted hits;
 - copy buttons for code blocks and footnote previews;
 - the consent dialog for embedded videos.
+
+`SiteNavigation` renders the navigation markup in C# once. The shared script inserts that markup before navigation controls initialize, adjusts relative URLs, and applies the page's current/ancestor/top-section state. It needs no fetch request or server endpoint and also works when opening a local HTML file. Page state uses URLs rather than positions in the tree, so a structural rebuild cannot accidentally highlight a different entry on a page awaiting refresh. Ordinary `serve` content edits leave the shared navigation and runtime files untouched; navigation changes rebuild them after the new generation has been prepared, right before its pages render. `serve` removes shared files that no page uses any more when the site is rebuilt.
+
+Breadcrumbs, previous/next links, and a link at the end of each page remain static. `_mdu/sitemap.html` contains the complete, expanded navigation without scripts or toggle buttons, including when JavaScript is disabled or the navigation script fails to load. The `_mdu` output directory is reserved for generated support pages; rendering stops with an error if a page would be written to `_mdu/sitemap.html`. No general HTML minifier touches user content, code whitespace, or PDF fragments.
 
 The image viewer is the shared file `js/image-lightbox.js`. Pages with images load it, unless the page turns the viewer off and no image turns it back on. The build writes the file only when a page loads it.
 
