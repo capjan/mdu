@@ -50,6 +50,24 @@ Native AOT build of the comparison (`osx-arm64`), Chrome 156.0.8078.80, same 503
 
 The functional browser check (`2026-11-07-shared-assets-browser-check.json.gz`) passed: consent and revocation, search, theme, TOC, code copy, shared navigation state, keyboard focus in the sidebar and on the footer sitemap link, and, with JavaScript disabled, the static navigation fallback and a complete, fully visible sitemap. The PDF check (`2026-11-07-shared-assets-pdf.json.gz`) passed for pending, failed and recovered downloads; the recovered PDF contains only the latest generation and was ready 490 ms after the fixing edit.
 
+## Repeat after review fixes
+
+The review fixes moved generated files into the reserved `_mdu/` folder, added content versions to every generated script and stylesheet, assigned top-section membership per item, and changed when `serve` replaces the navigation. Both series were repeated on the final state of the pull request with the same input fingerprint, sequentially and without concurrent work. Archives: `2026-11-07-shared-assets-final.json.gz` (portable) and `2026-11-07-shared-assets-final-native.json.gz` (native).
+
+| Measurement | Before review fixes | Final |
+| --- | ---: | ---: |
+| All generated files, bytes | 13,877,594 | 14,031,135 |
+| Reduction against the baseline (208,244,161 bytes) | 93.3% | 93.3% |
+| HTML files | 1,097 | 1,097 |
+| Portable complete render, median | 2,855.7 ms | 2,969.0 ms |
+| Native complete render, median | 1,122.8 ms | 1,088.8 ms |
+| Native first usable HTTP preview, median | 399.6 ms | 409.2 ms |
+| Text edit over HTTP / in the browser, p95 | 44.9 / 84.9 ms | 44.8 / 84.1 ms |
+| Diagram edit over HTTP / in the browser, p95 | 46.0 / 85.2 ms | 45.8 / 87.0 ms |
+| API edit over HTTP / in the browser, p95 | 49.5 / 101.8 ms | 49.5 / 100.8 ms |
+
+The output grows by 153,541 bytes (about 300 bytes per page) for the version queries and the per-item top-section owners. All 900 native edits were verified. The latency differences are within the run-to-run variation of these series; every p95 stays well inside the targets of ≤ 100 ms over HTTP and ≤ 150 ms in the browser.
+
 ## Implementation and correctness
 
 - `SiteAssets` publishes runtime files once per generation, using atomic file replacement. Optional assets are emitted and referenced only when needed; Hero effects remain selective.
