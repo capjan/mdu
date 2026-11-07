@@ -106,8 +106,8 @@ public partial class HtmlRenderer
     private readonly LinkReplacer _linkReplacer = new LinkReplacer();
     private string? _basePath;
     private SiteAssets _siteAssets = new(null);
-    private bool _sharedNavigation;
-    private string? _navigationVersion;
+    private string? _mainCssVersion;
+    private string? _searchScriptVersion;
     private IReadOnlyList<string> _iconSearchAssets = Array.Empty<string>();
     private IReadOnlyList<string> _imageZoomAssets = Array.Empty<string>();
     private SiteConfiguration _siteConfiguration = new();
@@ -183,31 +183,48 @@ public partial class HtmlRenderer
 
     public void PrepareBasePath(string basePath, SiteConfiguration? siteConfiguration = null)
     {
+        // Keep the published navigation for the same output until PrepareNavigation replaces it.
+        _siteAssets = basePath == _basePath ? _siteAssets.ForNextGeneration() : new SiteAssets(basePath);
         _basePath = basePath;
-        _siteAssets = new SiteAssets(basePath);
-        _sharedNavigation = false;
+        _searchScriptVersion = null;
         _siteConfiguration = siteConfiguration ?? new SiteConfiguration();
         _iconSearchAssets = Array.Empty<string>();
         _imageZoomAssets = Array.Empty<string>();
         var cssFolder = GetEnsuredCssFolderPath(basePath);
         var cssFilePath = Path.Combine(cssFolder, "main.css");
 
-        WriteCssFileTo(cssFilePath);
+        _mainCssVersion = WriteCssFileTo(cssFilePath);
     }
 
     public void PrepareNavigation(IReadOnlyList<NavigationItem> items)
     {
         if (_basePath is null) return;
-        _navigationVersion = SiteNavigation.WriteTo(_basePath, items);
-        _sharedNavigation = true;
+        const string prefix = "../"; // from _mdu/sitemap.html to the site root
+        var head = $"<title>Sitemap · {HtmlEncoder.Default.Encode(_siteConfiguration.SiteName)}</title>"
+            + _siteAssets.Script("theme", () => Resources.ScriptContent("theme"), prefix)
+            + $"<link rel=\"stylesheet\" href=\"{HtmlEncoder.Default.Encode(MainCssLink(prefix))}\">"
+            + _siteAssets.Styles("theme", () => RenderThemeStyles(_siteConfiguration), prefix);
+        SiteNavigation.WriteTo(_siteAssets, items, head);
     }
 
     /// <summary>Shared runtime, style and navigation files published for the current site generation.</summary>
-    public IEnumerable<string> SiteAssetPaths => _basePath is null
-        ? []
-        : _siteAssets.PublishedPaths.Concat(_sharedNavigation
-            ? [Path.Combine(_basePath, "js", "navigation.js"), Path.Combine(_basePath, SiteNavigation.SitemapPath)]
-            : []);
+    public IEnumerable<string> SiteAssetPaths => _siteAssets.PublishedPaths;
+
+    private string MainCssLink(string prefix) =>
+        prefix + "css/main.css" + (_mainCssVersion is null ? string.Empty : "?v=" + _mainCssVersion);
+
+    // search.js is written by Markdown.Search before pages render; version it from the published file.
+    private string SearchScriptLink(string prefix)
+    {
+        if (_searchScriptVersion is null)
+        {
+            var path = _basePath is null ? null : Path.Combine(_basePath, "js", "search.js");
+            _searchScriptVersion = path is not null && File.Exists(path)
+                ? "?v=" + SiteAssets.Version(File.ReadAllText(path))
+                : string.Empty;
+        }
+        return prefix + "js/search.js" + _searchScriptVersion;
+    }
 
     private MarkdownDocument ParseMarkdown(string markdown, string? pdfDownloadUrl = null,
         IReadOnlyDictionary<string, string>? pdfDownloadUrls = null,
@@ -331,8 +348,8 @@ public partial class HtmlRenderer
         bool imageZoom = true)
     {
         var prefix = string.Concat(Enumerable.Repeat("../", nestingDeep));
-        var cssFileLink = prefix + "css/main.css";
-        var searchScriptLink = prefix + "js/search.js";
+        var cssFileLink = MainCssLink(prefix);
+        var searchScriptLink = SearchScriptLink(prefix);
         var searchIndexLink = prefix + "search-index.json";
         var pipeline = glossaryScope?.Pipeline ?? _pipeline;
         
@@ -414,8 +431,8 @@ public partial class HtmlRenderer
             ["IS_DASHBOARD"] = dashboard is null ? "false" : "true",
             ["TOC_CONTROLS"] = dashboard is null && tocHeadings.Count > 0 ? "aria-controls=\"on-this-page\"" : string.Empty,
             ["HEADER_LAYOUT_CLASS"] = hasWideSidebar ? " has-wide-sidebar" : string.Empty,
-            ["NAVIGATION_ITEMS"] = _sharedNavigation
-                ? SiteNavigation.Reference(model.NavigationItems, prefix, _navigationVersion!)
+            ["NAVIGATION_ITEMS"] = _siteAssets.HasNavigation
+                ? SiteNavigation.Reference(model.NavigationItems, prefix, _siteAssets)
                 : SiteNavigation.RenderItems(model.NavigationItems),
             ["TOP_NAVIGATION_ITEMS"] = RenderTopNavigationItems(model.TopNavigationItems),
             ["SIDEBAR_SECTION_TITLE"] = currentTopNavigationItem is not null && hasWideSidebar && !hasUnassignedSidebarPages
@@ -439,7 +456,7 @@ public partial class HtmlRenderer
             ["PAGE_BREADCRUMBS"] = dashboard is null ? breadcrumbMarkup : string.Empty,
             ["PAGE_TOC"] = dashboard is null ? RenderOnThisPage(tocHeadings) : string.Empty,
             ["PAGE_FOOTER"] = RenderPageFooter(model.NavigationItems, editPageLink, !editLinkInserted, lastModified) + dashboardFootnotes
-                + (_sharedNavigation ? $"<p class=\"page-meta\"><a href=\"{HtmlEncoder.Default.Encode(prefix + SiteNavigation.SitemapPath)}\">Sitemap</a></p>" : string.Empty),
+                + (_siteAssets.HasNavigation ? $"<p class=\"page-meta\"><a href=\"{HtmlEncoder.Default.Encode(prefix + SiteAssets.SitemapPath)}\">Sitemap</a></p>" : string.Empty),
             ["ATTRIBUTION"] = _siteConfiguration.AttributionVisible
                 ? "<footer class=\"made-with-mdu\">Made with <a href=\"https://capjan.github.io/mdu/index.html\" target=\"_blank\" rel=\"noopener noreferrer\">MDU</a></footer>"
                 : string.Empty,
@@ -1821,7 +1838,7 @@ public partial class HtmlRenderer
         return cssFolder;
     }
 
-    private static void WriteCssFileTo(string cssFilePath)
+    private static string WriteCssFileTo(string cssFilePath)
     {
         var mainCssContent = Resources.CssContent();
         var syntaxCssContent = StaticCode.Highlighter.Res.Resources.CssContent();
@@ -1832,6 +1849,7 @@ public partial class HtmlRenderer
 
         var cssContent = cssContentBuilder.ToString();
         File.WriteAllText(cssFilePath, cssContent, Encoding.UTF8);
+        return SiteAssets.Version(cssContent);
     }
     
 

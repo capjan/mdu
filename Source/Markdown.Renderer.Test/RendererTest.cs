@@ -389,8 +389,8 @@ public class RendererTest
             });
             await renderer.WriteHtml(sw, "test", "", 0, "# Test", "");
 
-            Assert.Contains("href=\"css/theme.css?v=", sb.ToString());
-            var html = File.ReadAllText(Path.Combine(outputPath, "css", "theme.css"));
+            Assert.Contains("href=\"_mdu/css/theme.css?v=", sb.ToString());
+            var html = File.ReadAllText(Path.Combine(outputPath, "_mdu", "css", "theme.css"));
             Assert.Contains(":root,:root[data-theme=\"light\"]{--page-background:#123456;--surface-header:#123456;", html);
             Assert.Contains(":root[data-theme=\"dark\"]{--page-background:#654321;--surface-header:#654321;", html);
             Assert.Contains("@media(prefers-color-scheme:dark){:root[data-theme=\"auto\"]{--page-background:#654321;--surface-header:#654321;", html);
@@ -417,8 +417,8 @@ public class RendererTest
             });
             await renderer.WriteHtml(sw, "test", "", 0, "# Test", "");
 
-            Assert.Contains("href=\"css/theme.css?v=", sb.ToString());
-            var html = File.ReadAllText(Path.Combine(outputPath, "css", "theme.css"));
+            Assert.Contains("href=\"_mdu/css/theme.css?v=", sb.ToString());
+            var html = File.ReadAllText(Path.Combine(outputPath, "_mdu", "css", "theme.css"));
             Assert.Contains("--text-secondary:color-mix(in oklab,var(--text-primary) 63%,var(--page-background))", html);
             Assert.Contains("--border:color-mix(in oklab,var(--text-primary) 16%,var(--page-background))", html);
             Assert.Contains("--nav-hover:color-mix(in oklab,var(--link) 16%,var(--page-background))", html);

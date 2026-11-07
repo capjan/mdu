@@ -23,9 +23,9 @@ public class ServeCommandIntegrationTest
         try
         {
             await WaitUntilAsync(async () => (await client.GetStringAsync("__mdu/status")).Contains("\"building\":false"), process);
-            var assets = Directory.GetFiles(Path.Combine(site, "js"))
+            var assets = Directory.GetFiles(Path.Combine(site, "_mdu", "js"))
                 .ToDictionary(path => path, File.GetLastWriteTimeUtc);
-            Assert.Contains(Path.Combine(site, "js", "navigation.js"), assets.Keys);
+            Assert.Contains(Path.Combine(site, "_mdu", "js", "navigation.js"), assets.Keys);
             var navigationVersion = new System.Text.RegularExpressions.Regex("js/navigation\\.js\\?v=([0-9a-f]{12})");
             var originalVersion = navigationVersion.Match(File.ReadAllText(Path.Combine(site, "index.html"))).Groups[1].Value;
             Assert.NotEmpty(originalVersion);
@@ -34,9 +34,9 @@ public class ServeCommandIntegrationTest
             foreach (var (path, timestamp) in assets) Assert.Equal(timestamp, File.GetLastWriteTimeUtc(path));
 
             File.WriteAllText(page, "# Renamed title\n\nAfter title edit\n");
-            await WaitUntilAsync(async () => (await client.GetStringAsync("js/navigation.js")).Contains("Renamed title"), process);
+            await WaitUntilAsync(async () => (await client.GetStringAsync("_mdu/js/navigation.js")).Contains("Renamed title"), process);
             Assert.Contains("Renamed title", await client.GetStringAsync("_mdu/sitemap.html"));
-            Assert.DoesNotContain("Original title", await client.GetStringAsync("js/navigation.js"));
+            Assert.DoesNotContain("Original title", await client.GetStringAsync("_mdu/js/navigation.js"));
             var renamedVersion = navigationVersion.Match(await client.GetStringAsync("index.html")).Groups[1].Value;
             Assert.NotEqual(originalVersion, renamedVersion);
         }
@@ -64,14 +64,14 @@ public class ServeCommandIntegrationTest
         try
         {
             await WaitUntilAsync(async () => (await client.GetStringAsync("__mdu/status")).Contains("\"building\":false"), process);
-            Assert.True(File.Exists(Path.Combine(site, "css", "hero.css")));
+            Assert.True(File.Exists(Path.Combine(site, "_mdu", "css", "hero.css")));
             File.WriteAllText(banner, "# Banner\n\nNo hero any more\n");
             // A configuration change rebuilds the site and reconciles its generated files.
             File.WriteAllText(Path.Combine(docs, "mdu.yml"), "site.name: Changed\n");
             await WaitUntilAsync(async () => await PageContainsAsync(client, new Uri(client.BaseAddress, "Banner.html").ToString(), "No hero any more"), process);
             await WaitUntilAsync(async () => (await client.GetStringAsync("__mdu/status")).Contains("\"building\":false"), process);
-            Assert.False(File.Exists(Path.Combine(site, "css", "hero.css")));
-            Assert.True(File.Exists(Path.Combine(site, "js", "navigation.js")));
+            Assert.False(File.Exists(Path.Combine(site, "_mdu", "css", "hero.css")));
+            Assert.True(File.Exists(Path.Combine(site, "_mdu", "js", "navigation.js")));
         }
         finally
         {

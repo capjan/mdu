@@ -79,9 +79,9 @@ public class RenderCommandGlossaryTest
             Assert.Equal(0, result);
             var html = File.ReadAllText(Path.Combine(output, "index.html"));
             Assert.Contains("<abbr title=\"Application Programming Interface\">API</abbr>", html);
-            Assert.Contains("src=\"js/content-previews.js?v=", html);
+            Assert.Contains("src=\"_mdu/js/content-previews.js?v=", html);
             Assert.Contains("abbreviationTooltip.className = \"footnote-preview\"",
-                File.ReadAllText(Path.Combine(output, "js", "content-previews.js")));
+                File.ReadAllText(Path.Combine(output, "_mdu", "js", "content-previews.js")));
             Assert.DoesNotContain("abbreviations.html", Directory.EnumerateFiles(output, "*.html", SearchOption.AllDirectories)
                 .Select(Path.GetFileName));
             Assert.DoesNotContain("Application Programming Interface", File.ReadAllText(Path.Combine(output, "search-index.json")));

@@ -6,10 +6,8 @@ namespace Markdown.Renderer;
 
 internal static class SiteNavigation
 {
-    internal const string SitemapPath = "_mdu/sitemap.html";
-
-    /// <summary>Writes the shared navigation script and static sitemap and returns the script's content version.</summary>
-    internal static string WriteTo(string outputPath, IReadOnlyList<NavigationItem> items)
+    /// <summary>Publishes the shared navigation script and the static sitemap, whose head carries the site theme.</summary>
+    internal static void WriteTo(SiteAssets assets, IReadOnlyList<NavigationItem> items, string sitemapHead)
     {
         // URLs are relative to the site root; page-specific state stays in the referencing HTML.
         var neutral = items.Select(item => new NavigationItem
@@ -23,26 +21,24 @@ internal static class SiteNavigation
         var markup = RenderItems(neutral, shared: true);
         var script = Resources.ScriptContent("navigation")
             .Replace("%%NAVIGATION_HTML%%", Quote(markup), StringComparison.Ordinal);
-        SiteAssets.WriteAtomically(Path.Combine(outputPath, "js", "navigation.js"), script);
+        assets.Replace(SiteAssets.NavigationPath, script);
 
         foreach (var item in neutral) item.Url = "../" + item.Url;
-        var sitemap = "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\">" +
+        var sitemap = "<!DOCTYPE html><html lang=\"en\" data-theme=\"auto\"><head><meta charset=\"utf-8\">" +
             "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">" +
-            "<title>Sitemap</title><link rel=\"stylesheet\" href=\"../css/main.css\">" +
-            "</head><body><main class=\"markdown-content\"><h1>Sitemap</h1>" +
+            sitemapHead + "</head><body><main class=\"markdown-content\"><h1>Sitemap</h1>" +
             "<nav aria-label=\"All documentation pages\"><ul class=\"site-nav-list\">" +
             RenderItems(neutral, sitemap: true) + "</ul></nav></main></body></html>";
-        SiteAssets.WriteAtomically(Path.Combine(outputPath, SitemapPath), sitemap);
-        return SiteAssets.Version(script);
+        assets.Replace(SiteAssets.SitemapPath, sitemap);
     }
 
-    internal static string Reference(IReadOnlyList<NavigationItem> items, string prefix, string version)
+    internal static string Reference(IReadOnlyList<NavigationItem> items, string prefix, SiteAssets assets)
     {
         var current = items.FirstOrDefault(item => item.IsCurrent)?.Url ?? string.Empty;
         var sectionUrls = "[" + string.Join(',', items.Where(item => item.IsCurrentSection).Select(item => Quote(item.Url))) + "]";
         var top = items.FirstOrDefault(item => item.IsTopNavigationItem && item.IsInCurrentTopSection)?.Url ?? string.Empty;
-        return $"<li class=\"site-nav-item is-outside-top-navigation-section\"><a class=\"site-nav-link\" href=\"{HtmlEncoder.Default.Encode(prefix + SitemapPath)}\">Sitemap</a></li>" +
-            $"<script src=\"{HtmlEncoder.Default.Encode(prefix + "js/navigation.js?v=" + version)}\" data-prefix=\"{HtmlEncoder.Default.Encode(prefix)}\"" +
+        return $"<li class=\"site-nav-item is-outside-top-navigation-section\"><a class=\"site-nav-link\" href=\"{HtmlEncoder.Default.Encode(prefix + SiteAssets.SitemapPath)}\">Sitemap</a></li>" +
+            $"<script src=\"{HtmlEncoder.Default.Encode(prefix + assets.Url(SiteAssets.NavigationPath))}\" data-prefix=\"{HtmlEncoder.Default.Encode(prefix)}\"" +
             $" data-current=\"{HtmlEncoder.Default.Encode(current)}\" data-sections=\"{HtmlEncoder.Default.Encode(sectionUrls)}\" data-top=\"{HtmlEncoder.Default.Encode(top)}\"></script>";
     }
 
