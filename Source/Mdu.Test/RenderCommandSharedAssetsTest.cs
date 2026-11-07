@@ -10,6 +10,7 @@ using Mdu.Service.Visitors;
 
 namespace Mdu.Test;
 
+[Collection("Process state")]
 public class RenderCommandSharedAssetsTest
 {
     [Fact]
