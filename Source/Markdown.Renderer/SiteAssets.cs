@@ -69,8 +69,12 @@ internal sealed class SiteAssets
     /// <summary>Writes a file whose content changes within a generation, such as the navigation.</summary>
     internal void Replace(string relativePath, string content)
     {
-        WriteAtomically(Path.Combine(_outputPath!, relativePath), content);
-        _versions[relativePath] = Version(content);
+        var version = Version(content);
+        var path = Path.Combine(_outputPath!, relativePath);
+        // Unchanged content keeps its file, so a rebuild does not rewrite large navigation trees.
+        if (!_versions.TryGetValue(relativePath, out var current) || current != version || !File.Exists(path))
+            WriteAtomically(path, content);
+        _versions[relativePath] = version;
     }
 
     // Returns the versioned site-relative URL, so a cached copy from an earlier deployment is never reused.

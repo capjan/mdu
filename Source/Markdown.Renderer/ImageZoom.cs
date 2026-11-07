@@ -31,6 +31,8 @@ public static class ImageZoom
 
     private static string InvalidValue(string value) => $"images.zoom must be 'true' or 'false', not '{value}'.";
 
+    private static readonly Lazy<string> ScriptVersion = new(() => SiteAssets.Version(Resources.ImageLightboxScriptContent()));
+
     internal static IReadOnlyList<string> WriteAssetsTo(string outputPath)
     {
         var scriptDirectory = Path.Combine(outputPath, "js");
@@ -46,7 +48,7 @@ public static class ImageZoom
         if (!renderedMarkdown.Contains("<img", StringComparison.OrdinalIgnoreCase)) return string.Empty;
         if (!pageZoom && !renderedMarkdown.Contains(EnabledClass, StringComparison.Ordinal)) return string.Empty;
 
-        var source = HtmlEncoder.Default.Encode(prefix + "js/" + ScriptFileName);
+        var source = HtmlEncoder.Default.Encode(prefix + "js/" + ScriptFileName + "?v=" + ScriptVersion.Value);
         var setting = pageZoom ? string.Empty : " data-image-zoom=\"off\"";
         return $"<script defer src=\"{source}\"{setting}></script>{Environment.NewLine}";
     }

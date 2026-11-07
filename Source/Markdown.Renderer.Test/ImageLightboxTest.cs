@@ -75,7 +75,7 @@ public class ImageLightboxTest
         var html = await RenderAsync("# Title\n\n![Alt](image.png){.image-zoom-on}\n", imageZoom: false);
 
         Assert.Contains("class=\"image-zoom-on\"", html);
-        Assert.Contains("<script defer src=\"js/image-lightbox.js\" data-image-zoom=\"off\"></script>", html);
+        Assert.Matches("<script defer src=\"js/image-lightbox\\.js\\?v=[0-9a-f]{12}\" data-image-zoom=\"off\"></script>", html);
     }
 
     [Fact]

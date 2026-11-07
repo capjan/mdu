@@ -97,12 +97,12 @@ public class RenderCommand
         _searchIndexBuilder.Clear();
         var nodeCount = CountMarkdownNodes(graph);
         
-        Console.WriteLine("Preparing Assets");
-        CopyAssets(rootPath, outPath, graph);
-        SiteConfigurationReader.CopyAssets(rootPath, outPath, siteConfiguration);
-
         try
         {
+            Console.WriteLine("Preparing Assets");
+            CopyAssets(rootPath, outPath, graph);
+            SiteConfigurationReader.CopyAssets(rootPath, outPath, siteConfiguration);
+
             if (_pdfCommand.WriteSitePdfIfLinked(rootPath, Path.Combine(outPath, "documentation.pdf"), graph) != 0)
                 return 1;
 

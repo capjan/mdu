@@ -963,7 +963,8 @@ public sealed class ServeCommand
         var pageDirectory = Path.GetDirectoryName(page.SiteRelativePath ?? Path.GetRelativePath(_rootPath, page.FileInfo.FullName)) ?? string.Empty;
         var relativeAssetPath = Path.GetRelativePath(sourceDirectory, assetPath);
         var outputPath = Path.GetFullPath(Path.Combine(_outputPath, pageDirectory, relativeAssetPath));
-        return IsInsideDirectory(_outputPath, outputPath) ? outputPath : null;
+        // Never copy over or remove files that mdu generates in its reserved folder.
+        return IsInsideDirectory(_outputPath, outputPath) && !ReservedOutput.Contains(_outputPath, outputPath) ? outputPath : null;
     }
 
     private string GetPageKey(MarkdownFile page)

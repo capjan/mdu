@@ -71,6 +71,13 @@ public class SiteAssetsTest
             Assert.Contains("data-theme=\"auto\"", sitemap);
             Assert.Contains("src=\"../_mdu/js/theme.js?v=", sitemap);
             Assert.Contains("href=\"../css/main.css?v=", sitemap);
+            // An unchanged tree keeps its files, so rebuilds do not rewrite them.
+            var navigation = Path.Combine(output, "_mdu", "js", "navigation.js");
+            File.SetLastWriteTimeUtc(navigation, new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+            renderer.PrepareNavigation([new NavigationItem { Title = "Home", Url = "index.html" }]);
+            Assert.Equal(new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc), File.GetLastWriteTimeUtc(navigation));
+            renderer.PrepareNavigation([new NavigationItem { Title = "Start", Url = "index.html" }]);
+            Assert.Contains("Start", File.ReadAllText(navigation));
         }
         finally
         {

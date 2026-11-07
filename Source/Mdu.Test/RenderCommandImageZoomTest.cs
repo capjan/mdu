@@ -40,9 +40,9 @@ public class RenderCommandImageZoomTest
 
             Assert.Equal(0, result);
             Assert.True(File.Exists(Path.Combine(output, "js", "image-lightbox.js")));
-            Assert.Contains("<script defer src=\"js/image-lightbox.js\"></script>", File.ReadAllText(Path.Combine(output, "index.html")));
+            Assert.Matches("<script defer src=\"js/image-lightbox\\.js\\?v=[0-9a-f]{12}\"></script>", File.ReadAllText(Path.Combine(output, "index.html")));
             Assert.DoesNotContain("image-lightbox.js", File.ReadAllText(Path.Combine(output, "Off.html")));
-            Assert.Contains("<script defer src=\"../js/image-lightbox.js\" data-image-zoom=\"off\"></script>",
+            Assert.Matches("<script defer src=\"\\.\\./js/image-lightbox\\.js\\?v=[0-9a-f]{12}\" data-image-zoom=\"off\"></script>",
                 File.ReadAllText(Path.Combine(output, "Guide", "index.html")));
         }
         finally

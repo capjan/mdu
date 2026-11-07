@@ -464,7 +464,7 @@ public partial class HtmlRenderer
             ["REPOSITORY_LINK"] = RenderRepositoryLink(editPageLink),
             ["PAGE_SCRIPTS"] =
                 (hasIconSearch
-                    ? $"<script defer src=\"{HtmlEncoder.Default.Encode(prefix + "js/" + IconSearch.ScriptFileName)}\"></script>{Environment.NewLine}"
+                    ? $"<script defer src=\"{HtmlEncoder.Default.Encode(prefix + "js/" + IconSearch.ScriptFileName + IconSearch.AssetQuery())}\"></script>{Environment.NewLine}"
                     : string.Empty)
                 + (providersForSettings.Count > 0 ? _siteAssets.Script("media", () => MediaLinkEmbedder.Script, prefix) : string.Empty)
                 + (hasOpenApiInteractiveContent ? _siteAssets.Script("openapi", () => OpenApiResponseScript, prefix) : string.Empty)

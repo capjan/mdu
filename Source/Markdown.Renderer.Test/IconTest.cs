@@ -322,7 +322,7 @@ public class IconTest
 
             var searchPage = await RenderPage(renderer, "# Icons\n\n```icon-search\n```\n", 2);
             Assert.Contains("<div class=\"icon-search\">", searchPage);
-            Assert.Contains("<script defer src=\"../../js/icon-search.js\"></script>", searchPage);
+            Assert.Matches("<script defer src=\"\\.\\./\\.\\./js/icon-search\\.js\\?v=[0-9a-f]{12}&amp;i=[0-9a-f]{12}\"></script>", searchPage);
             Assert.Equal(2, renderer.IconSearchAssets.Count);
 
             using var index = JsonDocument.Parse(await File.ReadAllBytesAsync(Path.Combine(outputPath, "js", IconSearch.IndexFileName)));

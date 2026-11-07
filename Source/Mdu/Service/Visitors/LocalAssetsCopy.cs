@@ -50,6 +50,8 @@ public class LocalAssetsCopy : BaseVisitor
                     io.OutputFullDirectoryPath,
                     Path.GetRelativePath(io.InputFullDirectoryPath, fullPath)));
                 if (!IsInsideDirectory(io.OutputRootDirectoryPath, outputAssetPath)) continue;
+                if (ReservedOutput.Contains(io.OutputRootDirectoryPath, outputAssetPath))
+                    throw ReservedOutput.Collision(io.OutputRootDirectoryPath, outputAssetPath);
                 var relativeOutputAssetPath = Path.GetRelativePath(io.OutputRootDirectoryPath, outputAssetPath);
                 var assetIO = FilePathInfo.CreateRenderFileInfo(
                     io.RootDirectoryPath,
