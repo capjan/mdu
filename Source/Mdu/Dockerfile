@@ -29,10 +29,11 @@ RUN apk add --no-cache ca-certificates git libcrypto3 libssl3 \
 
 ENV HOME=/tmp
 
-COPY --from=build /app/publish/mdu /mdu
+COPY --from=build /app/publish/mdu /usr/local/bin/mdu
+RUN ln -s /usr/local/bin/mdu /mdu
 COPY --from=build /source/LICENSE /licenses/LICENSE
 COPY --from=build /source/Source/StaticCode.Icons/THIRD-PARTY-NOTICES.md /licenses/THIRD-PARTY-NOTICES.md
 COPY --from=build /source/Source/StaticCode.Icons/Res/dashboard-icons.LICENSE /licenses/dashboard-icons.LICENSE
 
 WORKDIR /work
-ENTRYPOINT ["/mdu"]
+ENTRYPOINT ["/usr/local/bin/mdu"]
