@@ -40,6 +40,13 @@ jobs:
             echo "Configure the Docker Hub secrets described in AGENTS.md." >&2
             exit 1
           fi
+          for repository in capjan/mdu capjan/mdu-ci; do
+            status="$(curl --silent --output /dev/null --write-out '%{http_code}' "https://hub.docker.com/v2/repositories/$repository/")"
+            if [[ "$status" != 200 ]]; then
+              echo "Docker Hub repository $repository is missing or not public (HTTP $status). Create it as a public repository, as described in AGENTS.md." >&2
+              exit 1
+            fi
+          done
 
       - name: Checkout
         uses: actions/checkout@v7
@@ -363,6 +370,7 @@ jobs:
         with:
           context: .
           file: Source/Mdu/Dockerfile
+          target: cli
           platforms: ${{ matrix.platform }}
           outputs: type=image,name=capjan/mdu,push-by-digest=true,name-canonical=true,push=true
           labels: |
@@ -370,18 +378,36 @@ jobs:
             org.opencontainers.image.version=${{ needs.prepare-release.outputs.package_version }}
             org.opencontainers.image.revision=${{ github.sha }}
 
-      - name: Save image digest
+      - name: Build and push CI architecture image
+        id: build-ci
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Source/Mdu/Dockerfile
+          target: ci
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=capjan/mdu-ci,push-by-digest=true,name-canonical=true,push=true
+          labels: |
+            org.opencontainers.image.source=https://github.com/capjan/mdu
+            org.opencontainers.image.version=${{ needs.prepare-release.outputs.package_version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Save image digests
         env:
           IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          CI_IMAGE_DIGEST: ${{ steps.build-ci.outputs.digest }}
         run: |
           mkdir -p /tmp/digests
           printf '%s\n' "$IMAGE_DIGEST" > "/tmp/digests/${{ matrix.arch }}"
+          printf '%s\n' "$CI_IMAGE_DIGEST" > "/tmp/digests/ci-${{ matrix.arch }}"
 
-      - name: Upload image digest
+      - name: Upload image digests
         uses: actions/upload-artifact@v7
         with:
           name: docker-digests-${{ matrix.arch }}
-          path: /tmp/digests/${{ matrix.arch }}
+          path: |
+            /tmp/digests/${{ matrix.arch }}
+            /tmp/digests/ci-${{ matrix.arch }}
           if-no-files-found: error
           retention-days: 1
 
@@ -418,3 +444,9 @@ jobs:
             --tag capjan/mdu:latest \
             "capjan/mdu@$(cat /tmp/digests/amd64)" \
             "capjan/mdu@$(cat /tmp/digests/arm64)"
+
+          docker buildx imagetools create \
+            --tag "capjan/mdu-ci:$PACKAGE_VERSION" \
+            --tag capjan/mdu-ci:latest \
+            "capjan/mdu-ci@$(cat /tmp/digests/ci-amd64)" \
+            "capjan/mdu-ci@$(cat /tmp/digests/ci-arm64)"
