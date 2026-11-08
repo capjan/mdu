@@ -860,10 +860,6 @@ body:has(.site-layout.sidebar-open)::before {
     opacity: 1;
 }
 
-.site-nav-section-title {
-    display: none;
-}
-
 .site-nav-list {
     margin: 0;
     padding: 0;
@@ -1083,11 +1079,7 @@ body:has(.site-layout.sidebar-open)::before {
         height: calc(100vh - var(--site-header-height));
     }
 
-    .site-nav-section-title {
-        display: none;
-    }
-
-    /* The tree root reads as the same quiet label as the wide sidebar's section title, with the same row height as other items. */
+    /* The tree root reads as the same quiet label as the wide sidebar's current section entry, with the same row height as other items. */
     .site-sidebar > nav > .site-nav-list > .site-nav-item:first-child > .site-nav-row > .site-nav-link {
         color: var(--text-secondary);
         font-size: 0.76rem;
@@ -1158,7 +1150,7 @@ body:has(.site-layout.sidebar-open)::before {
         display: none;
     }
 
-    /* Aligns the sidebar section title with the brand and the first tab. */
+    /* Aligns the sidebar section label with the brand and the first tab. */
     .site-sidebar {
         padding-left: 0.375rem;
     }
@@ -5291,7 +5283,10 @@ body:has(.image-lightbox[open]) {
     outline-offset: -2px;
 }
 
-/* A zero-height sticky rail in the article's grid cell keeps the overlay pill centered above the article column, whatever the sidebar and table of contents take, and follows the header instead of the viewport (.site-main is a size container, which would capture position: fixed). */
+/* A zero-height sticky rail in the article's grid cell keeps the overlay pill centered above the article column, whatever
+   the sidebar and table of contents take, and follows the header instead of the viewport (.site-main is a size container,
+   which would capture position: fixed). It follows the article in the source, so screen readers and the Tab key reach
+   the page first, and comes first through order in the narrow column layouts. */
 .back-to-top-rail {
     position: sticky;
     top: calc(var(--site-header-height) + var(--top-navigation-height) + 0.5rem);
@@ -5300,6 +5295,7 @@ body:has(.image-lightbox[open]) {
     grid-row: 1;
     align-self: start;
     height: 0;
+    order: -1;
     transition: top 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
@@ -5405,7 +5401,15 @@ body:has(.image-lightbox[open]) {
 
 @media (max-width: 760px) {
     .content-layout {
-        display: block;
+        /* A column instead of blocks, so the back-to-top rail that follows the article in the source can come first. */
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        align-items: stretch;
+    }
+
+    .content-layout > .back-to-top-rail {
+        align-self: stretch;
     }
 
     .on-this-page,

@@ -38,6 +38,27 @@ public class RendererTest
     }
 
     [Fact]
+    public async Task PlacesBackToTopInAStickyRailAfterTheArticle()
+    {
+        using var writer = new StringWriter();
+        await new HtmlRenderer().WriteHtml(writer, "test", "", 0, "# Page\n\n## Section\n\nText", "");
+        var html = writer.ToString();
+        var css = Resources.CssContent();
+
+        // Inside .site-main, a size container, position: fixed would follow the page instead of the viewport.
+        var rail = html.IndexOf("<div class=\"back-to-top-rail\"><a class=\"back-to-top\"", StringComparison.Ordinal);
+        Assert.True(rail > html.IndexOf("</article>", StringComparison.Ordinal));
+        Assert.True(rail > html.IndexOf("<div class=\"content-layout\">", StringComparison.Ordinal));
+        Assert.True(rail < html.IndexOf("</main>", StringComparison.Ordinal));
+        Assert.True(html.IndexOf("id=\"back-to-top\"", StringComparison.Ordinal) > html.IndexOf("</header>", StringComparison.Ordinal));
+        Assert.DoesNotContain("site-nav-section-title", html);
+        var railStyles = BlockAfter(css, "\n.back-to-top-rail {");
+        Assert.Contains("position: sticky;", railStyles);
+        Assert.Contains("order: -1;", railStyles);
+        Assert.Contains("position: absolute;", BlockAfter(css, "\n.back-to-top {"));
+    }
+
+    [Fact]
     public void RendersAnAccessibleSidebarResizer()
     {
         var html = TemplateWithScripts();

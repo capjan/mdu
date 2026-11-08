@@ -149,10 +149,6 @@ body:has(.top-navigation.is-empty)::after {
     }
 }
 
-:root.is-over-hero:has(.hero-full[data-hero-scene="beach"]) .back-to-top {
-    background: rgb(3 14 28 / 30%);
-}
-
 .site-header {
     transition: box-shadow 160ms ease, background-color 300ms ease;
 }

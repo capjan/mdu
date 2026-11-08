@@ -413,7 +413,6 @@ public partial class HtmlRenderer
         var hasTopNavigation = model.TopNavigationItems.Count > 0;
         var hasCurrentTopSection = model.NavigationItems.Any(item =>
             item.IsTopNavigationItem && item.IsInCurrentTopSection);
-        var currentTopNavigationItem = model.TopNavigationItems.FirstOrDefault(item => item.IsCurrent || item.IsCurrentSection);
         var hasUnassignedSidebarPages = model.NavigationItems.Any(item =>
             item.IsOutsideTopNavigationSection && !item.IsAncestorOfCurrentTopSection);
         var hasWideSidebar = !hasTopNavigation || (hasCurrentTopSection
@@ -440,9 +439,6 @@ public partial class HtmlRenderer
                 ? SiteNavigation.Reference(model.NavigationItems, prefix, _siteAssets)
                 : SiteNavigation.RenderItems(model.NavigationItems),
             ["TOP_NAVIGATION_ITEMS"] = RenderTopNavigationItems(model.TopNavigationItems),
-            ["SIDEBAR_SECTION_TITLE"] = currentTopNavigationItem is not null && hasWideSidebar && !hasUnassignedSidebarPages
-                ? $"<div class=\"site-nav-section-title\">{HtmlEncoder.Default.Encode(currentTopNavigationItem.Title)}</div>"
-                : string.Empty,
             ["TOP_NAVIGATION_CLASS"] = hasTopNavigation ? string.Empty : " is-empty",
             ["SITE_LAYOUT_CLASS"] = (hasTopNavigation
                 ? hasWideSidebar
