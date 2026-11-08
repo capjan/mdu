@@ -56,7 +56,7 @@
     const createLightbox = () => {
         const dialog = document.createElement("dialog");
         dialog.className = "image-lightbox";
-        dialog.innerHTML = `<div class="image-lightbox-stage" tabindex="-1" autofocus><img alt="" draggable="false"></div>
+        dialog.innerHTML = `<div class="image-lightbox-stage" tabindex="-1" autofocus><img alt="" draggable="false"><p class="image-lightbox-error" role="status"></p></div>
 <p class="image-lightbox-caption"></p>
 <button class="image-lightbox-close" type="button" aria-label="Close image" title="Close (Esc)">${icon("M5 5l10 10M15 5L5 15")}</button>
 <div class="image-lightbox-tools" role="group" aria-label="Image zoom">
@@ -75,6 +75,7 @@
 
         const stage = dialog.querySelector(".image-lightbox-stage");
         const preview = stage.querySelector("img");
+        const errorMessage = stage.querySelector(".image-lightbox-error");
         const caption = dialog.querySelector(".image-lightbox-caption");
         const closeButton = dialog.querySelector(".image-lightbox-close");
         const tools = dialog.querySelector(".image-lightbox-tools");
@@ -143,6 +144,7 @@
             update(animate);
         };
         const measure = (keepView) => {
+            if (errorMessage.textContent) return;
             const width = preview.naturalWidth || sourceSize.width;
             const height = preview.naturalHeight || sourceSize.height;
             if (!width || !height) return;
@@ -166,7 +168,21 @@
             stage.classList.remove("is-loading");
         };
         preview.addEventListener("load", reveal);
-        preview.addEventListener("error", () => dialog.close());
+        preview.addEventListener("error", () => {
+            if (!dialog.open) return;
+            if (navigation.hidden) {
+                dialog.close();
+                return;
+            }
+            errorMessage.textContent = "Image could not be loaded.";
+            view.width = 0;
+            view.height = 0;
+            view.zoomable = false;
+            view.scale = view.fit;
+            if (tools.contains(document.activeElement)) closeButton.focus();
+            tools.hidden = true;
+            update();
+        });
         const updateCaptionFocus = () => {
             const scrollable = caption.scrollHeight > caption.clientHeight;
             if (scrollable) caption.tabIndex = 0;
@@ -350,6 +366,7 @@
             sourceSize = { width: bounds.width, height: bounds.height };
             view.vector = isVector(source);
             view.fitted = true;
+            errorMessage.textContent = "";
             stage.classList.add("is-loading");
             preview.alt = image.alt;
             preview.classList.toggle("image-frame", image.classList.contains("image-frame"));
@@ -397,7 +414,7 @@
             if (dialog.open || !gallery) return;
             document.body.style.removeProperty("--image-lightbox-gutter");
             const images = galleryImages();
-            const image = images.includes(activeImage) ? activeImage : images[activeIndex];
+            const image = activeImage.getClientRects().length ? activeImage : images[activeIndex];
             if (!image) return;
             inlineGalleries.get(gallery)?.(image);
             const target = image.closest("a") ?? image;
@@ -419,10 +436,25 @@
             refreshGallery() {
                 if (!dialog.open || !gallery) return;
                 const images = galleryImages();
-                const current = images.indexOf(activeImage);
+                let current = images.indexOf(activeImage);
+                if (current < 0) {
+                    const step = activeImage.closest("figure") ?? activeImage.closest("p");
+                    if (step && gallery.contains(step)) {
+                        current = images.findIndex((image) => step.contains(image));
+                        if (current < 0 && !activeImage.getClientRects().length) {
+                            const replacement = [...step.querySelectorAll("img")].find((image) =>
+                                image.closest(".image-gallery") === gallery && image.getClientRects().length);
+                            if (replacement) {
+                                activeImage = replacement;
+                                dialog.close();
+                                return;
+                            }
+                        }
+                    }
+                }
                 activeIndex = current < 0 ? Math.min(activeIndex, images.length - 1) : current;
                 updateNavigation(images);
-                if (current < 0) {
+                if (images[activeIndex] !== activeImage) {
                     if (images[activeIndex]) showImage(images[activeIndex]);
                     else dialog.close();
                 } else if (!stage.classList.contains("is-loading")) measure(true);

@@ -4757,6 +4757,15 @@ body:has(.image-lightbox[open]) {
     visibility: hidden;
 }
 
+.image-lightbox-error {
+    position: absolute;
+    inset: 50% 12px auto;
+    margin: 0;
+    transform: translateY(-50%);
+    text-align: center;
+    pointer-events: none;
+}
+
 .image-lightbox-stage.is-animating img {
     transition: width 160ms ease-out, height 160ms ease-out, transform 160ms ease-out;
 }
