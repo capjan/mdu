@@ -42,7 +42,7 @@ layout: dashboard
 | `## Heading` | A group of tiles |
 | `### Heading` or a lower level inside a group | A subheading that divides the group; a paragraph below it is a short description |
 | `- [Name](URL)` | A tile that opens the link |
-| Text after the link | Subtitle of the tile. A leading `—`, `–`, `-`, or `:` is removed. Without it, the tile shows the host name. In a group of compact rows, a host that only spells the name, such as `github.com` for GitHub, is left out. |
+| Text after the link | Subtitle of the tile. A leading `—`, `–`, `-`, or `:` is removed. Without it, the tile shows the host name. In a group of compact rows, a host that is only the name and a top-level domain, such as `github.com` for GitHub, is left out; a host with a subdomain other than `www.` always stays. |
 | `---` | Starts a new row of groups |
 | A list item without a link | A note between the tiles |
 
