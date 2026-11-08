@@ -45,7 +45,7 @@ public class RenderCommandSharedAssetsTest
                 if (page.QuerySelector(".site-sidebar") is null) continue; // aliases and the static sitemap
                 Assert.Single(page.QuerySelectorAll(".site-sidebar .site-nav-link"));
                 Assert.Contains("_mdu/sitemap.html", page.QuerySelector(".site-sidebar a")!.GetAttribute("href"));
-                Assert.NotNull(page.QuerySelector(".page-meta a[href$='_mdu/sitemap.html']"));
+                Assert.Null(page.QuerySelector(".page-meta a[href$='_mdu/sitemap.html']"));
                 Assert.All(page.QuerySelectorAll("script"), script =>
                 {
                     Assert.True(script.HasAttribute("src"), "Common runtime must not be repeated inline.");

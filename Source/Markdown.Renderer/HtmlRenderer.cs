@@ -456,8 +456,7 @@ public partial class HtmlRenderer
             ["PAGE_BREADCRUMBS"] = dashboard is null ? breadcrumbMarkup : string.Empty,
             ["PAGE_TOC"] = dashboard is null ? RenderOnThisPage(tocHeadings) : string.Empty,
             // A dashboard is a start page, not a chapter: like the contents and breadcrumbs, it has no previous and next page.
-            ["PAGE_FOOTER"] = RenderPageFooter(dashboard is null ? model.NavigationItems : [], editPageLink, !editLinkInserted, lastModified) + dashboardFootnotes
-                + (_siteAssets.HasNavigation ? $"<p class=\"page-meta\"><a href=\"{HtmlEncoder.Default.Encode(prefix + SiteAssets.SitemapPath)}\">Sitemap</a></p>" : string.Empty),
+            ["PAGE_FOOTER"] = RenderPageFooter(dashboard is null ? model.NavigationItems : [], editPageLink, !editLinkInserted, lastModified) + dashboardFootnotes,
             ["ATTRIBUTION"] = _siteConfiguration.AttributionVisible
                 ? "<footer class=\"made-with-mdu\">Made with <a href=\"https://capjan.github.io/mdu/index.html\" target=\"_blank\" rel=\"noopener noreferrer\">MDU</a></footer>"
                 : string.Empty,
