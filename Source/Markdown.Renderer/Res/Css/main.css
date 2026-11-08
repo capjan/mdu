@@ -1,6 +1,7 @@
 :root {
     scrollbar-gutter: stable;
     color-scheme: light;
+    background: var(--page-background);
     --site-header-height: 56px;
     --top-navigation-height: 43px;
     --sidebar-preferred-width: 260px;
@@ -13,25 +14,28 @@
     --toc-content-min: 342px;
     --panel-gap: 48px;
     --main-padding: 32px;
+    --sticky-top-gap: 2.25rem;
     --toc-threshold: 600px;
     --page-max-width: 1400px;
     /* Space beside the centered page on screens wider than --page-max-width. */
     --page-inset: max(0px, (100% - var(--page-max-width)) / 2);
     --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
     --page-background: #fff;
-    --text-primary: #1d1d1f;
-    --text-secondary: #6e6e73;
+    --text-primary: #141518;
+    --text-body: #34373c;
+    --text-secondary: #686d76;
     --surface-header: #fff;
+    --surface-header-glass: rgb(255 255 255 / 88%);
     --surface-current: #f5f5f7;
     --surface-key: #fff;
     --surface-code: #f5f5f7;
     --surface-code-block: #f5f5f7;
     --surface-code-block-body: #fff;
     --code-block-border: #e5e5ea;
-    --border: #d2d2d7;
-    --border-subtle: #e5e5ea;
+    --border: #d5d7dc;
+    --border-subtle: #e7e8ec;
     --image-frame: #c7c7cc;
-    --header-divider: #e5e5ea;
+    --header-divider: #e7e8ec;
     --hover-background: rgb(0 0 0 / 4%);
     --link: #06c;
     --nav-hover: #eef5fc;
@@ -91,22 +95,24 @@
 
 :root[data-theme="dark"] {
     color-scheme: dark;
-    --page-background: rgb(22 22 24);
-    --text-primary: rgb(242 242 245);
-    --text-secondary: #a1a1a6;
-    --surface-header: rgb(22 22 24);
-    --surface-current: #1d1d1f;
-    --surface-key: #1d1d1f;
-    --surface-code: #2a2a2d;
-    --surface-code-block: #232325;
-    --surface-code-block-body: #1d1d1f;
-    --code-block-border: #303033;
-    --border: #303033;
-    --border-subtle: #424245;
+    --page-background: #0f1012;
+    --text-primary: #f3f4f6;
+    --text-body: #c4c6cb;
+    --text-secondary: #878c96;
+    --surface-header: #0f1012;
+    --surface-header-glass: rgb(15 16 18 / 88%);
+    --surface-current: #17181c;
+    --surface-key: #17181c;
+    --surface-code: #1d1f24;
+    --surface-code-block: #16181c;
+    --surface-code-block-body: #121317;
+    --code-block-border: #23262c;
+    --border: #262930;
+    --border-subtle: #1e2026;
     --image-frame: #48484d;
-    --header-divider: #303033;
+    --header-divider: #1e2026;
     --hover-background: rgb(255 255 255 / 5%);
-    --link: #2997ff;
+    --link: #4da3ff;
     --nav-hover: #325173;
     --nav-hover-text: #fff;
     --backdrop: rgb(0 0 0 / 60%);
@@ -135,7 +141,7 @@
     --alert-warning-background: #2a1e00;
     --alert-caution-accent: #ff8a80;
     --alert-caution-background: #2e0d0c;
-    --diagram-node-background: #1d1d1f;
+    --diagram-node-background: #17181c;
     --diagram-node-border: #8e8e93;
     --diagram-decision-background: #0b2440;
     --diagram-decision-border: #2f6db0;
@@ -146,8 +152,8 @@
     --diagram-container-background: rgb(255 255 255 / 4%);
     --diagram-subgraph-border: #69696f;
     --diagram-subgraph-title: #a1a1a6;
-    --iso-surface: rgb(22 22 24);
-    --iso-platform-surface: #2a2a2e;
+    --iso-surface: #0f1012;
+    --iso-platform-surface: #22242a;
     --iso-top-mix: 52%;
     --iso-left-mix: 38%;
     --iso-right-mix: 28%;
@@ -159,22 +165,24 @@
 @media (prefers-color-scheme: dark) {
     :root[data-theme="auto"] {
         color-scheme: dark;
-        --page-background: rgb(22 22 24);
-        --text-primary: rgb(242 242 245);
-        --text-secondary: #a1a1a6;
-        --surface-header: rgb(22 22 24);
-        --surface-current: #1d1d1f;
-        --surface-key: #1d1d1f;
-        --surface-code: #2a2a2d;
-        --surface-code-block: #232325;
-        --surface-code-block-body: #1d1d1f;
-        --code-block-border: #303033;
-        --border: #303033;
-        --border-subtle: #424245;
+        --page-background: #0f1012;
+        --text-primary: #f3f4f6;
+        --text-body: #c4c6cb;
+        --text-secondary: #878c96;
+        --surface-header: #0f1012;
+        --surface-header-glass: rgb(15 16 18 / 88%);
+        --surface-current: #17181c;
+        --surface-key: #17181c;
+        --surface-code: #1d1f24;
+        --surface-code-block: #16181c;
+        --surface-code-block-body: #121317;
+        --code-block-border: #23262c;
+        --border: #262930;
+        --border-subtle: #1e2026;
         --image-frame: #48484d;
-        --header-divider: #303033;
+        --header-divider: #1e2026;
         --hover-background: rgb(255 255 255 / 5%);
-        --link: #2997ff;
+        --link: #4da3ff;
         --nav-hover: #325173;
         --nav-hover-text: #fff;
         --backdrop: rgb(0 0 0 / 60%);
@@ -203,7 +211,7 @@
         --alert-warning-background: #2a1e00;
         --alert-caution-accent: #ff8a80;
         --alert-caution-background: #2e0d0c;
-        --diagram-node-background: #1d1d1f;
+        --diagram-node-background: #17181c;
         --diagram-node-border: #8e8e93;
         --diagram-decision-background: #0b2440;
         --diagram-decision-border: #2f6db0;
@@ -214,8 +222,8 @@
         --diagram-container-background: rgb(255 255 255 / 4%);
         --diagram-subgraph-border: #69696f;
         --diagram-subgraph-title: #a1a1a6;
-        --iso-surface: rgb(22 22 24);
-        --iso-platform-surface: #2a2a2e;
+        --iso-surface: #0f1012;
+        --iso-platform-surface: #22242a;
         --iso-top-mix: 52%;
         --iso-left-mix: 38%;
         --iso-right-mix: 28%;
@@ -235,8 +243,26 @@ body {
     background: var(--page-background);
     color: var(--text-primary);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
-    font-size: 17px;
-    line-height: 1.47;
+    font-size: 1rem;
+    line-height: 1.5;
+}
+
+/* A single glass backdrop spans both top bars so the blur never splits along their seam or fails on the scrollable tab bar. */
+body::before {
+    position: fixed;
+    top: 0;
+    right: 0;
+    left: 0;
+    z-index: 17;
+    height: calc(var(--site-header-height) + var(--top-navigation-height));
+    background: var(--surface-header);
+    content: "";
+    pointer-events: none;
+    transition: transform 220ms cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 160ms ease, background-color 300ms ease;
+}
+
+body:has(.top-navigation.is-empty)::before {
+    height: var(--site-header-height);
 }
 
 .site-header {
@@ -248,7 +274,7 @@ body {
     height: var(--site-header-height);
     padding: 0 calc(var(--page-inset) + 0.75rem) 0 calc(var(--page-inset) + 1.5rem);
     border-bottom: 0;
-    background: var(--surface-header);
+    background: transparent;
     transition: box-shadow 160ms ease;
 }
 
@@ -616,27 +642,37 @@ body {
     min-height: var(--top-navigation-height);
     padding: 0 calc(var(--page-inset) + 0.75rem);
     border-bottom: 0;
-    background: var(--surface-header);
+    background: transparent;
+    clip-path: inset(0);
     scrollbar-width: thin;
-    transition: transform 220ms cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 160ms ease;
+    transition: transform 220ms cubic-bezier(0.2, 0.7, 0.2, 1), clip-path 220ms cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 160ms ease;
 }
 
-/* Once the page scrolls, a hairline below the lowest bar separates it from the content. */
-:root.is-scrolled .site-header,
-:root.is-scrolled .top-navigation:not(.is-empty) {
+/* Once the page scrolls, the sticky side panels move closer to the header and a hairline separates it from the content. */
+:root.is-scrolled {
+    --sticky-top-gap: 1rem;
+}
+
+:root.is-scrolled body::before,
+body:has(.site-layout.sidebar-open)::before {
+    background: var(--surface-header-glass);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
     box-shadow: 0 1px 0 var(--header-divider);
 }
 
 @media (min-width: 1221px) {
-    :root.is-scrolled .site-header:has(~ .top-navigation:not(.is-empty)) {
-        box-shadow: none;
+    body:has(.top-navigation:not(.is-empty).is-hidden-on-scroll)::before {
+        transform: translateY(calc(0px - var(--top-navigation-height)));
     }
 }
 
 /* The navigation only slides away. Giving up its space would change the page height while scrolling and pull the
-   scrollbar away from the pointer. */
+   scrollbar away from the pointer. Matching inset clip-path cuts it off along the bottom edge of the header. */
 .top-navigation.is-hidden-on-scroll {
     transform: translateY(-100%);
+    clip-path: inset(100% 0 0 0);
+    pointer-events: none;
 }
 
 .top-navigation.is-empty {
@@ -697,8 +733,8 @@ body {
     overflow-y: auto;
     height: calc(100vh - var(--site-header-height) - var(--top-navigation-height));
     min-width: 0;
-    padding: 1rem 0.75rem 1rem;
-    transition: top 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
+    padding: var(--sticky-top-gap) 0.75rem 1rem;
+    transition: top 220ms cubic-bezier(0.2, 0.7, 0.2, 1), padding-top 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
 .sidebar-resizer {
@@ -778,6 +814,7 @@ body {
     display: none;
 }
 
+.panels-initializing body::before,
 .panels-initializing .site-header,
 .panels-initializing .site-header *,
 .panels-initializing .site-sidebar,
@@ -792,7 +829,7 @@ body {
 .toc-resizer {
     display: none;
     position: sticky;
-    top: calc(var(--site-header-height) + var(--top-navigation-height) + 16px);
+    top: calc(var(--site-header-height) + var(--top-navigation-height) + var(--sticky-top-gap));
     grid-column: 2;
     grid-row: 1;
     justify-self: start;
@@ -803,6 +840,7 @@ body {
     cursor: col-resize;
     touch-action: none;
     z-index: 1;
+    transition: top 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
 .toc-resizer::before {
@@ -821,14 +859,7 @@ body {
 }
 
 .site-nav-section-title {
-    margin: 0 0 0.75rem;
-    padding-left: 1.125rem;
-    color: var(--text-secondary);
-    font-size: 0.76rem;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    line-height: 1.4;
-    text-transform: uppercase;
+    display: none;
 }
 
 .site-nav-list {
@@ -1011,6 +1042,7 @@ body {
     width: 100%;
     min-width: 0;
     padding: 1rem var(--main-padding) 3rem;
+    padding-top: 2.25rem;
 }
 
 .site-layout.sidebar-collapsed .site-main {
@@ -1022,6 +1054,10 @@ body {
 }
 
 @media (max-width: 1220px) {
+    body::before {
+        height: var(--site-header-height);
+    }
+
     .top-navigation {
         display: none;
     }
@@ -1050,23 +1086,26 @@ body {
         display: none;
     }
 
-    /* The tree root reads as the same quiet label as the wide sidebar's section title, on the breadcrumb's line. */
+    /* The tree root reads as the same quiet label as the wide sidebar's section title, with the same row height as other items. */
     .site-sidebar > nav > .site-nav-list > .site-nav-item:first-child > .site-nav-row > .site-nav-link {
-        padding-block: 0;
         color: var(--text-secondary);
         font-size: 0.76rem;
         font-weight: 600;
         letter-spacing: 0.06em;
-        line-height: calc(0.875rem * 1.45);
+        line-height: calc(0.95rem * 1.45);
         text-transform: uppercase;
     }
 
-    .site-sidebar > nav > .site-nav-list > .site-nav-item:first-child > .site-nav-row:hover > .site-nav-link {
+    .site-sidebar > nav > .site-nav-list > .site-nav-item:first-child > .site-nav-row:is(:hover, .is-current-section) > .site-nav-link {
         color: var(--text-primary);
     }
 
     .site-sidebar > nav > .site-nav-list > .site-nav-item:first-child > .site-nav-row.is-current > .site-nav-link {
         color: var(--link);
+    }
+
+    .back-to-top {
+        top: 4rem;
     }
 }
 
@@ -1079,7 +1118,11 @@ body {
 
     .top-navigation:not(.is-empty).is-hidden-on-scroll ~ .site-layout .on-this-page,
     .top-navigation:not(.is-empty).is-hidden-on-scroll ~ .site-layout .toc-resizer {
-        top: calc(var(--site-header-height) + 16px);
+        top: calc(var(--site-header-height) + var(--sticky-top-gap));
+    }
+
+    .top-navigation:not(.is-empty).is-hidden-on-scroll ~ .site-layout .back-to-top {
+        top: 4rem;
     }
 
     .top-navigation.is-empty ~ .site-layout {
@@ -1094,7 +1137,11 @@ body {
 
     .top-navigation.is-empty ~ .site-layout .on-this-page,
     .top-navigation.is-empty ~ .site-layout .toc-resizer {
-        top: calc(var(--site-header-height) + 16px);
+        top: calc(var(--site-header-height) + var(--sticky-top-gap));
+    }
+
+    .top-navigation.is-empty ~ .site-layout .back-to-top {
+        top: 4rem;
     }
 
     .site-layout.no-wide-sidebar .site-sidebar {
@@ -1132,8 +1179,34 @@ body {
     }
 
     .site-layout.has-current-top-section.has-wide-sidebar .site-sidebar .site-nav-item.is-top-navigation-ancestor > .site-nav-row,
-    .site-layout.has-current-top-section.has-wide-sidebar .site-sidebar .site-nav-item.top-navigation-entry.is-current-section > .site-nav-row {
+    .site-layout.has-current-top-section.has-wide-sidebar .site-sidebar .site-nav-item.top-navigation-entry.is-current-section:not(:has(> .site-nav-children)) > .site-nav-row,
+    .site-layout.has-current-top-section.has-wide-sidebar .site-sidebar:has(.site-nav-item.is-outside-top-navigation-section:not(.is-top-navigation-ancestor)) .site-nav-item.top-navigation-entry.is-current-section > .site-nav-row {
         display: none;
+    }
+
+    .site-layout.has-current-top-section.has-wide-sidebar .site-sidebar .site-nav-item.top-navigation-entry.is-current-section > .site-nav-row > .site-nav-toggle {
+        display: none;
+    }
+
+    .site-layout.has-current-top-section.has-wide-sidebar .site-sidebar .site-nav-item.top-navigation-entry.is-current-section > .site-nav-children[hidden] {
+        display: block;
+    }
+
+    .site-layout.has-current-top-section.has-wide-sidebar .site-sidebar .site-nav-item.top-navigation-entry.is-current-section > .site-nav-row > .site-nav-link {
+        color: var(--text-secondary);
+        font-size: 0.76rem;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        line-height: calc(0.95rem * 1.45);
+        text-transform: uppercase;
+    }
+
+    .site-layout.has-current-top-section.has-wide-sidebar .site-sidebar .site-nav-item.top-navigation-entry.is-current-section > .site-nav-row:is(:hover, .is-current-section) > .site-nav-link {
+        color: var(--text-primary);
+    }
+
+    .site-layout.has-current-top-section.has-wide-sidebar .site-sidebar .site-nav-item.top-navigation-entry.is-current-section > .site-nav-row.is-current > .site-nav-link {
+        color: var(--link);
     }
 
     .site-layout.has-current-top-section.has-wide-sidebar .site-sidebar .site-nav-item.is-in-current-top-section > .site-nav-row {
@@ -1398,9 +1471,9 @@ a:hover {
 }
 
 .breadcrumbs {
-    margin: 0 0 0.75rem;
+    margin: 0 0 0.45rem;
     color: var(--text-secondary);
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
     line-height: 1.45;
 }
 
@@ -1425,10 +1498,12 @@ a:hover {
 
 h1, h2, h3, h4, h5, h6 {
     margin: 2rem 0 1rem;
+    color: var(--text-primary);
     font-weight: 600;
     letter-spacing: -0.02em;
     line-height: 1.2;
     scroll-margin-top: 4rem;
+    text-wrap: balance;
 }
 
 .media-embed {
@@ -1595,30 +1670,34 @@ h6 {
     font-size: 1rem;
 }
 
-/* Headings lead through size and weight, so bold body text never outranks them; modest sizes keep long pages calm. */
+/* Headings lead through size, weight and bright color, while slightly softened body text keeps long pages calm. */
 .markdown-content h1 {
-    margin-bottom: 1.5rem;
-    font-size: 2.25rem;
+    margin-bottom: 1.35rem;
+    font-size: 2rem;
+    font-weight: 700;
     letter-spacing: -0.025em;
 }
 
 .markdown-content h2 {
-    margin: 2.75rem 0 0.875rem;
-    font-size: 1.5rem;
+    margin: 2.5rem 0 0.85rem;
+    font-size: 1.375rem;
+    font-weight: 650;
 }
 
 .markdown-content h3 {
-    margin: 2rem 0 0.75rem;
-    font-size: 1.25rem;
+    margin: 1.85rem 0 0.65rem;
+    font-size: 1.15rem;
 }
 
 .site-main strong,
 .site-main b {
+    color: var(--text-primary);
     font-weight: 600;
 }
 
 .markdown-content p {
-    line-height: 1.6;
+    line-height: 1.65;
+    text-wrap: pretty;
 }
 
 .markdown-content figure:has(> figcaption):has(img) {
@@ -2982,9 +3061,19 @@ table {
 }
 
 th, td {
-    padding: 0.6rem 0.75rem;
+    padding: 0.85rem 0.75rem;
     border-bottom: 1px solid var(--border-subtle);
     text-align: left;
+}
+
+th {
+    padding-block: 0.6rem;
+    border-bottom-color: var(--border);
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
 }
 
 .footnote-preview {
@@ -4972,8 +5061,11 @@ body:has(.image-lightbox[open]) {
         height: calc(100vh - var(--site-header-height));
         height: calc(100dvh - var(--site-header-height));
         flex-direction: column;
+        padding-top: 1rem;
         overflow: hidden;
-        background: var(--surface-header);
+        background: var(--surface-header-glass);
+        -webkit-backdrop-filter: blur(8px);
+        backdrop-filter: blur(8px);
         box-shadow: var(--sidebar-shadow);
     }
 
@@ -4995,11 +5087,12 @@ body:has(.image-lightbox[open]) {
 
     .site-layout.sidebar-open .sidebar-backdrop {
         position: fixed;
-        inset: var(--site-header-height) 0 0;
+        inset: var(--site-header-height) 0 0 min(300px, calc(100vw - 3rem));
         z-index: 31;
         display: block;
-        width: 100%;
+        width: auto;
         height: calc(100vh - var(--site-header-height));
+        height: calc(100dvh - var(--site-header-height));
         padding: 0;
         border: 0;
         background: var(--backdrop);
@@ -5012,19 +5105,6 @@ body:has(.image-lightbox[open]) {
     .search-button {
         min-width: 0;
         margin-left: auto;
-    }
-
-    .site-header .back-to-top {
-        width: 44px;
-        min-height: 44px;
-        flex-shrink: 0;
-        margin-left: 0.35rem;
-        padding: 0;
-        justify-content: center;
-    }
-
-    .back-to-top span {
-        display: none;
     }
 
     .search-dialog {
@@ -5070,6 +5150,7 @@ body:has(.image-lightbox[open]) {
     grid-column: 1;
     grid-row: 1;
     min-width: 0;
+    color: var(--text-body);
 }
 
 .markdown-content > h1:first-of-type,
@@ -5126,7 +5207,7 @@ body:has(.image-lightbox[open]) {
     grid-row: 1;
     display: none;
     position: sticky;
-    top: calc(var(--site-header-height) + var(--top-navigation-height) + 16px);
+    top: calc(var(--site-header-height) + var(--top-navigation-height) + var(--sticky-top-gap));
     align-self: start;
     width: var(--toc-width);
     min-width: 0;
@@ -5140,7 +5221,7 @@ body:has(.image-lightbox[open]) {
 @media (max-width: 1220px) {
     .on-this-page,
     .toc-resizer {
-        top: calc(var(--site-header-height) + 16px);
+        top: calc(var(--site-header-height) + var(--sticky-top-gap));
     }
 }
 
@@ -5205,7 +5286,10 @@ body:has(.image-lightbox[open]) {
 }
 
 .back-to-top {
-    position: static;
+    position: fixed;
+    top: 6.75rem;
+    left: 50%;
+    z-index: 19;
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
@@ -5213,7 +5297,9 @@ body:has(.image-lightbox[open]) {
     padding: 0 0.85rem;
     border: 1px solid var(--border-subtle);
     border-radius: 999px;
-    background: var(--surface-current);
+    background: var(--surface-header-glass);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
     color: var(--text-secondary);
     box-shadow: 0 4px 16px rgb(0 0 0 / 14%);
     font-size: 0.875rem;
@@ -5222,13 +5308,13 @@ body:has(.image-lightbox[open]) {
     opacity: 0;
     visibility: visible;
     pointer-events: none;
-    transform: translateY(0.5rem);
-    transition: opacity 140ms ease, transform 140ms ease, visibility 140ms ease, background-color 120ms ease, color 120ms ease;
+    transform: translate(-50%, 0.5rem);
+    transition: top 220ms cubic-bezier(0.2, 0.7, 0.2, 1), opacity 140ms ease, transform 140ms ease, visibility 140ms ease, background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
 .back-to-top:hover {
-    background: var(--nav-hover);
-    color: var(--nav-hover-text);
+    border-color: var(--border);
+    color: var(--text-primary);
     text-decoration: none;
 }
 
@@ -5236,7 +5322,7 @@ body:has(.image-lightbox[open]) {
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
-    transform: translateY(0);
+    transform: translate(-50%, 0);
 }
 
 .back-to-top svg {
@@ -5252,7 +5338,7 @@ body:has(.image-lightbox[open]) {
 .back-to-top:focus-visible {
     opacity: 1;
     pointer-events: auto;
-    transform: translateY(0);
+    transform: translate(-50%, 0);
     outline: 2px solid var(--link);
     outline-offset: 3px;
 }

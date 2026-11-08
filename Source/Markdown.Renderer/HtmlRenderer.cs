@@ -580,7 +580,9 @@ public partial class HtmlRenderer
         // Secondary text, lines and surfaces follow a custom palette instead of staying on the default neutrals.
         if (palette.Background is not null || palette.Text is not null)
         {
+            values.Add($"--text-body:{MixText(84)}");
             values.Add($"--text-secondary:{MixText(63)}");
+            values.Add("--surface-header-glass:color-mix(in srgb,var(--page-background) 88%,transparent)");
             values.Add($"--border:{MixText(16)}");
             values.Add($"--border-subtle:{MixText(11)}");
             values.Add($"--header-divider:{MixText(11)}");
