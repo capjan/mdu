@@ -69,9 +69,12 @@
     padding-top: calc(2.5rem + var(--hero-overlap));
 }
 
+:root.is-over-hero:not(:has(.site-layout.sidebar-open)) body::before,
 :root.is-over-hero:not(:has(.site-layout.sidebar-open)) .site-header,
 :root.is-over-hero:not(:has(.site-layout.sidebar-open)) .top-navigation {
     background: transparent;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
     box-shadow: none;
 }
 
@@ -146,10 +149,6 @@ body:has(.top-navigation.is-empty)::after {
     }
 }
 
-:root.is-over-hero:has(.hero-full[data-hero-scene="beach"]) .site-header .back-to-top {
-    background: rgb(3 14 28 / 30%);
-}
-
 .site-header {
     transition: box-shadow 160ms ease, background-color 300ms ease;
 }
@@ -175,6 +174,7 @@ body:has(.top-navigation.is-empty)::after {
     transition: color 300ms ease, background-color 300ms ease, border-color 300ms ease, filter 300ms ease, opacity 140ms ease, transform 140ms ease, visibility 140ms ease;
 }
 
+:root.is-hero-settling body::before,
 :root.is-hero-settling .site-header,
 :root.is-hero-settling .site-header *,
 :root.is-hero-settling .top-navigation,

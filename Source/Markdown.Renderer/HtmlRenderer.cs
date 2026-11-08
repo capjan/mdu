@@ -413,7 +413,6 @@ public partial class HtmlRenderer
         var hasTopNavigation = model.TopNavigationItems.Count > 0;
         var hasCurrentTopSection = model.NavigationItems.Any(item =>
             item.IsTopNavigationItem && item.IsInCurrentTopSection);
-        var currentTopNavigationItem = model.TopNavigationItems.FirstOrDefault(item => item.IsCurrent || item.IsCurrentSection);
         var hasUnassignedSidebarPages = model.NavigationItems.Any(item =>
             item.IsOutsideTopNavigationSection && !item.IsAncestorOfCurrentTopSection);
         var hasWideSidebar = !hasTopNavigation || (hasCurrentTopSection
@@ -440,9 +439,6 @@ public partial class HtmlRenderer
                 ? SiteNavigation.Reference(model.NavigationItems, prefix, _siteAssets)
                 : SiteNavigation.RenderItems(model.NavigationItems),
             ["TOP_NAVIGATION_ITEMS"] = RenderTopNavigationItems(model.TopNavigationItems),
-            ["SIDEBAR_SECTION_TITLE"] = currentTopNavigationItem is not null && hasWideSidebar && !hasUnassignedSidebarPages
-                ? $"<div class=\"site-nav-section-title\">{HtmlEncoder.Default.Encode(currentTopNavigationItem.Title)}</div>"
-                : string.Empty,
             ["TOP_NAVIGATION_CLASS"] = hasTopNavigation ? string.Empty : " is-empty",
             ["SITE_LAYOUT_CLASS"] = (hasTopNavigation
                 ? hasWideSidebar
@@ -580,7 +576,9 @@ public partial class HtmlRenderer
         // Secondary text, lines and surfaces follow a custom palette instead of staying on the default neutrals.
         if (palette.Background is not null || palette.Text is not null)
         {
+            values.Add($"--text-body:{MixText(84)}");
             values.Add($"--text-secondary:{MixText(63)}");
+            values.Add("--surface-header-glass:color-mix(in srgb,var(--page-background) 88%,transparent)");
             values.Add($"--border:{MixText(16)}");
             values.Add($"--border-subtle:{MixText(11)}");
             values.Add($"--header-divider:{MixText(11)}");

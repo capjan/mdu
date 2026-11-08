@@ -134,7 +134,13 @@
             brandTitle.textContent = headingIsVisible ? brandTitle.dataset.siteTitle : brandTitle.dataset.pageTitle;
         }
         if (backToTop) {
-            backToTop.classList.toggle("is-visible", window.scrollY > 200 && scrollDirection < 0);
+            // The pill shows only once its sticky rail rests below the bars; until then (for example below a tall
+            // hero) the rail is still in the flow of the page and the pill would float in the middle of the screen.
+            // Without a rail the pill has no flow position to wait for. The check runs last, so scrolling down reads no layout.
+            const rail = backToTop.closest(".back-to-top-rail");
+            const railIsStuck = () => !rail ||
+                rail.getBoundingClientRect().top <= (parseFloat(getComputedStyle(rail).top) || 0) + 1;
+            backToTop.classList.toggle("is-visible", window.scrollY > 200 && scrollDirection < 0 && railIsStuck());
         }
         if (topNavigation) {
             // Once hidden, the navigation returns near the top only well below the point where it hid,

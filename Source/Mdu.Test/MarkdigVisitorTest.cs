@@ -295,12 +295,10 @@ public class MarkdigVisitorTest
             visitor.Process(page, 1);
             var pageHtml = File.ReadAllText(Path.Combine(outputPath, "Seite1.html"));
             Assert.Contains("class=\"site-layout has-top-navigation no-wide-sidebar\"", pageHtml);
-            Assert.DoesNotContain("site-nav-section-title", pageHtml);
 
             visitor.Process(home, 0);
             var homeHtml = File.ReadAllText(Path.Combine(outputPath, "index.html"));
             Assert.Contains("class=\"site-layout has-top-navigation no-wide-sidebar\"", homeHtml);
-            Assert.DoesNotContain("site-nav-section-title", homeHtml);
         }
         finally
         {
@@ -350,7 +348,6 @@ public class MarkdigVisitorTest
             Assert.Contains("is-outside-top-navigation-section", NavigationItemClass(sidebarNavigation, "Seite 3"));
             Assert.DoesNotContain("is-outside-top-navigation-section", NavigationItemClass(sidebarNavigation, "Seite 1"));
             Assert.Contains("is-top-navigation-ancestor", NavigationItemClass(sidebarNavigation, "Dashboard"));
-            Assert.DoesNotContain("site-nav-section-title", html);
         }
         finally
         {

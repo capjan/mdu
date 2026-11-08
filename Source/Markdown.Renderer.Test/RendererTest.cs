@@ -38,6 +38,27 @@ public class RendererTest
     }
 
     [Fact]
+    public async Task PlacesBackToTopInAStickyRailAfterTheArticle()
+    {
+        using var writer = new StringWriter();
+        await new HtmlRenderer().WriteHtml(writer, "test", "", 0, "# Page\n\n## Section\n\nText", "");
+        var html = writer.ToString();
+        var css = Resources.CssContent();
+
+        // Inside .site-main, a size container, position: fixed would follow the page instead of the viewport.
+        var rail = html.IndexOf("<div class=\"back-to-top-rail\"><a class=\"back-to-top\"", StringComparison.Ordinal);
+        Assert.True(rail > html.IndexOf("</article>", StringComparison.Ordinal));
+        Assert.True(rail > html.IndexOf("<div class=\"content-layout\">", StringComparison.Ordinal));
+        Assert.True(rail < html.IndexOf("</main>", StringComparison.Ordinal));
+        Assert.True(html.IndexOf("id=\"back-to-top\"", StringComparison.Ordinal) > html.IndexOf("</header>", StringComparison.Ordinal));
+        Assert.DoesNotContain("site-nav-section-title", html);
+        var railStyles = BlockAfter(css, "\n.back-to-top-rail {");
+        Assert.Contains("position: sticky;", railStyles);
+        Assert.Contains("order: -1;", railStyles);
+        Assert.Contains("position: absolute;", BlockAfter(css, "\n.back-to-top {"));
+    }
+
+    [Fact]
     public void RendersAnAccessibleSidebarResizer()
     {
         var html = TemplateWithScripts();
@@ -173,7 +194,7 @@ public class RendererTest
         var css = Resources.CssContent();
         Assert.Contains("#site-brand-title {", css);
         Assert.DoesNotContain(".site-brand > span", css);
-        Assert.Contains("padding: 1rem var(--main-padding) 3rem;", css);
+        Assert.Contains("padding: 2.25rem var(--main-padding) 3rem;", css);
         Assert.Contains("--main-padding: clamp(1rem, 2.5vw, 2.5rem);", Dashboard.Styles);
         Assert.Contains("padding-inline: var(--main-padding);", Dashboard.Styles);
     }
@@ -419,7 +440,9 @@ public class RendererTest
 
             Assert.Contains("href=\"_mdu/css/theme.css?v=", sb.ToString());
             var html = File.ReadAllText(Path.Combine(outputPath, "_mdu", "css", "theme.css"));
+            Assert.Contains("--text-body:color-mix(in oklab,var(--text-primary) 84%,var(--page-background))", html);
             Assert.Contains("--text-secondary:color-mix(in oklab,var(--text-primary) 63%,var(--page-background))", html);
+            Assert.Contains("--surface-header-glass:color-mix(in srgb,var(--page-background) 88%,transparent)", html);
             Assert.Contains("--border:color-mix(in oklab,var(--text-primary) 16%,var(--page-background))", html);
             Assert.Contains("--nav-hover:color-mix(in oklab,var(--link) 16%,var(--page-background))", html);
         }
