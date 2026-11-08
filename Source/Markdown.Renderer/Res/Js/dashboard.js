@@ -16,19 +16,19 @@
     const tiles = [...dashboard.querySelectorAll(".dashboard-tile")];
     const groups = [...dashboard.querySelectorAll(".dashboard-group")];
     const rows = [...dashboard.querySelectorAll(".dashboard-row")];
-    // A third-level heading starts a section of its group that runs to the next one; its heading and description rows
-    // hide with the section's tiles.
+    // A subheading (third level or lower) starts a section of its group that runs to the next one; its heading and
+    // description rows hide with the section's tiles.
     const sections = groups.flatMap(group => {
         const found = [];
         for (const child of group.children) {
-            if (child.matches('[role="row"]') && child.querySelector(":scope > [role='gridcell'] > h3"))
+            if (child.matches('[role="row"]') && child.querySelector(":scope > [role='gridcell'] > :is(h3, h4, h5, h6)"))
                 found.push({ heads: [child], parts: [] });
             else if (found.length > 0) (child.matches(".dashboard-tiles") ? found.at(-1).parts : found.at(-1).heads).push(child);
         }
         return found;
     });
     const subheadings = new Map(sections.flatMap(section => {
-        const text = section.heads[0].querySelector("h3").textContent;
+        const text = section.heads[0].querySelector("h3, h4, h5, h6").textContent;
         return section.parts.flatMap(part => [...part.querySelectorAll(".dashboard-tile")].map(tile => [tile, text]));
     }));
     const opensNewTab = (link) => link.target === "_blank";
@@ -392,8 +392,8 @@
         if (pointer && pointer.x === event.screenX && pointer.y === event.screenY) return;
         pointer = { x: event.screenX, y: event.screenY };
         setInput("pointer");
-        // Focus on a tile or the page links below follows the pointer, so the arrow keys and Tab continue from there.
-        const followed = "a.dashboard-link, a.dashboard-page, a.page-pagination-link";
+        // Focus on a tile or a matching page follows the pointer, so the arrow keys and Tab continue from there.
+        const followed = "a.dashboard-link, a.dashboard-page";
         const link = event.target instanceof Element ? event.target.closest(followed) : null;
         hovered = link;
         if (link && link !== document.activeElement && document.activeElement?.matches?.(followed))

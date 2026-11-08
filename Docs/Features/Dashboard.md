@@ -40,13 +40,13 @@ layout: dashboard
 | --- | --- |
 | `# Heading` and text before the first group | Page title and introduction above the filter field |
 | `## Heading` | A group of tiles |
-| `### Heading` inside a group | A subheading that divides the group; a paragraph below it is a short description |
+| `### Heading` or a lower level inside a group | A subheading that divides the group; a paragraph below it is a short description |
 | `- [Name](URL)` | A tile that opens the link |
-| Text after the link | Subtitle of the tile. A leading `—`, `–`, `-`, or `:` is removed. Without it, the tile shows the host name. |
+| Text after the link | Subtitle of the tile. A leading `—`, `–`, `-`, or `:` is removed. Without it, the tile shows the host name. In a group of compact rows, a host that only spells the name, such as `github.com` for GitHub, is left out. |
 | `---` | Starts a new row of groups |
 | A list item without a link | A note between the tiles |
 
-Groups with subtitles use large tiles; groups without them use compact rows. Groups in a row share the width and wrap on narrow screens. Links to `.md` files point to the rendered pages, and all links open in the same tab unless you set `open: new-tab`.
+Groups with subtitles use large tiles; groups without them use compact rows. A compact row always shows the whole name first and the host only in the space that is left. Groups in a row share the width and wrap on narrow screens. Links to `.md` files point to the rendered pages, and all links open in the same tab unless you set `open: new-tab`.
 
 ## Icons
 
@@ -108,6 +108,6 @@ dashboard:
 
 ## Behavior
 
-- The dashboard spans the whole width. The sidebar starts collapsed and opens with the navigation button, and the page has no table of contents or breadcrumbs.
+- The dashboard spans the whole width. The sidebar starts collapsed and opens with the navigation button, and the page has no table of contents, breadcrumbs, or links to the previous and next page.
 - The status check runs in the reader's browser. Sites that block such requests and `http` sites on an `https` dashboard show no status.
 - A dashboard can be any page of a site, or the only page of its own folder that you render with `mdu render` and use as the browser start page.
