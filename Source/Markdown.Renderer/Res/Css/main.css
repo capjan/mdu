@@ -5,6 +5,8 @@
     --site-header-height: 56px;
     --top-navigation-height: 43px;
     --sidebar-preferred-width: 260px;
+    /* Width of the overlay sidebar on small screens; its backdrop starts at the same edge. */
+    --overlay-sidebar-width: min(300px, calc(100vw - 3rem));
     --toc-preferred-width: 210px;
     --sidebar-min-width: 200px;
     --sidebar-max-width: 480px;
@@ -1041,8 +1043,7 @@ body:has(.site-layout.sidebar-open)::before {
     grid-row: 1;
     width: 100%;
     min-width: 0;
-    padding: 1rem var(--main-padding) 3rem;
-    padding-top: 2.25rem;
+    padding: 2.25rem var(--main-padding) 3rem;
 }
 
 .site-layout.sidebar-collapsed .site-main {
@@ -1104,8 +1105,8 @@ body:has(.site-layout.sidebar-open)::before {
         color: var(--link);
     }
 
-    .back-to-top {
-        top: 4rem;
+    .content-layout > .back-to-top-rail {
+        top: calc(var(--site-header-height) + 0.5rem);
     }
 }
 
@@ -1121,8 +1122,8 @@ body:has(.site-layout.sidebar-open)::before {
         top: calc(var(--site-header-height) + var(--sticky-top-gap));
     }
 
-    .top-navigation:not(.is-empty).is-hidden-on-scroll ~ .site-layout .back-to-top {
-        top: 4rem;
+    .top-navigation:not(.is-empty).is-hidden-on-scroll ~ .site-layout .back-to-top-rail {
+        top: calc(var(--site-header-height) + 0.5rem);
     }
 
     .top-navigation.is-empty ~ .site-layout {
@@ -1140,8 +1141,8 @@ body:has(.site-layout.sidebar-open)::before {
         top: calc(var(--site-header-height) + var(--sticky-top-gap));
     }
 
-    .top-navigation.is-empty ~ .site-layout .back-to-top {
-        top: 4rem;
+    .top-navigation.is-empty ~ .site-layout .back-to-top-rail {
+        top: calc(var(--site-header-height) + 0.5rem);
     }
 
     .site-layout.no-wide-sidebar .site-sidebar {
@@ -1179,7 +1180,6 @@ body:has(.site-layout.sidebar-open)::before {
     }
 
     .site-layout.has-current-top-section.has-wide-sidebar .site-sidebar .site-nav-item.is-top-navigation-ancestor > .site-nav-row,
-    .site-layout.has-current-top-section.has-wide-sidebar .site-sidebar .site-nav-item.top-navigation-entry.is-current-section:not(:has(> .site-nav-children)) > .site-nav-row,
     .site-layout.has-current-top-section.has-wide-sidebar .site-sidebar:has(.site-nav-item.is-outside-top-navigation-section:not(.is-top-navigation-ancestor)) .site-nav-item.top-navigation-entry.is-current-section > .site-nav-row {
         display: none;
     }
@@ -3074,6 +3074,12 @@ th {
     font-weight: 600;
     letter-spacing: 0.05em;
     text-transform: uppercase;
+}
+
+/* Header labels are uppercase, but code and keys inside them keep their exact case. */
+th :is(code, kbd, samp) {
+    letter-spacing: normal;
+    text-transform: none;
 }
 
 .footnote-preview {
@@ -5057,7 +5063,7 @@ body:has(.image-lightbox[open]) {
         bottom: auto;
         left: 0;
         z-index: 32;
-        width: min(300px, calc(100vw - 3rem));
+        width: var(--overlay-sidebar-width);
         height: calc(100vh - var(--site-header-height));
         height: calc(100dvh - var(--site-header-height));
         flex-direction: column;
@@ -5087,7 +5093,7 @@ body:has(.image-lightbox[open]) {
 
     .site-layout.sidebar-open .sidebar-backdrop {
         position: fixed;
-        inset: var(--site-header-height) 0 0 min(300px, calc(100vw - 3rem));
+        inset: var(--site-header-height) 0 0 var(--overlay-sidebar-width);
         z-index: 31;
         display: block;
         width: auto;
@@ -5285,11 +5291,22 @@ body:has(.image-lightbox[open]) {
     outline-offset: -2px;
 }
 
-.back-to-top {
-    position: fixed;
-    top: 6.75rem;
-    left: 50%;
+/* A zero-height sticky rail in the article's grid cell keeps the overlay pill centered above the article column, whatever the sidebar and table of contents take, and follows the header instead of the viewport (.site-main is a size container, which would capture position: fixed). */
+.back-to-top-rail {
+    position: sticky;
+    top: calc(var(--site-header-height) + var(--top-navigation-height) + 0.5rem);
     z-index: 19;
+    grid-column: 1;
+    grid-row: 1;
+    align-self: start;
+    height: 0;
+    transition: top 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.back-to-top {
+    position: absolute;
+    top: 0;
+    left: 50%;
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
@@ -5309,7 +5326,7 @@ body:has(.image-lightbox[open]) {
     visibility: visible;
     pointer-events: none;
     transform: translate(-50%, 0.5rem);
-    transition: top 220ms cubic-bezier(0.2, 0.7, 0.2, 1), opacity 140ms ease, transform 140ms ease, visibility 140ms ease, background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+    transition: opacity 140ms ease, transform 140ms ease, visibility 140ms ease, background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
 .back-to-top:hover {

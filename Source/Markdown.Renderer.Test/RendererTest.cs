@@ -173,7 +173,7 @@ public class RendererTest
         var css = Resources.CssContent();
         Assert.Contains("#site-brand-title {", css);
         Assert.DoesNotContain(".site-brand > span", css);
-        Assert.Contains("padding: 1rem var(--main-padding) 3rem;", css);
+        Assert.Contains("padding: 2.25rem var(--main-padding) 3rem;", css);
         Assert.Contains("--main-padding: clamp(1rem, 2.5vw, 2.5rem);", Dashboard.Styles);
         Assert.Contains("padding-inline: var(--main-padding);", Dashboard.Styles);
     }
@@ -419,7 +419,9 @@ public class RendererTest
 
             Assert.Contains("href=\"_mdu/css/theme.css?v=", sb.ToString());
             var html = File.ReadAllText(Path.Combine(outputPath, "_mdu", "css", "theme.css"));
+            Assert.Contains("--text-body:color-mix(in oklab,var(--text-primary) 84%,var(--page-background))", html);
             Assert.Contains("--text-secondary:color-mix(in oklab,var(--text-primary) 63%,var(--page-background))", html);
+            Assert.Contains("--surface-header-glass:color-mix(in srgb,var(--page-background) 88%,transparent)", html);
             Assert.Contains("--border:color-mix(in oklab,var(--text-primary) 16%,var(--page-background))", html);
             Assert.Contains("--nav-hover:color-mix(in oklab,var(--link) 16%,var(--page-background))", html);
         }
