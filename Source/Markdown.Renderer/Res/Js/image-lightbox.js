@@ -122,6 +122,12 @@
         };
         preview.addEventListener("load", reveal);
         preview.addEventListener("error", () => dialog.close());
+        const updateCaptionFocus = () => {
+            const scrollable = caption.scrollHeight > caption.clientHeight;
+            if (scrollable) caption.tabIndex = 0;
+            else caption.removeAttribute("tabindex");
+        };
+        new ResizeObserver(updateCaptionFocus).observe(caption);
         new ResizeObserver(() => {
             if (dialog.open) measure(true);
         }).observe(stage);
@@ -143,6 +149,7 @@
         closeButton.addEventListener("click", () => dialog.close());
 
         dialog.addEventListener("keydown", (event) => {
+            if (event.target === caption) return;
             // A held Enter must not close the viewer it just opened, and then reopen it.
             if (event.repeat && (event.key === "Enter" || event.key === " ")) {
                 event.preventDefault();
@@ -164,6 +171,7 @@
 
         // A smooth mouse wheel and a trackpad send the same events, so the direction decides: sideways pans, vertical zooms.
         dialog.addEventListener("wheel", (event) => {
+            if (event.target === caption && caption.scrollHeight > caption.clientHeight) return;
             event.preventDefault();
             if (!view.zoomable) return;
             const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16 : 1;
@@ -282,10 +290,15 @@
                 stage.classList.add("is-loading");
                 preview.alt = image.alt;
                 preview.classList.toggle("image-frame", image.classList.contains("image-frame"));
-                caption.textContent = image.alt;
-                caption.hidden = !image.alt;
-                dialog.setAttribute("aria-label", image.alt || "Image");
+                const figureCaption = image.closest("figure")?.querySelector(":scope > figcaption")?.textContent.trim();
+                const label = figureCaption || image.alt;
+                caption.classList.toggle("has-figure-caption", Boolean(figureCaption));
+                caption.textContent = label;
+                caption.hidden = !label;
+                dialog.setAttribute("aria-label", label || "Image");
                 dialog.showModal();
+                caption.scrollTop = 0;
+                updateCaptionFocus();
                 // Keyboard users start on a control with a visible focus ring; pointer users see no ring.
                 if (openedByKeyboard) closeButton.focus();
                 preview.src = source;

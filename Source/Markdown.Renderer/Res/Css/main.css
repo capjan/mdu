@@ -438,6 +438,7 @@ body {
 .search-dialog button:focus-visible,
 .search-dialog input:focus-visible,
 .image-lightbox button:focus-visible,
+.image-lightbox-caption:focus-visible,
 .image-lightbox-trigger:focus-visible,
 .media-settings-dialog button:focus-visible,
 .media-settings-dialog input:focus-visible,
@@ -1617,6 +1618,22 @@ h6 {
 
 .markdown-content p {
     line-height: 1.6;
+}
+
+.markdown-content figure:has(> figcaption):has(img) {
+    margin: 1em 0;
+}
+
+.markdown-content figure:has(> figcaption) > p:has(img) {
+    margin-bottom: 0;
+}
+
+.markdown-content figure:has(img) > figcaption {
+    margin-top: 0.35rem;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
 }
 
 .site-main > h1:first-child,
@@ -4644,7 +4661,6 @@ th, td {
     background: transparent;
     color: #f5f5f7;
     color-scheme: dark;
-    touch-action: none;
 }
 
 .image-lightbox[open] {
@@ -4682,6 +4698,7 @@ html:has(.image-lightbox[open]) {
     min-width: 0;
     min-height: 0;
     overflow: hidden;
+    touch-action: none;
     user-select: none;
     -webkit-user-select: none;
 }
@@ -4747,6 +4764,19 @@ html:has(.image-lightbox[open]) {
     background: rgb(38 38 42 / 88%);
     -webkit-backdrop-filter: blur(12px);
     backdrop-filter: blur(12px);
+}
+
+.image-lightbox-caption.has-figure-caption {
+    box-sizing: border-box;
+    max-height: calc(100% - 5rem);
+    padding: 9px 14px;
+    overflow: auto;
+    overscroll-behavior: contain;
+    border-radius: 12px;
+    line-height: 1.4;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    pointer-events: auto;
 }
 
 .image-lightbox button {

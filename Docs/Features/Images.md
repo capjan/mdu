@@ -47,6 +47,28 @@ A white window screenshot on a white page has no visible edge. Add `{.image-fram
 - Semi-transparent areas inside the image, such as a translucent sidebar, let the outline show through faintly along their edges. Window screenshots captured without their shadow are opaque inside and are not affected.
 - While the image has keyboard focus, the focus ring replaces the outline.
 
+## Add a visible caption
+
+Use a figure to give an image a visible caption. Start the figure with `^^^` on its own line and write the caption after the closing `^^^`. The alternative text describes what the screenshot shows, and the caption explains why it matters.
+
+~~~markdown title="Markdown"
+^^^
+![Settings window with three option cards](images/framed-window-light.svg#only-light){.image-frame}
+![Settings window with three option cards](images/framed-window-dark.svg#only-dark){.image-frame}
+^^^ Review all three options side by side **before choosing a configuration**, so you can compare their defaults without leaving the settings window.
+~~~
+
+^^^
+![Settings window with three option cards](images/framed-window-light.svg#only-light){.image-frame}
+![Settings window with three option cards](images/framed-window-dark.svg#only-dark){.image-frame}
+^^^ Review all three options side by side **before choosing a configuration**, so you can compare their defaults without leaving the settings window.
+
+Use the same figure for both theme variants so they share one caption. A figure can also contain a single image. The image viewer displays the caption as plain text and falls back to the alternative text if there is no caption or it is blank.
+
+Other Markdown viewers, including GitHub, may display the `^^^` lines as literal text. For viewers that support raw HTML, use `<figure>` with an `<img alt="…">` and a `<figcaption>` as a portable alternative.
+
+PDF output includes the caption as text alongside the image's alternative text. For theme variants, the PDF uses the light image's alternative text.
+
 ## Local images
 
 Keep local image files inside the documentation folder and link to them with a relative path from the Markdown file. For example, a page can refer to an image in its own `images` subfolder as `images/page.png`.
