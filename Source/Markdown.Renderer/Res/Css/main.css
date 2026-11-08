@@ -438,6 +438,7 @@ body {
 .search-dialog button:focus-visible,
 .search-dialog input:focus-visible,
 .image-lightbox button:focus-visible,
+.image-lightbox-caption:focus-visible,
 .image-lightbox-trigger:focus-visible,
 .media-settings-dialog button:focus-visible,
 .media-settings-dialog input:focus-visible,
@@ -4660,7 +4661,6 @@ th, td {
     background: transparent;
     color: #f5f5f7;
     color-scheme: dark;
-    touch-action: none;
 }
 
 .image-lightbox[open] {
@@ -4698,6 +4698,7 @@ html:has(.image-lightbox[open]) {
     min-width: 0;
     min-height: 0;
     overflow: hidden;
+    touch-action: none;
     user-select: none;
     -webkit-user-select: none;
 }
@@ -4770,6 +4771,7 @@ html:has(.image-lightbox[open]) {
     max-height: calc(100% - 5rem);
     padding: 9px 14px;
     overflow: auto;
+    overscroll-behavior: contain;
     border-radius: 12px;
     line-height: 1.4;
     white-space: normal;
