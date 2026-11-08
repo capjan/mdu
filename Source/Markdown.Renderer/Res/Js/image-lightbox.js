@@ -13,10 +13,10 @@
 
     // `images.zoom: false` in the front matter; the closest class on an image or around it wins.
     const pageZoom = document.currentScript?.dataset.imageZoom !== "off";
-    const allowsZoom = (image) => {
+    const allowsZoom = (image, requireGrowth = true) => {
         if (image.getClientRects().length === 0) return false;
         const setting = image.closest(".image-zoom-on, .image-zoom-off");
-        return setting ? setting.matches(".image-zoom-on") : pageZoom && canGrow(image);
+        return setting ? setting.matches(".image-zoom-on") : pageZoom && (!requireGrowth || canGrow(image));
     };
 
     const icon = (path) => `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="${path}"/></svg>`;
@@ -348,7 +348,7 @@
         stage.addEventListener("pointercancel", release);
 
         const galleryImages = () => [...gallery.querySelectorAll("img")]
-            .filter((image) => image.closest(".image-gallery") === gallery && viewerImage(image));
+            .filter((image) => image.closest(".image-gallery") === gallery && viewerImage(image, false));
 
         const updateNavigation = (images) => {
             navigation.hidden = images.length < 2;
@@ -463,10 +463,10 @@
     };
 
     // Returns the image that an event on this element opens, or null when the element keeps its own behavior.
-    const viewerImage = (target) => {
+    const viewerImage = (target, requireGrowth = true) => {
         // Enter on a link targets the link, not the image inside it.
         const image = target.closest("img") ?? target.closest("a")?.querySelector("img");
-        if (!image || !allowsZoom(image)) return null;
+        if (!image || !allowsZoom(image, requireGrowth)) return null;
         const link = image.closest("a");
         return link && link.href !== image.src && link.href !== image.currentSrc ? null : image;
     };
