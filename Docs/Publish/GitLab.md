@@ -23,7 +23,7 @@ pages:
 
 The job uses the CI-ready MDU image `capjan/mdu-ci:latest` from Docker Hub. Unlike the default CLI image `capjan/mdu`, the CI image leaves the container entrypoint open so GitLab Runner can directly start its job shell and run scripts.
 
-`mdu lint` and `mdu render` default to the `./docs` source folder, and `mdu render` outputs to `./site` by default, matching `pages.publish: site`. GitLab publishes the generated `site` folder; since GitLab 17.10 it is included as a job artifact automatically. Make sure a GitLab Runner is enabled for the project.
+`mdu lint` and `mdu render` default to the `./docs` source folder, and `mdu render` outputs to `./site` by default, matching `pages.publish: site`. `mdu lint` fails the job when it reports errors, so a page with a broken link is not published; remove that line if you want to publish without the check. GitLab publishes the generated `site` folder; since GitLab 17.10 it is included as a job artifact automatically. Make sure a GitLab Runner is enabled for the project.
 
 > [!TIP]
 > If you prefer using the standard CLI image `capjan/mdu:latest`, override its entrypoint in your job:
@@ -35,6 +35,6 @@ The job uses the CI-ready MDU image `capjan/mdu-ci:latest` from Docker Hub. Unli
 > ```
 
 > [!NOTE]
-> If your source folder has another name, update both `docs` and `docs/**/*` to match.
+> If your source folder has another name, pass it to both commands, for example `mdu lint content` and `mdu render content site`, and update `docs/**/*` to match.
 
 [GitLab Pages documentation](https://docs.gitlab.com/user/project/pages/)

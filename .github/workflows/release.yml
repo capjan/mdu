@@ -40,6 +40,13 @@ jobs:
             echo "Configure the Docker Hub secrets described in AGENTS.md." >&2
             exit 1
           fi
+          for repository in capjan/mdu capjan/mdu-ci; do
+            status="$(curl --silent --output /dev/null --write-out '%{http_code}' "https://hub.docker.com/v2/repositories/$repository/")"
+            if [[ "$status" != 200 ]]; then
+              echo "Docker Hub repository $repository is missing or not public (HTTP $status). Create it as a public repository, as described in AGENTS.md." >&2
+              exit 1
+            fi
+          done
 
       - name: Checkout
         uses: actions/checkout@v7

@@ -30,4 +30,4 @@ The compact container includes the Native AOT `mdu` executable, its Alpine runti
 
 ## CI/CD container
 
-For CI/CD runners such as GitLab CI or GitHub Actions where jobs run shell commands directly, use [`capjan/mdu-ci`](https://hub.docker.com/r/capjan/mdu-ci). Unlike `capjan/mdu` which defaults to the `mdu` entrypoint, `capjan/mdu-ci` leaves the entrypoint open and provides a default shell so you can run `mdu` commands in your job scripts without overriding the container entrypoint. See [GitLab Pages](../Publish/GitLab.md) for an example.
+For CI/CD runners such as GitLab CI or GitHub Actions where jobs run shell commands directly, use [`capjan/mdu-ci`](https://hub.docker.com/r/capjan/mdu-ci). Unlike `capjan/mdu` which defaults to the `mdu` entrypoint, `capjan/mdu-ci` leaves the entrypoint open and starts a shell by default. It contains everything in `capjan/mdu` plus `bash`, so you can run `mdu` commands in your job scripts without overriding the container entrypoint. See [GitLab Pages](../Publish/GitLab.md) for an example.

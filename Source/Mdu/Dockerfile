@@ -23,7 +23,7 @@ RUN case "$TARGETARCH" in \
 
 FROM mcr.microsoft.com/dotnet/runtime-deps:10.0-alpine AS runtime-base
 
-RUN apk add --no-cache bash ca-certificates git libcrypto3 libssl3 \
+RUN apk add --no-cache ca-certificates git libcrypto3 libssl3 \
     && mkdir -p /work \
     && chmod 1777 /work /tmp
 
@@ -38,6 +38,7 @@ COPY --from=build /source/Source/StaticCode.Icons/Res/dashboard-icons.LICENSE /l
 WORKDIR /work
 
 FROM runtime-base AS ci
+RUN apk add --no-cache bash
 ENTRYPOINT []
 CMD ["/bin/sh"]
 

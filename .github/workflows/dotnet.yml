@@ -154,6 +154,9 @@ jobs:
       run: |
         docker run --rm --platform "$PLATFORM" mdu:smoke --help
         docker run --rm --platform "$PLATFORM" --entrypoint git mdu:smoke --version
+        ci_entrypoint="$(docker image inspect --format '{{json .Config.Entrypoint}}' mdu-ci:smoke)"
+        [[ "$ci_entrypoint" == null || "$ci_entrypoint" == "[]" ]] || { echo "mdu-ci entrypoint must be empty, got $ci_entrypoint" >&2; exit 1; }
+        echo 'mdu --help' | docker run --rm -i --platform "$PLATFORM" mdu-ci:smoke
         docker run --rm --platform "$PLATFORM" mdu-ci:smoke sh -c "mdu --help"
         docker run --rm --platform "$PLATFORM" mdu-ci:smoke bash -c "mdu --help"
 
