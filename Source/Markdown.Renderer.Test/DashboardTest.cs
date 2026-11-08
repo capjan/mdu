@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using Markdown.Renderer.Res.Model;
 
 namespace Markdown.Renderer.Test;
 
@@ -72,7 +73,7 @@ public class DashboardTest
         Assert.Contains("<span class=\"dashboard-description\">Team <em>rules</em></span>", html);
 
         Assert.Contains("<ul class=\"dashboard-tiles\" role=\"presentation\">", html);
-        Assert.Contains("<span class=\"dashboard-name\">GitHub</span><span class=\"dashboard-description\">github.com</span>", html);
+        Assert.Contains("<span class=\"dashboard-name\">GitHub</span></span>", html);
         Assert.Contains("<span class=\"dashboard-name\">Christians GitLab</span><span class=\"dashboard-description\">gitlab.example.org</span>", html);
         Assert.Contains(">JD</span><span class=\"dashboard-text\"><span class=\"dashboard-name\">Jan@Dataport</span>", html);
         Assert.Contains("<li class=\"dashboard-note\" role=\"row\"><div role=\"gridcell\">Plain note without a link</div></li>", html);
@@ -105,6 +106,81 @@ public class DashboardTest
         var footnotes = html[footnotesIndex..].Split("</div>", 2)[0];
         Assert.Contains("<h2 class=\"footnotes-title\">Footnotes</h2>", footnotes);
         Assert.DoesNotContain("<hr />", footnotes);
+    }
+
+    [Theory]
+    [InlineData("GitHub", "github.com", true)]
+    [InlineData("YouTube", "www.youtube.com", true)]
+    [InlineData("Prime Video", "www.primevideo.com", true)]
+    [InlineData("Disney+", "www.disneyplus.com", true)]
+    [InlineData("Stack Overflow", "stackoverflow.com", true)]
+    [InlineData("Cloudflare", "dash.cloudflare.com", false)]
+    [InlineData("Grafana", "prod.grafana.example", false)]
+    [InlineData("Grafana", "staging.grafana.example", false)]
+    [InlineData("Spotify", "open.spotify.com", false)]
+    [InlineData("Grafana", "grafana.example", true)]
+    [InlineData("Grafana", "grafana", true)]
+    [InlineData("Grafana", "grafana.example.org", false)]
+    [InlineData("GitLab (Privat)", "git.ip-co.de", false)]
+    [InlineData("ChatGPT", "chat.openai.com", false)]
+    [InlineData("GitHub Docs", "docs.github.com", false)]
+    [InlineData("Amazon", "amazon.co.uk", false)]
+    [InlineData("MDN", "developer.mozilla.org", false)]
+    [InlineData("Portal", "", false)]
+    [InlineData("…", "example.org", false)]
+    public void RecognizesAHostThatOnlyRepeatsTheName(string name, string host, bool repeats) =>
+        Assert.Equal(repeats, Dashboard.HostRepeatsName(name, host));
+
+    [Fact]
+    public async Task ShowsTheHostOnlyWhereItAddsToTheName()
+    {
+        var html = await RenderPage("""
+            ## Compact
+
+            - [Netflix](https://www.netflix.com)
+            - [Grafana](https://grafana.example.org)
+
+            ## Described
+
+            - [GitHub](https://github.com)
+            - [Wiki](https://wiki.example.org) — Team knowledge
+            """, Options);
+
+        Assert.Contains("<span class=\"dashboard-name\">Netflix</span></span>", html);
+        Assert.Contains("<span class=\"dashboard-name\">Grafana</span><span class=\"dashboard-description\">grafana.example.org</span>", html);
+        // Described tiles keep two lines, so the host still fills the second one.
+        Assert.Contains("<span class=\"dashboard-name\">GitHub</span><span class=\"dashboard-description\">github.com</span>", html);
+        Assert.Contains("href=\"https://www.netflix.com\"", html);
+    }
+
+    [Fact]
+    public async Task LeavesOutThePreviousAndNextPageButKeepsThePageMeta()
+    {
+        var html = await RenderPage(
+            "## Work\n\n- [Mail](https://mail.example.org)\n",
+            Options,
+            new DateTimeOffset(2026, 10, 3, 14, 0, 0, TimeSpan.Zero),
+            Neighbors);
+
+        Assert.Contains("Last updated on <time", html);
+        Assert.DoesNotContain("page-pagination", html);
+
+        var regular = await RenderPage(
+            "# Start\n",
+            null,
+            navigationItems: Neighbors);
+        Assert.Contains("class=\"page-pagination\"", regular);
+    }
+
+    [Fact]
+    public async Task TreatsLowerLevelHeadingsAsSubheadingsOfAGroup()
+    {
+        var html = await RenderPage("## Network\n\n#### Bookmarks\n\n- [Shop](https://shop.example.org)\n", Options);
+
+        Assert.Contains("<section class=\"dashboard-group\" role=\"rowgroup\">", html);
+        Assert.Contains("<div role=\"row\"><div role=\"gridcell\">\n<h4", html);
+        Assert.Contains(".markdown-content .dashboard-group :is(h3, h4, h5, h6) {", Dashboard.Styles);
+        Assert.Contains(":scope > [role='gridcell'] > :is(h3, h4, h5, h6)", Dashboard.Script);
     }
 
     [Fact]
@@ -407,14 +483,21 @@ public class DashboardTest
 
     private static readonly DashboardOptions Options = new("https://duckduckgo.com/?q={query}", true, false, true);
 
+    private static readonly NavigationItem[] Neighbors =
+    [
+        new() { Title = "Start", Url = "index.html", IsCurrent = true },
+        new() { Title = "Guide", Url = "Guide.html" }
+    ];
+
     private static async Task<string> RenderPage(
         string markdown,
         DashboardOptions? dashboard,
-        DateTimeOffset? lastModified = null)
+        DateTimeOffset? lastModified = null,
+        IReadOnlyList<NavigationItem>? navigationItems = null)
     {
         var html = new StringBuilder();
         await using var writer = new StringWriter(html);
-        await new HtmlRenderer().WriteHtml(writer, "Start", "", 0, markdown, "", lastModified: lastModified, dashboard: dashboard);
+        await new HtmlRenderer().WriteHtml(writer, "Start", "", 0, markdown, "", navigationItems, lastModified: lastModified, dashboard: dashboard);
         return html.ToString();
     }
 

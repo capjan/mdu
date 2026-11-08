@@ -229,9 +229,12 @@ public static class Dashboard
 
             var external = Uri.TryCreate(tile.Url, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https";
             var host = external ? uri!.Host : string.Empty;
+            // In a compact list, a host that only repeats the name (GitHub, github.com) would take the name's space.
             var subtitle = tile.Description.Length > 0
                 ? tile.Description
-                : HtmlEncoder.Default.Encode(NormalizeHost(host));
+                : !hasDescriptions && HostRepeatsName(tile.PlainName, host)
+                    ? string.Empty
+                    : HtmlEncoder.Default.Encode(NormalizeHost(host));
 
             string id;
             do id = $"dashboard-tile-{tileIndex++}";
@@ -377,6 +380,23 @@ public static class Dashboard
             if (word.Length > 3 && labels.Contains(word, StringComparer.OrdinalIgnoreCase)) Add(word);
 
         return candidates;
+    }
+
+    /// <summary>
+    /// Tells whether a host adds nothing to a tile's name: apart from a leading <c>www.</c>, the host is the name followed
+    /// by a top-level domain, or the name alone, such as <c>Prime Video</c> at <c>www.primevideo.com</c>. Any further
+    /// label keeps the host, because it may be all that tells two tiles of the same name apart, such as <c>Grafana</c> at
+    /// <c>prod.grafana.example</c> and <c>staging.grafana.example</c>.
+    /// </summary>
+    internal static bool HostRepeatsName(string name, string host)
+    {
+        var labels = NormalizeHost(host).Split('.', StringSplitOptions.RemoveEmptyEntries);
+        if (labels.Length is 0 or > 2) return false;
+        var label = labels[0];
+        return Compact(name.Replace("+", "plus", StringComparison.Ordinal)) is { Length: > 0 } compactName &&
+               compactName == Compact(label);
+
+        static string Compact(string value) => new(value.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
     }
 
     private static string NormalizeHost(string host)
