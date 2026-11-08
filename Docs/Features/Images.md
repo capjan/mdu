@@ -117,7 +117,7 @@ Add a class to an image to decide for that image alone. The class wins over the 
 
 ## Galleries
 
-Wrap related images or figures in `<div class="image-gallery">` to browse them together. Leave a blank line inside each end of the container so MDU parses the Markdown. The usual viewer settings apply to each image.
+Wrap related images or figures in `<div class="image-gallery">` to show a step-by-step guide. Leave a blank line inside each end of the container and between steps so MDU parses each step as its own image paragraph or figure. Use a figure to add instructions as a caption. Previous step and Next step browse the guide directly on the page, even when image zoom is disabled.
 
 ~~~markdown title="Markdown"
 <div class="image-gallery">
@@ -147,6 +147,6 @@ Wrap related images or figures in `<div class="image-gallery">` to browse them t
 
 </div>
 
-Open any image and use the Previous image and Next image buttons. The position shows where you are in the gallery. Navigation stops at the first and last images. With an image fitted to the window, ++left++ and ++right++ browse the gallery. While zoomed in, the arrow keys pan the image, and the buttons still let you browse. Each image change resets the zoom to fit. Press ++esc++ to close the viewer and return to the current image on the page.
+To see a larger view, open the current image and use the Previous image and Next image buttons. The position shows where you are in the gallery. Navigation stops at the first and last images. With an image fitted to the window, ++left++ and ++right++ browse the gallery. While zoomed in, the arrow keys pan the image, and the buttons still let you browse. Each image change resets the zoom to fit. Press ++esc++ to close the viewer and show the current step on the page and return focus to its image.
 
-Put light and dark variants directly next to each other, either in the same figure or as consecutive images. The viewer counts and shows only the visible variant. Other Markdown viewers may show the images inline, including both variants, and display figure markers as literal text.
+Put light and dark variants directly next to each other, either in the same figure or as consecutive images without a blank line between them. They share one step, and the viewer counts and shows only the visible variant. Without JavaScript, MDU shows all steps in order. Other Markdown viewers may show the images inline, including both variants, and display figure markers as literal text.

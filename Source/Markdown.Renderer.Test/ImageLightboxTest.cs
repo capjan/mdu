@@ -125,6 +125,23 @@ public class ImageLightboxTest
     }
 
     [Fact]
+    public async Task KeepsInlineGalleryNavigationWhenTheViewerIsOff()
+    {
+        var html = await RenderAsync("""
+            <div class="image-gallery">
+
+            ![First step](first.png)
+
+            ![Second step](second.png)
+
+            </div>
+            """, imageZoom: false);
+
+        Assert.Contains(ScriptMarker, html);
+        Assert.Contains("data-image-zoom=\"off\"", html);
+    }
+
+    [Fact]
     public void OffersHiddenGalleryControlsWithAccessibleNamesAndPosition()
     {
         var script = Resources.ImageLightboxScriptContent();

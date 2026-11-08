@@ -21,6 +21,38 @@
 
     const icon = (path) => `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="${path}"/></svg>`;
 
+    const inlineGalleries = new Map();
+    for (const gallery of content.querySelectorAll(".image-gallery")) {
+        const steps = [...gallery.children];
+        if (steps.length < 2 || !steps.every((step) => step.matches("p, figure") && step.querySelector("img"))) continue;
+
+        const slides = document.createElement("div");
+        slides.className = "image-gallery-slides";
+        slides.append(...steps);
+        const controls = document.createElement("div");
+        controls.className = "image-gallery-controls";
+        controls.setAttribute("role", "group");
+        controls.setAttribute("aria-label", "Gallery steps");
+        controls.innerHTML = `<button type="button">Previous step</button>
+<span aria-live="polite" aria-atomic="true"></span>
+<button type="button">Next step</button>`;
+        gallery.append(slides, controls);
+        const [previous, position, next] = controls.children;
+        let current = 0;
+        const showStep = (index) => {
+            if (index < 0 || index >= steps.length) return;
+            current = index;
+            for (const [stepIndex, step] of steps.entries()) step.inert = stepIndex !== index;
+            position.textContent = `${index + 1} / ${steps.length}`;
+            previous.setAttribute("aria-disabled", String(index === 0));
+            next.setAttribute("aria-disabled", String(index === steps.length - 1));
+        };
+        previous.addEventListener("click", () => showStep(current - 1));
+        next.addEventListener("click", () => showStep(current + 1));
+        inlineGalleries.set(gallery, (image) => showStep(steps.findIndex((step) => step.contains(image))));
+        showStep(0);
+    }
+
     const createLightbox = () => {
         const dialog = document.createElement("dialog");
         dialog.className = "image-lightbox";
@@ -367,6 +399,7 @@
             const images = galleryImages();
             const image = images.includes(activeImage) ? activeImage : images[activeIndex];
             if (!image) return;
+            inlineGalleries.get(gallery)?.(image);
             const target = image.closest("a") ?? image;
             if (target.tabIndex < 0 && !target.hasAttribute("tabindex")) {
                 target.tabIndex = -1;

@@ -440,6 +440,7 @@ body {
 .image-lightbox button:focus-visible,
 .image-lightbox-caption:focus-visible,
 .image-lightbox-trigger:focus-visible,
+.image-gallery-controls button:focus-visible,
 .media-settings-dialog button:focus-visible,
 .media-settings-dialog input:focus-visible,
 .search-result:focus-visible,
@@ -4643,6 +4644,46 @@ th, td {
 
 .image-zoomable {
     cursor: zoom-in;
+}
+
+.image-gallery-slides {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.image-gallery-slides > * {
+    grid-area: 1 / 1;
+    align-self: start;
+}
+
+/* Keep inactive images measurable for the viewer and reserve space for the tallest step. */
+.image-gallery-slides > [inert] {
+    visibility: hidden;
+}
+
+.image-gallery-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-block: 8px 16px;
+    font-variant-numeric: tabular-nums;
+}
+
+.image-gallery-controls button {
+    padding: 6px 12px;
+    border: 1px solid currentColor;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--link);
+    font: inherit;
+    cursor: pointer;
+}
+
+.image-gallery-controls button[aria-disabled="true"] {
+    color: var(--text-secondary);
+    cursor: default;
 }
 
 .image-lightbox {
