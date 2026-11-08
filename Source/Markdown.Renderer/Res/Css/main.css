@@ -4759,6 +4759,7 @@ html:has(.image-lightbox[open]) {
 
 .image-lightbox-caption,
 .image-lightbox-close,
+.image-lightbox-gallery,
 .image-lightbox-tools {
     border: 1px solid rgb(255 255 255 / 14%);
     background: rgb(38 38 42 / 88%);
@@ -4820,6 +4821,7 @@ html:has(.image-lightbox[open]) {
     border-radius: 50%;
 }
 
+.image-lightbox-gallery,
 .image-lightbox-tools {
     position: absolute;
     bottom: 12px;
@@ -4832,10 +4834,20 @@ html:has(.image-lightbox[open]) {
     transform: translateX(-50%);
 }
 
+.image-lightbox-gallery {
+    bottom: 60px;
+}
+
+.image-lightbox:has(.image-lightbox-gallery:not([hidden])) .has-figure-caption {
+    max-height: max(38px, calc(100% - 124px));
+}
+
+.image-lightbox-gallery[hidden],
 .image-lightbox-tools[hidden] {
     display: none;
 }
 
+.image-lightbox-gallery button,
 .image-lightbox-tools button {
     width: 34px;
     height: 34px;

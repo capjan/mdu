@@ -101,6 +101,42 @@ public class ImageLightboxTest
     }
 
     [Fact]
+    public async Task RendersImagesAndFiguresInsideTheOptInGallery()
+    {
+        var html = await RenderAsync("""
+            <div class="image-gallery">
+
+            ![Overview](light.svg#only-light)
+            ![Overview](dark.svg#only-dark)
+
+            ^^^
+            ![Settings](settings.svg)
+            ^^^ Choose an option.
+
+            </div>
+            """);
+
+        Assert.Contains("<div class=\"image-gallery\">", html);
+        Assert.Contains("src=\"light.svg#only-light\"", html);
+        Assert.Contains("src=\"dark.svg#only-dark\"", html);
+        Assert.Contains("<figure>", html);
+        Assert.Contains("<figcaption>Choose an option.</figcaption>", html);
+        Assert.Contains(ScriptMarker, html);
+    }
+
+    [Fact]
+    public void OffersHiddenGalleryControlsWithAccessibleNamesAndPosition()
+    {
+        var script = Resources.ImageLightboxScriptContent();
+
+        Assert.Contains("aria-label=\"Image gallery\" hidden", script);
+        Assert.Contains("aria-label=\"Previous image\"", script);
+        Assert.Contains("aria-label=\"Next image\"", script);
+        Assert.Contains("aria-live=\"polite\" aria-atomic=\"true\"", script);
+        Assert.Contains(".image-lightbox-gallery[hidden]", Resources.CssContent());
+    }
+
+    [Fact]
     public void KeepsThePageFromScrollingWhileTheViewerIsOpen()
     {
         Assert.Matches(@"html:has\(\.image-lightbox\[open\]\)\s*\{\s*overflow:\s*hidden;\s*scrollbar-gutter:\s*auto;\s*\}", Resources.CssContent());

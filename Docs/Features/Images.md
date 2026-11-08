@@ -114,3 +114,39 @@ Add a class to an image to decide for that image alone. The class wins over the 
 
 - An element around an image can carry the class too, such as `<figure class="image-zoom-off">`. The closest class to the image counts.
 - Renderers without attribute support, such as GitHub, show `{.image-zoom-off}` as text. Use an HTML `<img>` with the class if the page must stay readable there.
+
+## Galleries
+
+Wrap related images or figures in `<div class="image-gallery">` to browse them together. Leave a blank line inside each end of the container so MDU parses the Markdown. The usual viewer settings apply to each image.
+
+~~~markdown title="Markdown"
+<div class="image-gallery">
+
+![Configuration overview with three option cards](images/framed-window-light.svg#only-light)
+![Configuration overview with three option cards](images/framed-window-dark.svg#only-dark)
+
+^^^
+![Configuration window with a selected option](images/gallery-selection.svg)
+^^^ Select a configuration to review its details.
+
+![Configuration window with a confirmation checkmark](images/gallery-confirmation.svg)
+
+</div>
+~~~
+
+<div class="image-gallery">
+
+![Configuration overview with three option cards](images/framed-window-light.svg#only-light)
+![Configuration overview with three option cards](images/framed-window-dark.svg#only-dark)
+
+^^^
+![Configuration window with a selected option](images/gallery-selection.svg)
+^^^ Select a configuration to review its details.
+
+![Configuration window with a confirmation checkmark](images/gallery-confirmation.svg)
+
+</div>
+
+Open any image and use the Previous image and Next image buttons. The position shows where you are in the gallery. Navigation stops at the first and last images. With an image fitted to the window, ++left++ and ++right++ browse the gallery. While zoomed in, the arrow keys pan the image, and the buttons still let you browse. Each image change resets the zoom to fit. Press ++esc++ to close the viewer and return to the current image on the page.
+
+Put light and dark variants directly next to each other, either in the same figure or as consecutive images. The viewer counts and shows only the visible variant. Other Markdown viewers may show the images inline, including both variants, and display figure markers as literal text.
