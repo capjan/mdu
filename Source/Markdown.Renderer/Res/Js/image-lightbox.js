@@ -281,6 +281,7 @@
                 view.fitted = true;
                 stage.classList.add("is-loading");
                 preview.alt = image.alt;
+                preview.classList.toggle("image-frame", image.classList.contains("image-frame"));
                 caption.textContent = image.alt;
                 caption.hidden = !image.alt;
                 dialog.setAttribute("aria-label", image.alt || "Image");

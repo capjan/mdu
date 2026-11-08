@@ -30,6 +30,7 @@
     --code-block-border: #e5e5ea;
     --border: #d2d2d7;
     --border-subtle: #e5e5ea;
+    --image-frame: #c7c7cc;
     --header-divider: #e5e5ea;
     --hover-background: rgb(0 0 0 / 4%);
     --link: #06c;
@@ -102,6 +103,7 @@
     --code-block-border: #303033;
     --border: #303033;
     --border-subtle: #424245;
+    --image-frame: #48484d;
     --header-divider: #303033;
     --hover-background: rgb(255 255 255 / 5%);
     --link: #2997ff;
@@ -169,6 +171,7 @@
         --code-block-border: #303033;
         --border: #303033;
         --border-subtle: #424245;
+        --image-frame: #48484d;
         --header-divider: #303033;
         --hover-background: rgb(255 255 255 / 5%);
         --link: #2997ff;
@@ -2887,6 +2890,21 @@ img {
     height: auto;
 }
 
+/*
+ * A 1px outline that follows the image's own shape, so transparent rounded window corners stay clean.
+ * Four unblurred drop shadows draw it; each shadow also shifts the previous ones, which fills the diagonals.
+ * The color must be opaque, or overlapping shadows would darken the corners. The viewer copies the class.
+ */
+img.image-frame {
+    filter: drop-shadow(1px 0 0 var(--image-frame)) drop-shadow(-1px 0 0 var(--image-frame))
+        drop-shadow(0 1px 0 var(--image-frame)) drop-shadow(0 -1px 0 var(--image-frame));
+}
+
+/* A filter also draws the focus outline, which would give the shared focus ring a gray edge. */
+img.image-frame:focus-visible {
+    filter: none;
+}
+
 :root[data-color-scheme="light"] .markdown-content :is(
     img[src$="#only-dark"],
     img[src$="#gh-dark-mode-only"],
@@ -4612,6 +4630,7 @@ th, td {
 
 .image-lightbox {
     --link: #6cb6ff;
+    --image-frame: #48484d;
     position: fixed;
     inset: 0;
     width: 100%;
@@ -4673,8 +4692,8 @@ html:has(.image-lightbox[open]) {
     left: 0;
     max-width: none;
     margin: 0;
+    /* No box shadow: it is rectangular and outlines the transparent corners of images, and the dark backdrop hides it. */
     border-radius: 4px;
-    box-shadow: 0 12px 48px rgb(0 0 0 / 45%);
     -webkit-user-drag: none;
 }
 
