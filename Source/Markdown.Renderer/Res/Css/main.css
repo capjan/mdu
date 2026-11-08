@@ -440,6 +440,7 @@ body {
 .image-lightbox button:focus-visible,
 .image-lightbox-caption:focus-visible,
 .image-lightbox-trigger:focus-visible,
+.image-gallery-controls button:focus-visible,
 .media-settings-dialog button:focus-visible,
 .media-settings-dialog input:focus-visible,
 .search-result:focus-visible,
@@ -4645,6 +4646,39 @@ th, td {
     cursor: zoom-in;
 }
 
+.image-gallery-slides {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.markdown-content .image-gallery-slides > :is(p, figure),
+.markdown-content .image-gallery-slides > figure > p {
+    margin: 0;
+    text-align: center;
+}
+
+.image-gallery-slides > * {
+    grid-area: 1 / 1;
+    align-self: start;
+}
+
+/* Keep inactive images measurable for the viewer and reserve space for the tallest step. */
+.image-gallery-slides > [inert] {
+    visibility: hidden;
+}
+
+.image-gallery-controls {
+    width: fit-content;
+    margin: 8px auto 16px;
+    border: 1px solid var(--border);
+}
+
+.image-gallery-controls button[aria-disabled="true"] {
+    color: var(--text-secondary);
+    opacity: 0.6;
+    cursor: default;
+}
+
 .image-lightbox {
     --link: #6cb6ff;
     --image-frame: #48484d;
@@ -4676,6 +4710,11 @@ th, td {
 html:has(.image-lightbox[open]) {
     overflow: hidden;
     scrollbar-gutter: auto;
+}
+
+/* Preserve gallery image widths while the dialog covers the full viewport. */
+body:has(.image-lightbox[open]) {
+    padding-inline-end: var(--image-lightbox-gutter, 0px);
 }
 
 .image-lightbox::backdrop {
@@ -4716,6 +4755,15 @@ html:has(.image-lightbox[open]) {
 
 .image-lightbox-stage.is-loading img {
     visibility: hidden;
+}
+
+.image-lightbox-error {
+    position: absolute;
+    inset: 50% 12px auto;
+    margin: 0;
+    transform: translateY(-50%);
+    text-align: center;
+    pointer-events: none;
 }
 
 .image-lightbox-stage.is-animating img {
@@ -4759,6 +4807,7 @@ html:has(.image-lightbox[open]) {
 
 .image-lightbox-caption,
 .image-lightbox-close,
+.image-lightbox-gallery,
 .image-lightbox-tools {
     border: 1px solid rgb(255 255 255 / 14%);
     background: rgb(38 38 42 / 88%);
@@ -4779,6 +4828,7 @@ html:has(.image-lightbox[open]) {
     pointer-events: auto;
 }
 
+.image-gallery-controls button,
 .image-lightbox button {
     display: inline-flex;
     align-items: center;
@@ -4791,6 +4841,7 @@ html:has(.image-lightbox[open]) {
     cursor: pointer;
 }
 
+.image-gallery-controls button svg,
 .image-lightbox button svg {
     width: 20px;
     height: 20px;
@@ -4820,22 +4871,39 @@ html:has(.image-lightbox[open]) {
     border-radius: 50%;
 }
 
+.image-gallery-controls,
+.image-lightbox-gallery,
 .image-lightbox-tools {
-    position: absolute;
-    bottom: 12px;
-    left: 50%;
     display: flex;
     align-items: center;
     gap: 2px;
     padding: 3px;
     border-radius: 999px;
+}
+
+.image-lightbox-gallery,
+.image-lightbox-tools {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
     transform: translateX(-50%);
 }
 
+.image-lightbox-gallery {
+    bottom: 60px;
+}
+
+.image-lightbox:has(.image-lightbox-gallery:not([hidden])) .has-figure-caption {
+    max-height: max(38px, calc(100% - 124px));
+}
+
+.image-lightbox-gallery[hidden],
 .image-lightbox-tools[hidden] {
     display: none;
 }
 
+.image-gallery-controls button,
+.image-lightbox-gallery button,
 .image-lightbox-tools button {
     width: 34px;
     height: 34px;
@@ -4844,12 +4912,20 @@ html:has(.image-lightbox[open]) {
     background: transparent;
 }
 
+.image-gallery-controls > span,
 .image-lightbox-level {
     min-width: 3.25rem;
-    color: #e5e5ea;
     font-size: 0.8125rem;
     font-variant-numeric: tabular-nums;
     text-align: center;
+}
+
+.image-lightbox-level {
+    color: #e5e5ea;
+}
+
+.image-gallery-controls button:not([aria-disabled="true"]):hover {
+    background: var(--surface-current);
 }
 
 .image-lightbox-tools [data-zoom="fit"] {

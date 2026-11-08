@@ -42,11 +42,12 @@ public static class ImageZoom
         return new[] { scriptPath };
     }
 
-    /// <summary>Returns the viewer's script tag, or nothing when the page has no image or turns the viewer off without an exception.</summary>
+    /// <summary>Returns the image script for galleries and pages with viewer-enabled images.</summary>
     internal static string ScriptFor(string renderedMarkdown, bool pageZoom, string prefix)
     {
         if (!renderedMarkdown.Contains("<img", StringComparison.OrdinalIgnoreCase)) return string.Empty;
-        if (!pageZoom && !renderedMarkdown.Contains(EnabledClass, StringComparison.Ordinal)) return string.Empty;
+        if (!pageZoom && !renderedMarkdown.Contains(EnabledClass, StringComparison.Ordinal)
+            && !renderedMarkdown.Contains("image-gallery", StringComparison.Ordinal)) return string.Empty;
 
         var source = HtmlEncoder.Default.Encode(prefix + "js/" + ScriptFileName + "?v=" + ScriptVersion.Value);
         var setting = pageZoom ? string.Empty : " data-image-zoom=\"off\"";

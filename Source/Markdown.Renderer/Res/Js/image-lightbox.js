@@ -21,10 +21,42 @@
 
     const icon = (path) => `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="${path}"/></svg>`;
 
+    const inlineGalleries = new Map();
+    for (const gallery of content.querySelectorAll(".image-gallery")) {
+        const steps = [...gallery.children];
+        if (steps.length < 2 || !steps.every((step) => step.matches("p, figure") && step.querySelector("img"))) continue;
+
+        const slides = document.createElement("div");
+        slides.className = "image-gallery-slides";
+        slides.append(...steps);
+        const controls = document.createElement("div");
+        controls.className = "image-gallery-controls";
+        controls.setAttribute("role", "group");
+        controls.setAttribute("aria-label", "Gallery steps");
+        controls.innerHTML = `<button type="button" aria-label="Previous step" title="Previous step">${icon("M12 5l-5 5 5 5")}</button>
+<span aria-live="polite" aria-atomic="true"></span>
+<button type="button" aria-label="Next step" title="Next step">${icon("M8 5l5 5-5 5")}</button>`;
+        gallery.append(slides, controls);
+        const [previous, position, next] = controls.children;
+        let current = 0;
+        const showStep = (index) => {
+            if (index < 0 || index >= steps.length) return;
+            current = index;
+            for (const [stepIndex, step] of steps.entries()) step.inert = stepIndex !== index;
+            position.textContent = `${index + 1} / ${steps.length}`;
+            previous.setAttribute("aria-disabled", String(index === 0));
+            next.setAttribute("aria-disabled", String(index === steps.length - 1));
+        };
+        previous.addEventListener("click", () => showStep(current - 1));
+        next.addEventListener("click", () => showStep(current + 1));
+        inlineGalleries.set(gallery, (image) => showStep(steps.findIndex((step) => step.contains(image))));
+        showStep(0);
+    }
+
     const createLightbox = () => {
         const dialog = document.createElement("dialog");
         dialog.className = "image-lightbox";
-        dialog.innerHTML = `<div class="image-lightbox-stage" tabindex="-1" autofocus><img alt="" draggable="false"></div>
+        dialog.innerHTML = `<div class="image-lightbox-stage" tabindex="-1" autofocus><img alt="" draggable="false"><p class="image-lightbox-error" role="status"></p></div>
 <p class="image-lightbox-caption"></p>
 <button class="image-lightbox-close" type="button" aria-label="Close image" title="Close (Esc)">${icon("M5 5l10 10M15 5L5 15")}</button>
 <div class="image-lightbox-tools" role="group" aria-label="Image zoom">
@@ -33,16 +65,29 @@
 <button type="button" data-zoom="in" aria-label="Zoom in" title="Zoom in (+)">${icon("M4.5 10h11M10 4.5v11")}</button>
 <button type="button" data-zoom="fit" aria-label="Fit image to window" title="Fit to window (0)">${icon("M3.5 7.5v-4h4M16.5 7.5v-4h-4M3.5 12.5v4h4M16.5 12.5v4h-4")}</button>
 <button type="button" data-zoom="actual" aria-label="Actual size" title="Actual size (1)">1:1</button>
+</div>
+<div class="image-lightbox-gallery" role="group" aria-label="Image gallery" hidden>
+<button type="button" aria-label="Previous image" title="Previous image">${icon("M12 5l-5 5 5 5")}</button>
+<span class="image-lightbox-level" aria-live="polite" aria-atomic="true"></span>
+<button type="button" aria-label="Next image" title="Next image">${icon("M8 5l5 5-5 5")}</button>
 </div>`;
         document.body.append(dialog);
 
         const stage = dialog.querySelector(".image-lightbox-stage");
         const preview = stage.querySelector("img");
+        const errorMessage = stage.querySelector(".image-lightbox-error");
         const caption = dialog.querySelector(".image-lightbox-caption");
         const closeButton = dialog.querySelector(".image-lightbox-close");
         const tools = dialog.querySelector(".image-lightbox-tools");
         const level = dialog.querySelector(".image-lightbox-level");
         const zoomButtons = Object.fromEntries([...tools.querySelectorAll("button")].map((button) => [button.dataset.zoom, button]));
+
+        const navigation = dialog.querySelector(".image-lightbox-gallery");
+        const position = navigation.querySelector("span");
+        const [previous, next] = navigation.querySelectorAll("button");
+        let gallery = null;
+        let activeImage = null;
+        let activeIndex = 0;
 
         // The view: image size, zoom limits, and the image's top-left corner in stage pixels.
         const view = { width: 0, height: 0, scale: 1, fit: 1, max: 1, x: 0, y: 0, zoomable: false, fitted: true, vector: false };
@@ -54,7 +99,7 @@
             const width = stage.clientWidth;
             const height = stage.clientHeight;
             const side = width < 760 ? 8 : 32;
-            return { left: side, top: 64, width: Math.max(1, width - side * 2), height: Math.max(1, height - 128) };
+            return { left: side, top: 64, width: Math.max(1, width - side * 2), height: Math.max(1, height - (navigation.hidden ? 128 : 176)) };
         };
         const place = (position, size, start, length) => size <= length
             ? start + (length - size) / 2
@@ -99,6 +144,7 @@
             update(animate);
         };
         const measure = (keepView) => {
+            if (errorMessage.textContent) return;
             const width = preview.naturalWidth || sourceSize.width;
             const height = preview.naturalHeight || sourceSize.height;
             if (!width || !height) return;
@@ -111,6 +157,7 @@
             // Vector images stay sharp, so they may start enlarged, but a small icon must not fill the window. Pixel images never start enlarged.
             view.fit = view.vector ? Math.min(3, ratio) : Math.min(1, ratio);
             view.max = view.vector ? Math.max(4, view.fit * 6) : view.zoomable ? 4 : view.fit;
+            if (gallery && !view.zoomable && tools.contains(document.activeElement)) closeButton.focus();
             tools.hidden = !view.zoomable;
             view.scale = keepView && !wasFitted ? Math.min(view.max, Math.max(view.fit, view.scale)) : view.fit;
             update();
@@ -121,7 +168,21 @@
             stage.classList.remove("is-loading");
         };
         preview.addEventListener("load", reveal);
-        preview.addEventListener("error", () => dialog.close());
+        preview.addEventListener("error", () => {
+            if (!dialog.open) return;
+            if (navigation.hidden) {
+                dialog.close();
+                return;
+            }
+            errorMessage.textContent = "Image could not be loaded.";
+            view.width = 0;
+            view.height = 0;
+            view.zoomable = false;
+            view.scale = view.fit;
+            if (tools.contains(document.activeElement)) closeButton.focus();
+            tools.hidden = true;
+            update();
+        });
         const updateCaptionFocus = () => {
             const scrollable = caption.scrollHeight > caption.clientHeight;
             if (scrollable) caption.tabIndex = 0;
@@ -155,7 +216,13 @@
                 event.preventDefault();
                 return;
             }
-            if (event.metaKey || event.ctrlKey || event.altKey || !view.zoomable) return;
+            if (event.metaKey || event.ctrlKey || event.altKey) return;
+            if (!navigation.hidden && view.fitted && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+                move(event.key === "ArrowLeft" ? -1 : 1);
+                event.preventDefault();
+                return;
+            }
+            if (!view.zoomable) return;
             const pan = { ArrowLeft: [1, 0], ArrowRight: [-1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[event.key];
             if (pan) {
                 view.x += pan[0] * 80;
@@ -280,29 +347,117 @@
         stage.addEventListener("pointerup", release);
         stage.addEventListener("pointercancel", release);
 
-        return {
-            show(image, openedByKeyboard) {
-                const source = image.currentSrc || image.src;
-                const bounds = image.getBoundingClientRect();
-                sourceSize = { width: bounds.width, height: bounds.height };
-                view.vector = isVector(source);
-                view.fitted = true;
-                stage.classList.add("is-loading");
-                preview.alt = image.alt;
-                preview.classList.toggle("image-frame", image.classList.contains("image-frame"));
-                const figureCaption = image.closest("figure")?.querySelector(":scope > figcaption")?.textContent.trim();
-                const label = figureCaption || image.alt;
-                caption.classList.toggle("has-figure-caption", Boolean(figureCaption));
-                caption.textContent = label;
-                caption.hidden = !label;
-                dialog.setAttribute("aria-label", label || "Image");
+        const galleryImages = () => [...gallery.querySelectorAll("img")]
+            .filter((image) => image.closest(".image-gallery") === gallery && viewerImage(image));
+
+        const updateNavigation = (images) => {
+            navigation.hidden = images.length < 2;
+            if (navigation.hidden && navigation.contains(document.activeElement)) closeButton.focus();
+            const label = navigation.hidden ? "" : `${activeIndex + 1} / ${images.length}`;
+            if (position.textContent !== label) position.textContent = label;
+            previous.setAttribute("aria-disabled", String(activeIndex === 0));
+            next.setAttribute("aria-disabled", String(activeIndex >= images.length - 1));
+        };
+
+        const showImage = (image, openedByKeyboard) => {
+            activeImage = image;
+            const source = image.currentSrc || image.src;
+            const bounds = image.getBoundingClientRect();
+            sourceSize = { width: bounds.width, height: bounds.height };
+            view.vector = isVector(source);
+            view.fitted = true;
+            errorMessage.textContent = "";
+            stage.classList.add("is-loading");
+            preview.alt = image.alt;
+            preview.classList.toggle("image-frame", image.classList.contains("image-frame"));
+            const figureCaption = image.closest("figure")?.querySelector(":scope > figcaption")?.textContent.trim();
+            const label = figureCaption || image.alt;
+            caption.classList.toggle("has-figure-caption", Boolean(figureCaption));
+            caption.textContent = label;
+            caption.hidden = !label;
+            dialog.setAttribute("aria-label", label || "Image");
+            if (!dialog.open) {
+                if (gallery) {
+                    const gutter = window.innerWidth - document.documentElement.getBoundingClientRect().width;
+                    document.body.style.setProperty("--image-lightbox-gutter", `${gutter}px`);
+                }
                 dialog.showModal();
-                caption.scrollTop = 0;
-                updateCaptionFocus();
                 // Keyboard users start on a control with a visible focus ring; pointer users see no ring.
                 if (openedByKeyboard) closeButton.focus();
-                preview.src = source;
-                if (preview.complete && preview.naturalWidth) reveal();
+            }
+            caption.scrollTop = 0;
+            updateCaptionFocus();
+            preview.src = source;
+            if (preview.complete && preview.naturalWidth) reveal();
+            else if (gallery) {
+                // Reset zoom immediately while the new preview is loading.
+                view.scale = view.fit;
+                update();
+            }
+        };
+
+        const move = (step) => {
+            const images = galleryImages();
+            const current = images.indexOf(activeImage);
+            const index = (current < 0 ? activeIndex : current) + step;
+            if (!images[index]) return;
+            activeIndex = index;
+            updateNavigation(images);
+            forgetPointers();
+            lastToggle = 0;
+            showImage(images[index]);
+        };
+        previous.addEventListener("click", () => move(-1));
+        next.addEventListener("click", () => move(1));
+
+        dialog.addEventListener("close", () => {
+            if (dialog.open || !gallery) return;
+            document.body.style.removeProperty("--image-lightbox-gutter");
+            const images = galleryImages();
+            const image = activeImage.getClientRects().length ? activeImage : images[activeIndex];
+            if (!image) return;
+            inlineGalleries.get(gallery)?.(image);
+            const target = image.closest("a") ?? image;
+            if (target.tabIndex < 0 && !target.hasAttribute("tabindex")) {
+                target.tabIndex = -1;
+                target.focus();
+                target.removeAttribute("tabindex");
+            } else target.focus();
+        });
+
+        return {
+            show(image, openedByKeyboard) {
+                gallery = image.closest(".image-gallery");
+                const images = gallery ? galleryImages() : [];
+                activeIndex = images.indexOf(image);
+                updateNavigation(images);
+                showImage(image, openedByKeyboard);
+            },
+            refreshGallery() {
+                if (!dialog.open || !gallery) return;
+                const images = galleryImages();
+                let current = images.indexOf(activeImage);
+                if (current < 0) {
+                    const step = activeImage.closest("figure") ?? activeImage.closest("p");
+                    if (step && gallery.contains(step)) {
+                        current = images.findIndex((image) => step.contains(image));
+                        if (current < 0 && !activeImage.getClientRects().length) {
+                            const replacement = [...step.querySelectorAll("img")].find((image) =>
+                                image.closest(".image-gallery") === gallery && image.getClientRects().length);
+                            if (replacement) {
+                                activeImage = replacement;
+                                dialog.close();
+                                return;
+                            }
+                        }
+                    }
+                }
+                activeIndex = current < 0 ? Math.min(activeIndex, images.length - 1) : current;
+                updateNavigation(images);
+                if (images[activeIndex] !== activeImage) {
+                    if (images[activeIndex]) showImage(images[activeIndex]);
+                    else dialog.close();
+                } else if (!stage.classList.contains("is-loading")) measure(true);
             },
         };
     };
@@ -351,6 +506,7 @@
     const refresh = (images) => {
         const states = images.map((image) => [image, Boolean(viewerImage(image))]);
         for (const [image, opens] of states) showOpens(image, opens);
+        lightbox?.refreshGallery();
     };
     new MutationObserver(() => refresh([...content.querySelectorAll("img")]))
         .observe(document.documentElement, { attributes: true, attributeFilter: ["data-color-scheme"] });

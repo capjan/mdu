@@ -7,11 +7,12 @@ MDU renders images with standard Markdown syntax. Local image files are copied i
 Add alternative text in square brackets and the image URL in parentheses. An optional title appears when a visitor hovers over the image:
 
 ~~~markdown title="Markdown"
-![Hand checking off items on a to-do list](https://images.unsplash.com/photo-1768055105012-4c53791b2877)
+![North Sea beach](images/image-placeholder.png)
 ~~~
 
-![Hand checking off items on a to-do list](https://images.unsplash.com/photo-1768055105012-4c53791b2877)
-> Photo by [Jakub Żerdzicki](https://unsplash.com/@jakubzerdzicki) on [unsplash](https://unsplash.com/photos/hand-checking-off-items-on-a-to-do-list-fXlL5I0IvK0)
+> [!RESULT]
+>
+> ![North Sea beach](images/image-placeholder.png)
 
 The alternative text describes the image to people who use assistive technology, so write it for every image.
 
@@ -20,8 +21,8 @@ The alternative text describes the image to people who use assistive technology,
 Add `#only-light` or `#only-dark` to the end of each image URL to show a different image for each theme. Use the same alternative text for both variants:
 
 ~~~markdown title="Markdown"
-![Application configuration](images/config-light.png#only-light)
-![Application configuration](images/config-dark.png#only-dark)
+![App settings](images/config-light.png#only-light)
+![App settings](images/config-dark.png#only-dark)
 ~~~
 
 MDU shows the matching image when a reader selects light or dark mode. In automatic mode, it follows the reader's system appearance. The GitHub-compatible markers `#gh-light-mode-only` and `#gh-dark-mode-only` work too. Other Markdown viewers may show both variants.
@@ -33,12 +34,14 @@ For PDF output, MDU keeps only the light variant. Images appear as alternative t
 A white window screenshot on a white page has no visible edge. Add `{.image-frame}` after an image to draw a subtle 1-pixel outline around it. The outline uses a light gray in light mode and a dark gray in dark mode, and the image viewer shows it too:
 
 ~~~markdown title="Markdown"
-![Settings window with three option cards](images/framed-window-light.svg#only-light){.image-frame}
-![Settings window with three option cards](images/framed-window-dark.svg#only-dark){.image-frame}
+![Three settings cards](images/framed-window-light.svg#only-light){.image-frame}
+![Three settings cards](images/framed-window-dark.svg#only-dark){.image-frame}
 ~~~
 
-![Settings window with three option cards](images/framed-window-light.svg#only-light){.image-frame}
-![Settings window with three option cards](images/framed-window-dark.svg#only-dark){.image-frame}
+> [!RESULT]
+>
+> ![Three settings cards](images/framed-window-light.svg#only-light){.image-frame}
+> ![Three settings cards](images/framed-window-dark.svg#only-dark){.image-frame}
 
 - The outline follows the visible shape of the image. Transparent areas, such as the rounded corners of a macOS window captured without its shadow, stay transparent and are not cropped.
 - The frame adds no shadow, background, or padding on the page. Images without the class look as before.
@@ -53,15 +56,17 @@ Use a figure to give an image a visible caption. Start the figure with `^^^` on 
 
 ~~~markdown title="Markdown"
 ^^^
-![Settings window with three option cards](images/framed-window-light.svg#only-light){.image-frame}
-![Settings window with three option cards](images/framed-window-dark.svg#only-dark){.image-frame}
+![Three settings cards](images/framed-window-light.svg#only-light){.image-frame}
+![Three settings cards](images/framed-window-dark.svg#only-dark){.image-frame}
 ^^^ Review all three options side by side **before choosing a configuration**, so you can compare their defaults without leaving the settings window.
 ~~~
 
-^^^
-![Settings window with three option cards](images/framed-window-light.svg#only-light){.image-frame}
-![Settings window with three option cards](images/framed-window-dark.svg#only-dark){.image-frame}
-^^^ Review all three options side by side **before choosing a configuration**, so you can compare their defaults without leaving the settings window.
+> [!RESULT]
+>
+> ^^^
+> ![Three settings cards](images/framed-window-light.svg#only-light){.image-frame}
+> ![Three settings cards](images/framed-window-dark.svg#only-dark){.image-frame}
+> ^^^ Review all three options side by side **before choosing a configuration**, so you can compare their defaults without leaving the settings window.
 
 Use the same figure for both theme variants so they share one caption. A figure can also contain a single image. The image viewer displays the caption as plain text and falls back to the alternative text if there is no caption or it is blank.
 
@@ -114,3 +119,41 @@ Add a class to an image to decide for that image alone. The class wins over the 
 
 - An element around an image can carry the class too, such as `<figure class="image-zoom-off">`. The closest class to the image counts.
 - Renderers without attribute support, such as GitHub, show `{.image-zoom-off}` as text. Use an HTML `<img>` with the class if the page must stay readable there.
+
+## Galleries
+
+Wrap related images or figures in `<div class="image-gallery">` to show a step-by-step guide. Leave a blank line inside each end of the container and between steps so MDU parses each step as its own image paragraph or figure. Use a figure to add instructions as a caption. Previous step and Next step browse the guide directly on the page, even when image zoom is disabled.
+
+~~~markdown title="Markdown"
+<div class="image-gallery">
+
+![Configuration options](images/framed-window-light.svg#only-light)
+![Configuration options](images/framed-window-dark.svg#only-dark)
+
+^^^
+![Selected option](images/gallery-selection.svg)
+^^^ Select a configuration to review its details.
+
+![Confirmation checkmark](images/gallery-confirmation.svg)
+
+</div>
+~~~
+
+> [!RESULT]
+>
+> <div class="image-gallery">
+>
+> ![Configuration options](images/framed-window-light.svg#only-light)
+> ![Configuration options](images/framed-window-dark.svg#only-dark)
+>
+> ^^^
+> ![Selected option](images/gallery-selection.svg)
+> ^^^ Select a configuration to review its details.
+>
+> ![Confirmation checkmark](images/gallery-confirmation.svg)
+>
+> </div>
+
+To see a larger view, open the current image and use the Previous image and Next image buttons. The position shows where you are in the gallery. Navigation stops at the first and last images. With an image fitted to the window, ++left++ and ++right++ browse the gallery. While zoomed in, the arrow keys pan the image, and the buttons still let you browse. Each image change resets the zoom to fit. Press ++esc++ to close the viewer and show the current step on the page and return focus to its image.
+
+Put light and dark variants directly next to each other, either in the same figure or as consecutive images without a blank line between them. They share one step, and the viewer counts and shows only the visible variant. Without JavaScript, MDU shows all steps in order. Other Markdown viewers may show the images inline, including both variants, and display figure markers as literal text.
