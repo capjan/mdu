@@ -132,9 +132,20 @@ jobs:
       with:
         context: .
         file: Source/Mdu/Dockerfile
+        target: cli
         platforms: ${{ matrix.platform }}
         load: true
         tags: mdu:smoke
+
+    - name: Build CI Docker image
+      uses: docker/build-push-action@v7
+      with:
+        context: .
+        file: Source/Mdu/Dockerfile
+        target: ci
+        platforms: ${{ matrix.platform }}
+        load: true
+        tags: mdu-ci:smoke
 
     - name: Smoke test container commands and mounted files
       env:
@@ -143,6 +154,8 @@ jobs:
       run: |
         docker run --rm --platform "$PLATFORM" mdu:smoke --help
         docker run --rm --platform "$PLATFORM" --entrypoint git mdu:smoke --version
+        docker run --rm --platform "$PLATFORM" mdu-ci:smoke sh -c "mdu --help"
+        docker run --rm --platform "$PLATFORM" mdu-ci:smoke bash -c "mdu --help"
 
         fixture="$RUNNER_TEMP/mdu-docker-smoke"
         mkdir -p "$fixture/docs" "$fixture/import-docs" "$fixture/import-source/Docs"
@@ -189,6 +202,15 @@ jobs:
         grep -q 'Docker smoke test' "$fixture/site/index.html"
         grep -q 'datetime="2026-01-02"' "$fixture/site/index.html"
         test "$(stat -c '%u' "$fixture/site/index.html")" = "$(id -u)"
+
+        docker run --rm --platform "$PLATFORM" \
+          --volume "$fixture:/work" \
+          --workdir /work \
+          --user "$(id -u):$(id -g)" \
+          mdu-ci:smoke sh -c "mdu lint docs --format json && mdu render docs ci-site"
+
+        test -s "$fixture/ci-site/index.html"
+        grep -q 'Docker smoke test' "$fixture/ci-site/index.html"
 
         docker run --rm --platform "$PLATFORM" \
           --volume "$fixture:/work" \

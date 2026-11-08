@@ -21,9 +21,9 @@ RUN case "$TARGETARCH" in \
         -p:OptimizationPreference=Size \
         --output /app/publish
 
-FROM mcr.microsoft.com/dotnet/runtime-deps:10.0-alpine AS runtime
+FROM mcr.microsoft.com/dotnet/runtime-deps:10.0-alpine AS runtime-base
 
-RUN apk add --no-cache ca-certificates git libcrypto3 libssl3 \
+RUN apk add --no-cache bash ca-certificates git libcrypto3 libssl3 \
     && mkdir -p /work \
     && chmod 1777 /work /tmp
 
@@ -36,4 +36,10 @@ COPY --from=build /source/Source/StaticCode.Icons/THIRD-PARTY-NOTICES.md /licens
 COPY --from=build /source/Source/StaticCode.Icons/Res/dashboard-icons.LICENSE /licenses/dashboard-icons.LICENSE
 
 WORKDIR /work
+
+FROM runtime-base AS ci
+ENTRYPOINT []
+CMD ["/bin/sh"]
+
+FROM runtime-base AS cli
 ENTRYPOINT ["/usr/local/bin/mdu"]
