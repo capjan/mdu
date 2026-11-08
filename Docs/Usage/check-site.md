@@ -1,6 +1,8 @@
-# mdu check-site
+# check-site
 
 Run `mdu check-site <directory>` after rendering and adding any generated content, before publishing the site.
+
+For example, if you copy a separately generated API reference into the site after rendering, run `check-site` after the copy to catch broken links and missing anchors between the documentation and the reference.
 
 ```bash
 mdu render
