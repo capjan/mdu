@@ -345,7 +345,8 @@ public partial class HtmlRenderer
         IReadOnlyDictionary<string, string>? pdfDownloadUrls = null,
         IReadOnlyDictionary<string, string>? pdfDownloadNames = null,
         GlossaryScope? glossaryScope = null,
-        bool imageZoom = true)
+        bool imageZoom = true,
+        PageNavigation? pageNavigation = null)
     {
         var prefix = string.Concat(Enumerable.Repeat("../", nestingDeep));
         var cssFileLink = MainCssLink(prefix);
@@ -385,7 +386,9 @@ public partial class HtmlRenderer
             }, 1);
         }
         var providersForSettings = siteMediaProviders is { Count: > 0 } ? siteMediaProviders : mediaProviders;
-        var tocHeadings = GetTableOfContentsHeadings(renderedMarkdown);
+        var showToc = dashboard is null && pageNavigation?.Toc != false;
+        var tocHeadings = showToc ? GetTableOfContentsHeadings(renderedMarkdown) : [];
+        var hasToc = tocHeadings.Count > 0;
         var pageHeading = GetPageHeadingTitle(renderedMarkdown);
         renderedMarkdown = InsertHeadingPermalinks(renderedMarkdown);
         renderedMarkdown = CollapseOpenApiBlocks(renderedMarkdown);
@@ -394,7 +397,9 @@ public partial class HtmlRenderer
                                            renderedMarkdown.Contains("class=\"openapi-tag-list\"", StringComparison.Ordinal) ||
                                            renderedMarkdown.Contains("class=\"openapi-request-body\"", StringComparison.Ordinal);
         renderedMarkdown = InsertEditPageLink(renderedMarkdown, editPageLink, out var editLinkInserted);
-        var breadcrumbMarkup = RenderBreadcrumbs(renderedMarkdown, breadcrumbs ?? Array.Empty<BreadcrumbItem>());
+        var breadcrumbMarkup = dashboard is null && pageNavigation?.Breadcrumbs != false
+            ? RenderBreadcrumbs(renderedMarkdown, breadcrumbs ?? Array.Empty<BreadcrumbItem>())
+            : string.Empty;
         var model = new MainModel
         {
             Title = title,
@@ -426,10 +431,10 @@ public partial class HtmlRenderer
             ["SITE_THEME_STYLE"] = _siteAssets.Styles("theme", () => RenderThemeStyles(_siteConfiguration), prefix),
             ["SEARCH_SCRIPT_LINK"] = HtmlEncoder.Default.Encode(searchScriptLink),
             ["SEARCH_INDEX_LINK"] = HtmlEncoder.Default.Encode(searchIndexLink),
-            ["TOC_LAYOUT_CLASS"] = dashboard is null ? " has-on-this-page" : string.Empty,
-            ["HAS_TOC"] = dashboard is null && tocHeadings.Count > 0 ? "true" : "false",
+            ["TOC_LAYOUT_CLASS"] = showToc ? " has-on-this-page" : string.Empty,
+            ["HAS_TOC"] = hasToc ? "true" : "false",
             ["IS_DASHBOARD"] = dashboard is null ? "false" : "true",
-            ["TOC_CONTROLS"] = dashboard is null && tocHeadings.Count > 0 ? "aria-controls=\"on-this-page\"" : string.Empty,
+            ["TOC_CONTROLS"] = hasToc ? "aria-controls=\"on-this-page\"" : string.Empty,
             ["HEADER_LAYOUT_CLASS"] = hasWideSidebar ? " has-wide-sidebar" : string.Empty,
             ["NAVIGATION_ITEMS"] = _siteAssets.HasNavigation
                 ? SiteNavigation.Reference(model.NavigationItems, prefix, _siteAssets)
@@ -453,10 +458,10 @@ public partial class HtmlRenderer
             ["PAGE_HERO"] = pageHero,
             ["PAGE_STYLES"] = (hasHero ? _siteAssets.Styles("hero", () => Hero.Styles, prefix) : string.Empty)
                 + (dashboard is null ? string.Empty : _siteAssets.Styles("dashboard", () => Dashboard.Styles, prefix)),
-            ["PAGE_BREADCRUMBS"] = dashboard is null ? breadcrumbMarkup : string.Empty,
-            ["PAGE_TOC"] = dashboard is null ? RenderOnThisPage(tocHeadings) : string.Empty,
+            ["PAGE_BREADCRUMBS"] = breadcrumbMarkup,
+            ["PAGE_TOC"] = showToc ? RenderOnThisPage(tocHeadings) : string.Empty,
             // A dashboard is a start page, not a chapter: like the contents and breadcrumbs, it has no previous and next page.
-            ["PAGE_FOOTER"] = RenderPageFooter(dashboard is null ? model.NavigationItems : [], editPageLink, !editLinkInserted, lastModified) + dashboardFootnotes,
+            ["PAGE_FOOTER"] = RenderPageFooter(dashboard is null && pageNavigation?.Pagination != false ? model.NavigationItems : [], editPageLink, !editLinkInserted, lastModified) + dashboardFootnotes,
             ["ATTRIBUTION"] = _siteConfiguration.AttributionVisible
                 ? "<footer class=\"made-with-mdu\">Made with <a href=\"https://capjan.github.io/mdu/index.html\" target=\"_blank\" rel=\"noopener noreferrer\">MDU</a></footer>"
                 : string.Empty,

@@ -10,7 +10,9 @@ MDU builds the navigation from the folder structure. A folder's `README.md` repr
 | `navigation.expanded` | `true` opens a sidebar section initially |
 | `navigation.placement` | `top` turns a first-level entry into a tab |
 
-Breadcrumbs above each page show its path from the documentation root. Pages whose trail would only name the page itself, such as the landing page, show none.
+Breadcrumbs above documentation pages show the path from the documentation root. Pages whose trail would only name the page itself, such as the landing page, show none.
+
+Set `page.breadcrumbs: false`, `page.pagination: false`, or `page.toc: false` to hide breadcrumbs, previous and next links, or the table of contents on a page. These switches work independently of the sidebar and top navigation. See the [product page example](Hero.md#product-page-example).
 
 ## Top navigation
 

@@ -28,4 +28,5 @@ public static class RuleCodes
     public const string LocalFragmentExistsName = "LocalFragmentExists";
     public const string DiagramTooLarge = "MDU023";
     public const string InvalidImageZoom = "MDU024";
+    public const string InvalidPageNavigation = "MDU025";
 }

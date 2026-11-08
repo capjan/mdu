@@ -191,7 +191,8 @@ public class MarkdigVisitor : BaseVisitor
                     pdfDownloadUrls,
                     pdfDownloadNames,
                     GetGlossaryScope(entity),
-                    ImageZoom.ReadFrontMatter(entity.FrontMatter)).GetAwaiter().GetResult();
+                    ImageZoom.ReadFrontMatter(entity.FrontMatter),
+                    pageNavigation: PageNavigation.ReadFrontMatter(entity.FrontMatter)).GetAwaiter().GetResult();
 
             File.Move(temporaryPath, outputFileName, true);
             WriteAliasPage(entity, outputFileName);

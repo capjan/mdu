@@ -35,6 +35,7 @@ navigation:
 | `MDU022` | `LocalFragmentExists` | Error | A link fragment matches an anchor on the target page. | — |
 | `MDU023` | `DiagramTooLarge` | Warning | A PlantUML component diagram stays within the size limits. |
 | `MDU024` | `InvalidImageZoom` | Error | `images.zoom` in the front matter is `true` or `false`, and `images` itself is not a boolean. | — |
+| `MDU025` | `InvalidPageNavigation` | Error | `page.breadcrumbs`, `page.pagination`, and `page.toc` in the front matter accept `true` or `false`. | — |
 
 ## MDU001: HeadingRequired
 
@@ -107,3 +108,7 @@ This warning points to a PlantUML component diagram above the [size limits](../.
 The [`images.zoom`](../../Features/Images.md#turn-off-the-viewer) front matter setting takes `true` or `false`. With YAML-style values such as `off` or `no`, the image viewer would stay on, so this error points to the page.
 
 `images: false` and `images: true` are reported as well, because they look like this setting without `zoom`. Write `images.zoom: false` instead. Other values of `images`, such as a list of pictures, are not reported.
+
+## MDU025: InvalidPageNavigation
+
+Use `true` or `false` for each page navigation setting. Both dotted keys and keys nested under `page` are supported. For example, replace `page.toc: off` with `page.toc: false`.

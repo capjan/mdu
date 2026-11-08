@@ -104,7 +104,7 @@ Both approaches follow the browser's effective preference, which can come from a
 
 ## Settings for one page
 
-`mdu.yml` applies to the whole site. YAML front matter at the top of a page applies to that page and uses the same naming. Its `navigation`, `pdf`, and `images` keys also work in the dotted form, such as `navigation.order: 10`:
+`mdu.yml` applies to the whole site. YAML front matter at the top of a page applies to that page and uses the same naming. Its `navigation`, `pdf`, `images`, and `page` keys also work in the dotted form, such as `navigation.order: 10`:
 
 ```yaml title="docs/Setup/README.md"
 ---
@@ -129,5 +129,8 @@ navigation:
 | `navigation.placement` | `top` makes a first-level page or section a [top navigation tab](../Features/Navigation.md#top-navigation) |
 | `pdf.visible` | `false` leaves the page out of [`mdu pdf`](pdf.md) |
 | `images.zoom` | `false` turns off the [image viewer](../Features/Images.md#turn-off-the-viewer) on the page |
+| `page.breadcrumbs` | `false` hides the page’s breadcrumb trail |
+| `page.pagination` | `false` hides the page’s previous and next links |
+| `page.toc` | `false` hides the table of contents and gives its space to the content |
 
 [Navigation](../Features/Navigation.md) explains the navigation keys in detail.

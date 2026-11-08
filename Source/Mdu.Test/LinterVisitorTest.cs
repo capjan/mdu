@@ -444,6 +444,20 @@ public class LinterVisitorTest
         }, frontMatter: "---\nnavigation:\n  placement: unknown\n---", invalidNavigationPlacement: "unknown");
     }
 
+    [Theory]
+    [InlineData("page.breadcrumbs: off", "page.breadcrumbs")]
+    [InlineData("page:\n  pagination: [false]", "page.pagination")]
+    [InlineData("page.toc: 0", "page.toc")]
+    public void InvalidPageNavigationIsRejected(string setting, string key)
+    {
+        WithPage("Overview.md", "# Overview", "Overview", 0, errors =>
+        {
+            var error = Assert.Single(errors);
+            Assert.Equal(RuleCodes.InvalidPageNavigation, CodeOf(error));
+            Assert.Contains(key, error.Message);
+        }, frontMatter: $"---\n{setting}\n---");
+    }
+
     [Fact]
     public void InvalidImageZoomIsRejected()
     {

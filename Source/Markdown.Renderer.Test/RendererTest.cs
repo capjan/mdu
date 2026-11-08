@@ -475,6 +475,56 @@ public class RendererTest
         Assert.DoesNotContain("class=\"breadcrumbs\"", sb.ToString());
     }
 
+    [Theory]
+    [InlineData(null, true, true, true)]
+    [InlineData("page.breadcrumbs: false", false, true, true)]
+    [InlineData("page.pagination: false", true, false, true)]
+    [InlineData("page.toc: false", true, true, false)]
+    [InlineData("page:\n  breadcrumbs: false\n  pagination: false\n  toc: false", false, false, false)]
+    public async Task AppliesPageNavigationSwitches(string? frontMatter, bool breadcrumbs, bool pagination, bool toc)
+    {
+        var html = await RenderPageNavigation(frontMatter);
+
+        Assert.Equal(breadcrumbs, html.Contains("class=\"breadcrumbs\""));
+        Assert.Equal(pagination, html.Contains("class=\"page-pagination\""));
+        Assert.Equal(toc, html.Contains("id=\"on-this-page\""));
+        Assert.Equal(toc, html.Contains("aria-controls=\"on-this-page\""));
+        Assert.Equal(toc, html.Contains("class=\"site-main has-on-this-page\""));
+        Assert.Contains("data-label=\"Home tab\">Home tab</a>", html);
+        Assert.Contains("class=\"page-meta\"", html);
+    }
+
+    [Fact]
+    public async Task PageNavigationSwitchesDoNotAffectDashboards()
+    {
+        var dashboard = Dashboard.ReadFrontMatter("layout: dashboard");
+        Assert.NotNull(dashboard);
+        var defaults = await RenderPageNavigation(null, dashboard);
+        var enabled = await RenderPageNavigation("page: { breadcrumbs: true, pagination: true, toc: true }", dashboard);
+
+        Assert.Equal(defaults, enabled);
+        Assert.DoesNotContain("class=\"breadcrumbs\"", enabled);
+        Assert.DoesNotContain("class=\"page-pagination\"", enabled);
+        Assert.DoesNotContain("id=\"on-this-page\"", enabled);
+    }
+
+    private static async Task<string> RenderPageNavigation(string? frontMatter, DashboardOptions? dashboard = null)
+    {
+        using var writer = new StringWriter();
+        await new HtmlRenderer().WriteHtml(writer, "Guide", "", 0, "# Guide\n\n## Overview\n\nText", "",
+            navigationItems:
+            [
+                new NavigationItem { Title = "Home", Url = "index.html" },
+                new NavigationItem { Title = "Guide", Url = "Guide.html", IsCurrent = true }
+            ],
+            breadcrumbs: [new BreadcrumbItem("Home", "index.html"), new BreadcrumbItem("Guide", null)],
+            topNavigationItems: [new NavigationItem { Title = "Home tab", Url = "index.html" }],
+            lastModified: DateTimeOffset.UnixEpoch,
+            dashboard: dashboard,
+            pageNavigation: PageNavigation.ReadFrontMatter(frontMatter));
+        return writer.ToString();
+    }
+
     [Fact]
     public async Task RendersBreadcrumbsWithAncestors()
     {
