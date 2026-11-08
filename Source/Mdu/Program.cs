@@ -76,6 +76,18 @@ lintCommand.SetAction(parseResult =>
         Enum.Parse<LintFormat>(parseResult.GetValue(lintFormat) ?? "text", ignoreCase: true)));
 rootCommand.Subcommands.Add(lintCommand);
 
+var checkSiteCommand = new Command("check-site", "Checks local links, assets and anchors in a static HTML site.");
+var siteDirectory = new Argument<DirectoryInfo>("directory") { Description = "Root of the published site." };
+var dynamicFragments = new Option<string[]>("--dynamic-fragments")
+{
+    Description = "Skip anchor checks for this site-relative HTML file. Repeat for multiple files."
+};
+checkSiteCommand.Arguments.Add(siteDirectory);
+checkSiteCommand.Options.Add(dynamicFragments);
+checkSiteCommand.SetAction(parseResult => CheckSiteCommand.Execute(
+    parseResult.GetRequiredValue(siteDirectory), parseResult.GetValue(dynamicFragments) ?? []));
+rootCommand.Subcommands.Add(checkSiteCommand);
+
 var fixCommand = new Command("fix", "Migrates MkDocs-specific Markdown to supported Markdown and applies automatic fixes.");
 var (fixPattern, fixHidden) = AddVisitorOptions(fixCommand);
 var fixPath = AddRootPathArgument(fixCommand, "Root folder containing Markdown files. Defaults to ./docs.");

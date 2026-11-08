@@ -20,8 +20,10 @@ mdu tree     # show the page structure
 mdu lint     # report broken links and structure problems
 mdu serve    # preview the site with live reload
 mdu render   # write the static site to ./site
+mdu check-site ./site  # verify the finished site
 ```
 
+Use [mdu check-site](check-site.md) after all generated content has been added to the site.
 A typical workflow checks the pages, previews them while you write, and renders the site when you are ready to publish. Click a step to open its command page.
 
 ```mermaid

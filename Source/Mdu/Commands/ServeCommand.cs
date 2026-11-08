@@ -930,7 +930,7 @@ public sealed class ServeCommand
     {
         var pathInfo = FilePathInfo.CreateRenderFileInfo(_rootPath, _outputPath, page.FileInfo, ".html", page.SiteRelativePath);
         var outputPath = pathInfo.OutputFullFilePath;
-        if (outputPath.EndsWith("readme.html", StringComparison.OrdinalIgnoreCase))
+        if (Path.GetFileName(outputPath).Equals("readme.html", StringComparison.OrdinalIgnoreCase))
             outputPath = outputPath[..^"readme.html".Length] + "index.html";
         return Path.GetFullPath(outputPath);
     }

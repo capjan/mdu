@@ -149,7 +149,7 @@ public class MarkdigVisitor : BaseVisitor
         
         var outputFileName = io.OutputFullFilePath;
    
-        if (outputFileName.EndsWith("readme.html", StringComparison.InvariantCultureIgnoreCase))
+        if (Path.GetFileName(outputFileName).Equals("readme.html", StringComparison.OrdinalIgnoreCase))
         {
             if (File.Exists(outputFileName)) File.Delete(outputFileName);
             outputFileName = outputFileName.Substring(0, outputFileName.Length - 11) + "index.html";
@@ -545,7 +545,7 @@ public class MarkdigVisitor : BaseVisitor
 
     private static string GetOutputPagePath(string pagePath)
     {
-        if (pagePath.EndsWith("readme.html", StringComparison.OrdinalIgnoreCase))
+        if (Path.GetFileName(pagePath).Equals("readme.html", StringComparison.OrdinalIgnoreCase))
             pagePath = pagePath[..^"readme.html".Length] + "index.html";
 
         return Path.GetFullPath(pagePath);
