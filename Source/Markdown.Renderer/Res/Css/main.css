@@ -4651,6 +4651,12 @@ th, td {
     grid-template-columns: minmax(0, 1fr);
 }
 
+.markdown-content .image-gallery-slides > :is(p, figure),
+.markdown-content .image-gallery-slides > figure > p {
+    margin: 0;
+    text-align: center;
+}
+
 .image-gallery-slides > * {
     grid-area: 1 / 1;
     align-self: start;
@@ -4662,27 +4668,14 @@ th, td {
 }
 
 .image-gallery-controls {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    margin-block: 8px 16px;
-    font-variant-numeric: tabular-nums;
-}
-
-.image-gallery-controls button {
-    padding: 6px 12px;
-    border: 1px solid currentColor;
-    border-radius: 6px;
-    background: transparent;
-    color: var(--link);
-    font: inherit;
-    cursor: pointer;
+    width: fit-content;
+    margin: 8px auto 16px;
+    border: 1px solid var(--border);
 }
 
 .image-gallery-controls button[aria-disabled="true"] {
     color: var(--text-secondary);
+    opacity: 0.6;
     cursor: default;
 }
 
@@ -4826,6 +4819,7 @@ body:has(.image-lightbox[open]) {
     pointer-events: auto;
 }
 
+.image-gallery-controls button,
 .image-lightbox button {
     display: inline-flex;
     align-items: center;
@@ -4838,6 +4832,7 @@ body:has(.image-lightbox[open]) {
     cursor: pointer;
 }
 
+.image-gallery-controls button svg,
 .image-lightbox button svg {
     width: 20px;
     height: 20px;
@@ -4867,16 +4862,21 @@ body:has(.image-lightbox[open]) {
     border-radius: 50%;
 }
 
+.image-gallery-controls,
 .image-lightbox-gallery,
 .image-lightbox-tools {
-    position: absolute;
-    bottom: 12px;
-    left: 50%;
     display: flex;
     align-items: center;
     gap: 2px;
     padding: 3px;
     border-radius: 999px;
+}
+
+.image-lightbox-gallery,
+.image-lightbox-tools {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
     transform: translateX(-50%);
 }
 
@@ -4893,6 +4893,7 @@ body:has(.image-lightbox[open]) {
     display: none;
 }
 
+.image-gallery-controls button,
 .image-lightbox-gallery button,
 .image-lightbox-tools button {
     width: 34px;
@@ -4902,12 +4903,20 @@ body:has(.image-lightbox[open]) {
     background: transparent;
 }
 
+.image-gallery-controls > span,
 .image-lightbox-level {
     min-width: 3.25rem;
-    color: #e5e5ea;
     font-size: 0.8125rem;
     font-variant-numeric: tabular-nums;
     text-align: center;
+}
+
+.image-lightbox-level {
+    color: #e5e5ea;
+}
+
+.image-gallery-controls button:not([aria-disabled="true"]):hover {
+    background: var(--surface-current);
 }
 
 .image-lightbox-tools [data-zoom="fit"] {

@@ -33,9 +33,9 @@
         controls.className = "image-gallery-controls";
         controls.setAttribute("role", "group");
         controls.setAttribute("aria-label", "Gallery steps");
-        controls.innerHTML = `<button type="button">Previous step</button>
+        controls.innerHTML = `<button type="button" aria-label="Previous step" title="Previous step">${icon("M12 5l-5 5 5 5")}</button>
 <span aria-live="polite" aria-atomic="true"></span>
-<button type="button">Next step</button>`;
+<button type="button" aria-label="Next step" title="Next step">${icon("M8 5l5 5-5 5")}</button>`;
         gallery.append(slides, controls);
         const [previous, position, next] = controls.children;
         let current = 0;
