@@ -50,6 +50,40 @@ actions:
 
 The source stays an ordinary code block, so the file remains readable on GitHub and in any other Markdown viewer.
 
+## Product page example
+
+Combine a full-width hero with ordinary Markdown sections. The first hero action is the primary link. Each `page` switch defaults to `true` and works in nested or dotted form, such as `page.toc: false`.
+
+````markdown title="README.md"
+---
+page:
+  breadcrumbs: false
+  pagination: false
+  toc: false
+---
+
+# Typing Studio
+
+```hero
+title: Build typing confidence
+text: Short lessons make it easy to practice every day.
+effect: connections
+width: full
+actions:
+  - text: Get Typing Studio
+    link: Download.md
+```
+
+## Practice at your pace
+
+Follow short lessons and see your progress.
+
+^^^
+![Typing Studio workspace](images/workspace-light.png#only-light){.image-frame}
+![Typing Studio workspace](images/workspace-dark.png#only-dark){.image-frame}
+^^^ Choose the practice settings that suit you.
+````
+
 ## Effects
 
 The beach remains the default. To choose another background, add just one line:

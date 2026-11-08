@@ -135,6 +135,8 @@ public class LinterVisitor: IVisitor<MarkdownFile>
         ReportLegacySidebarMetadata(entity);
         ReportInvalidNavigationMetadata(entity);
         ReportInvalidImageZoom(entity);
+        foreach (var problem in Markdown.Renderer.PageNavigation.FindProblems(entity.FrontMatter))
+            ErrorReceiver.Add(entity.FileInfo.FullName, 1, $"{RuleCodes.InvalidPageNavigation}: {problem}");
         foreach (var issue in MarkdownCompatibility.FindIssues(markdownContent))
             ErrorReceiver.Add(markdownFilePath, issue.LineNumber, $"{issue.Code}: {issue.Message}");
 
