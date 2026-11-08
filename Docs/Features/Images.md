@@ -28,6 +28,25 @@ MDU shows the matching image when a reader selects light or dark mode. In automa
 
 For PDF output, MDU keeps only the light variant. Images appear as alternative text in PDFs.
 
+## Frame screenshots
+
+A white window screenshot on a white page has no visible edge. Add `{.image-frame}` after an image to draw a subtle 1-pixel outline around it. The outline uses a light gray in light mode and a dark gray in dark mode, and the image viewer shows it too:
+
+~~~markdown title="Markdown"
+![Settings window with three option cards](images/framed-window-light.svg#only-light){.image-frame}
+![Settings window with three option cards](images/framed-window-dark.svg#only-dark){.image-frame}
+~~~
+
+![Settings window with three option cards](images/framed-window-light.svg#only-light){.image-frame}
+![Settings window with three option cards](images/framed-window-dark.svg#only-dark){.image-frame}
+
+- The outline follows the visible shape of the image. Transparent areas, such as the rounded corners of a macOS window captured without its shadow, stay transparent and are not cropped.
+- The frame adds no shadow, background, or padding on the page. Images without the class look as before.
+- With light and dark variants, add the class to each variant.
+- The class belongs on the image itself. In raw HTML, write `<img class="image-frame" …>`.
+- Semi-transparent areas inside the image, such as a translucent sidebar, let the outline show through faintly along their edges. Window screenshots captured without their shadow are opaque inside and are not affected.
+- While the image has keyboard focus, the focus ring replaces the outline.
+
 ## Local images
 
 Keep local image files inside the documentation folder and link to them with a relative path from the Markdown file. For example, a page can refer to an image in its own `images` subfolder as `images/page.png`.
