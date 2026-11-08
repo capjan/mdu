@@ -179,6 +179,7 @@ internal sealed class PdfLayout
         switch (element.LocalName.ToLowerInvariant())
         {
             case "p":
+            case "figcaption":
                 var paragraphLines = ParagraphLines(element, 10.5, indent).Length;
                 return 4 + (paragraphLines <= 3 ? paragraphLines : 2) * 10.5 * 1.35;
             case "pre":
@@ -289,6 +290,7 @@ internal sealed class PdfLayout
             case "template":
                 return;
             case "p":
+            case "figcaption":
                 WriteParagraph(ReadInlineRuns(element.ChildNodes.Cast<XmlNode>(), PdfTextStyle.Body, _sectionPath),
                     10.5, indent, 4, 8, keepTogether: IsAccentBlockTitle(element));
                 return;

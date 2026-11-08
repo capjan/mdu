@@ -7,6 +7,23 @@ namespace Markdown.Renderer.Test;
 public class PdfRendererTest
 {
     [Fact]
+    public void ImageFigureKeepsItsCaptionAndLightAltTextTogetherInTheOutput()
+    {
+        var result = Layout("""
+            ^^^
+            ![Light lesson grid](lessons-light.png#only-light)
+            ![Dark lesson grid](lessons-dark.png#only-dark)
+            ^^^ Use keyboard previews to **choose an exercise**.
+            """);
+        var text = string.Concat(result.Pages.SelectMany(page => ReadTextOperations(page.Content.ToString()))
+            .Select(operation => operation.Text));
+
+        Assert.Contains("Light lesson grid", text);
+        Assert.DoesNotContain("Dark lesson grid", text);
+        Assert.Contains("Use keyboard previews to choose an exercise.", text);
+    }
+
+    [Fact]
     public void FailedSectionsCannotBeSkippedOrPublished()
     {
         var renderer = new PdfRenderer(new HtmlRenderer());

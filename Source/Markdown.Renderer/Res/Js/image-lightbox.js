@@ -282,9 +282,12 @@
                 stage.classList.add("is-loading");
                 preview.alt = image.alt;
                 preview.classList.toggle("image-frame", image.classList.contains("image-frame"));
-                caption.textContent = image.alt;
-                caption.hidden = !image.alt;
-                dialog.setAttribute("aria-label", image.alt || "Image");
+                const figureCaption = image.closest("figure")?.querySelector(":scope > figcaption")?.textContent.trim();
+                const label = figureCaption || image.alt;
+                caption.classList.toggle("has-figure-caption", Boolean(figureCaption));
+                caption.textContent = label;
+                caption.hidden = !label;
+                dialog.setAttribute("aria-label", label || "Image");
                 dialog.showModal();
                 // Keyboard users start on a control with a visible focus ring; pointer users see no ring.
                 if (openedByKeyboard) closeButton.focus();
