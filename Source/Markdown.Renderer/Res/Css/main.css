@@ -4678,6 +4678,11 @@ html:has(.image-lightbox[open]) {
     scrollbar-gutter: auto;
 }
 
+/* Preserve gallery image widths while the dialog covers the full viewport. */
+body:has(.image-lightbox[open]) {
+    padding-inline-end: var(--image-lightbox-gutter, 0px);
+}
+
 .image-lightbox::backdrop {
     background: rgb(12 12 14 / 92%);
 }

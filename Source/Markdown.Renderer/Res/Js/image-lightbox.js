@@ -123,6 +123,7 @@
             // Vector images stay sharp, so they may start enlarged, but a small icon must not fill the window. Pixel images never start enlarged.
             view.fit = view.vector ? Math.min(3, ratio) : Math.min(1, ratio);
             view.max = view.vector ? Math.max(4, view.fit * 6) : view.zoomable ? 4 : view.fit;
+            if (gallery && !view.zoomable && tools.contains(document.activeElement)) closeButton.focus();
             tools.hidden = !view.zoomable;
             view.scale = keepView && !wasFitted ? Math.min(view.max, Math.max(view.fit, view.scale)) : view.fit;
             update();
@@ -327,6 +328,10 @@
             caption.hidden = !label;
             dialog.setAttribute("aria-label", label || "Image");
             if (!dialog.open) {
+                if (gallery) {
+                    const gutter = window.innerWidth - document.documentElement.getBoundingClientRect().width;
+                    document.body.style.setProperty("--image-lightbox-gutter", `${gutter}px`);
+                }
                 dialog.showModal();
                 // Keyboard users start on a control with a visible focus ring; pointer users see no ring.
                 if (openedByKeyboard) closeButton.focus();
@@ -358,6 +363,7 @@
 
         dialog.addEventListener("close", () => {
             if (dialog.open || !gallery) return;
+            document.body.style.removeProperty("--image-lightbox-gutter");
             const images = galleryImages();
             const image = images.includes(activeImage) ? activeImage : images[activeIndex];
             if (!image) return;
@@ -386,7 +392,7 @@
                 if (current < 0) {
                     if (images[activeIndex]) showImage(images[activeIndex]);
                     else dialog.close();
-                } else measure(true);
+                } else if (!stage.classList.contains("is-loading")) measure(true);
             },
         };
     };
@@ -435,11 +441,9 @@
     const refresh = (images) => {
         const states = images.map((image) => [image, Boolean(viewerImage(image))]);
         for (const [image, opens] of states) showOpens(image, opens);
-    };
-    new MutationObserver(() => {
-        refresh([...content.querySelectorAll("img")]);
         lightbox?.refreshGallery();
-    })
+    };
+    new MutationObserver(() => refresh([...content.querySelectorAll("img")]))
         .observe(document.documentElement, { attributes: true, attributeFilter: ["data-color-scheme"] });
     // A change of the shown size, such as in a narrower window or an opened section, can change the answer.
     const sizes = new ResizeObserver((entries) => refresh(entries.map((entry) => entry.target)));
