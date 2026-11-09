@@ -1,3 +1,7 @@
+---
+tags: [Navigation]
+---
+
 # Navigation
 
 MDU builds the navigation from the folder structure. A folder's `README.md` represents the folder, and the other pages appear beneath it. You control the result with front matter:

@@ -91,11 +91,17 @@
             const section = fold(entry.section);
             const text = fold(entry.text);
             const code = fold(entry.code || "");
-            const allText = `${title} ${section} ${text} ${code}`;
+            const tags = fold((entry.tags || []).join(" "));
+            const allText = `${title} ${section} ${text} ${code} ${tags}`;
             if (!terms.every(term => allText.includes(term))) return null;
 
-            const score = terms.reduce((total, term) =>
-                total + (title.includes(term) ? 30 : section.includes(term) ? 15 : 1), 0);
+            let score = terms.reduce((total, term) =>
+                total + (title.includes(term) ? 30 : section.includes(term) ? 15 : tags.includes(term) ? 10 : 1), 0);
+            // A query that starts the name of a tag or one of its aliases lists the tag page first.
+            if (entry.kind === "tag") {
+                const names = tokenize(`${entry.title} ${entry.code || ""}`);
+                if (terms.every(term => names.some(name => name.startsWith(term)))) score += 1000;
+            }
             return { entry, terms, score };
         }).filter(Boolean)
             .sort((left, right) => right.score - left.score || left.entry.title.localeCompare(right.entry.title));
@@ -130,15 +136,30 @@
             const link = document.createElement("a");
             link.className = "search-result";
             const heading = document.createElement("strong");
-            const resultTitle = document.createElement("span");
-            resultTitle.textContent = entry.section && entry.section !== entry.title
-                ? `${entry.title} › ${entry.section}`
-                : entry.title;
-            appendHighlightedText(heading, resultTitle.textContent, terms);
             const snippet = document.createElement("span");
             snippet.className = "search-result-snippet";
-            appendHighlightedText(snippet, createSnippet(entry.text, terms), terms);
-            link.append(heading, snippet);
+            if (entry.kind === "tag") {
+                const kind = document.createElement("span");
+                kind.className = "search-result-kind";
+                kind.textContent = "Tag: ";
+                heading.append(kind);
+                appendHighlightedText(heading, entry.title, terms);
+                const pages = `${entry.count} ${entry.count === 1 ? "page" : "pages"}`;
+                appendHighlightedText(snippet, entry.text ? `${pages} · ${createSnippet(entry.text, terms)}` : pages, terms);
+                link.append(heading, snippet);
+            } else {
+                appendHighlightedText(heading, entry.section && entry.section !== entry.title
+                    ? `${entry.title} › ${entry.section}`
+                    : entry.title, terms);
+                appendHighlightedText(snippet, createSnippet(entry.text, terms), terms);
+                link.append(heading, snippet);
+                if (entry.tags?.length) {
+                    const tags = document.createElement("span");
+                    tags.className = "search-result-tags";
+                    appendHighlightedText(tags, `Tags: ${entry.tags.join(" · ")}`, terms);
+                    link.append(tags);
+                }
+            }
 
             const resultUrl = new URL(entry.url, indexUrl);
             link.href = resultUrl.href;

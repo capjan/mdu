@@ -1,4 +1,5 @@
 ---
+tags: [Navigation, PDF]
 title: Configuration
 description: Everything you can set in mdu.yml and in page front matter.
 navigation.order: 50
@@ -45,6 +46,7 @@ site:                 # How does the published site present itself?
 content:              # What do all pages share?
   glossary: includes/abbreviations.md
   icons: assets/icons
+  tags: Tags.md
 
 diagrams:             # How large may a diagram get?
   limits:
@@ -94,6 +96,7 @@ Both approaches follow the browser's effective preference, which can come from a
 | --- | --- | --- |
 | `content.glossary` | None | Markdown file with [abbreviations](../Features/Abbreviations.md#shared-glossary) for all pages |
 | `content.icons` | `.icons`, if it exists | Folder with [your own icon sets](../Features/Icons-and-Emojis.md#your-own-icons) |
+| `content.tags` | None | Markdown page that defines the allowed [tags](../Features/Tags.md#define-the-vocabulary); unknown tags then stop `mdu render` and `mdu pdf` |
 
 ### `diagrams`
 
@@ -122,6 +125,7 @@ navigation:
 | `title` | Browser title and fallback navigation title |
 | `description` | Page meta description |
 | `icon` | Icon shortcode shown beside the level-one heading, such as `material-download` |
+| `tags` | [Tags](../Features/Tags.md) of the page, such as `[Security, Kubernetes]` |
 | `navigation.title` | Label in the sidebar, tabs, and breadcrumbs |
 | `navigation.order` | Sort order among sibling pages |
 | `navigation.visible` | `false` hides the entry; the page stays reachable by its URL |

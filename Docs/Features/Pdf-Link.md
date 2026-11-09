@@ -1,3 +1,7 @@
+---
+tags: [PDF]
+---
+
 # PDF Link
 
 Offer your documentation as a PDF download. Put a link to `mdu:pdf` on any page, and `mdu render` and `mdu serve` generate the PDF and point the link to it. There is nothing to configure and no extra build step.

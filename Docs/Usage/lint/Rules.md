@@ -36,6 +36,8 @@ navigation:
 | `MDU023` | `DiagramTooLarge` | Warning | A PlantUML component diagram stays within the size limits. | [Size limits](../../Features/Diagrams.md#size-limits) |
 | `MDU024` | `InvalidImageZoom` | Error | `images.zoom` in the front matter is `true` or `false`, and `images` itself is not a boolean. | — |
 | `MDU025` | `InvalidPageNavigation` | Error | `page.breadcrumbs`, `page.pagination`, and `page.toc` in the front matter accept `true` or `false`. | — |
+| `MDU026` | `UnknownTag` | Error | Every tag is defined in the tag vocabulary, and `tags` is one tag or a list of tags. | [Tags](../../Features/Tags.md#define-the-vocabulary) |
+| `MDU027` | `TagSpelling` | Warning | A tag is written like its name in the vocabulary, or like most pages write it. | [Tags](../../Features/Tags.md#tag-a-page) |
 
 ## MDU001: HeadingRequired
 
@@ -108,6 +110,16 @@ The [`images.zoom`](../../Features/Images.md#turn-off-the-viewer) front matter s
 ## MDU025: InvalidPageNavigation
 
 Use `true` or `false` for each page navigation setting. Both dotted keys and keys nested under `page` are supported. For example, replace `page.toc: off` with `page.toc: false`.
+
+## MDU026: UnknownTag
+
+With a [tag vocabulary](../../Features/Tags.md#define-the-vocabulary) set in `content.tags`, every tag in the front matter must be one of its names or aliases. The error points to the line of the tag and suggests the closest defined name. Correct the spelling, or add the tag as a second-level heading to the vocabulary. `mdu render` and `mdu pdf` stop with the same error.
+
+The rule also reports a `tags` value that is neither one tag nor a list of tags, such as a mapping, and a vocabulary that cannot be read.
+
+## MDU027: TagSpelling
+
+This warning points to a tag that differs from its name only in letter case or spacing, such as `kubernetes` for `Kubernetes`. The page is still listed under the tag. Without a vocabulary, the spelling most pages use is the name. Write the tag like the name so that the source stays consistent.
 
 ## Informational output
 

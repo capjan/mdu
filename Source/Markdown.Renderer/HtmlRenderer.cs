@@ -346,7 +346,9 @@ public partial class HtmlRenderer
         IReadOnlyDictionary<string, string>? pdfDownloadNames = null,
         GlossaryScope? glossaryScope = null,
         bool imageZoom = true,
-        PageNavigation? pageNavigation = null)
+        PageNavigation? pageNavigation = null,
+        IReadOnlyList<PageTagLink>? pageTags = null,
+        IReadOnlyList<PageTagLink>? tagSectionLinks = null)
     {
         var prefix = string.Concat(Enumerable.Repeat("../", nestingDeep));
         var cssFileLink = MainCssLink(prefix);
@@ -369,6 +371,7 @@ public partial class HtmlRenderer
         renderedMarkdown = MediaLinkEmbedder.ReplaceStandaloneLinks(renderedMarkdown, out var mediaProviders);
         var pageHero = hasHero ? Hero.ExtractFullWidth(ref renderedMarkdown) : string.Empty;
         renderedMarkdown = InsertFootnotesTitle(renderedMarkdown);
+        renderedMarkdown = PageTags.InsertSectionLinks(renderedMarkdown, tagSectionLinks);
         var dashboardFootnotes = dashboard is null ? string.Empty : ExtractDashboardFootnotes(ref renderedMarkdown)
             .Replace("<hr />\n", string.Empty, StringComparison.Ordinal);
         if (!string.IsNullOrWhiteSpace(pageIcon))
@@ -397,6 +400,8 @@ public partial class HtmlRenderer
                                            renderedMarkdown.Contains("class=\"openapi-tag-list\"", StringComparison.Ordinal) ||
                                            renderedMarkdown.Contains("class=\"openapi-request-body\"", StringComparison.Ordinal);
         renderedMarkdown = InsertEditPageLink(renderedMarkdown, editPageLink, out var editLinkInserted);
+        // A dashboard is a start page: it can carry tags for the tag pages, but shows none itself.
+        if (dashboard is null) renderedMarkdown = PageTags.InsertAfterTitle(renderedMarkdown, pageTags);
         var breadcrumbMarkup = dashboard is null && pageNavigation?.Breadcrumbs != false
             ? RenderBreadcrumbs(renderedMarkdown, breadcrumbs ?? Array.Empty<BreadcrumbItem>())
             : string.Empty;

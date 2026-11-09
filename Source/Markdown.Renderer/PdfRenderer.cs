@@ -6,7 +6,8 @@ using Markdown.Renderer.MarkdigExtension;
 
 namespace Markdown.Renderer;
 
-public sealed record PdfSourceSection(string Title, string RelativeHtmlPath, string Markdown, int Depth = 0);
+/// <param name="Tags">The tags of the page, joined for the line below its title; null without tags.</param>
+public sealed record PdfSourceSection(string Title, string RelativeHtmlPath, string Markdown, int Depth = 0, string? Tags = null);
 
 /// <summary>Writes a paginated PDF from the HTML fragment produced by MDU's Markdown pipeline.</summary>
 public sealed class PdfRenderer(HtmlRenderer htmlRenderer)
@@ -159,7 +160,17 @@ internal sealed class PdfLayout
         }
 
         _destinations[_sectionPath] = new PdfDestination(_pages.Count - 1, PageHeight - _y);
-        RenderBlocks(blocks, 0);
+        if (string.IsNullOrWhiteSpace(section.Tags))
+        {
+            RenderBlocks(blocks, 0);
+            return;
+        }
+
+        // The tags follow the page title; a page whose title is excluded from the PDF starts with them.
+        var title = Array.FindIndex(blocks, block => block is XmlElement { LocalName: "h1" });
+        RenderBlocks(blocks[..(title + 1)], 0);
+        WriteParagraph([new PdfRun(PdfEncoding.PrintableEmojiText($"Tags: {section.Tags}"), PdfTextStyle.Muted)], 9, 0, title < 0 ? 0 : 2, 10);
+        RenderBlocks(blocks[(title + 1)..], 0);
     }
 
     private void RenderBlocks(IEnumerable<XmlNode> nodes, int indent)

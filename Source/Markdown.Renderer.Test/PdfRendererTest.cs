@@ -24,6 +24,20 @@ public class PdfRendererTest
     }
 
     [Fact]
+    public void TagLineFollowsThePageTitle()
+    {
+        var layout = new PdfLayout(new HtmlRenderer(), "");
+        layout.RenderSection(new PdfSourceSection("Backups", "Backups.html", "# Backups\n\nEncrypted.", Tags: "Security · Incident"));
+        var operations = ReadTextOperations(layout.Complete().Pages[0].Content.ToString()).ToArray();
+
+        var title = operations.Single(operation => operation.Text == "Backups").Y;
+        var tags = operations.First(operation => operation.Text.Contains("Tags:", StringComparison.Ordinal)).Y;
+        var body = operations.Single(operation => operation.Text == "Encrypted.").Y;
+        Assert.True(title > tags && tags > body, $"title {title}, tags {tags}, body {body}");
+        Assert.Contains("Tags: Security · Incident", string.Concat(operations.Select(operation => operation.Text)));
+    }
+
+    [Fact]
     public void FailedSectionsCannotBeSkippedOrPublished()
     {
         var renderer = new PdfRenderer(new HtmlRenderer());

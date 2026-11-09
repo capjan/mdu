@@ -1,3 +1,7 @@
+---
+tags: [Navigation, Search]
+---
+
 # Dashboard
 
 ## Overview
@@ -73,7 +77,7 @@ Icons are embedded while rendering, so the dashboard loads no favicons from othe
 The filter field has the focus when the page opens, and ++slash++ returns to it. While you type:
 
 - Tiles that do not match the name, subtitle, address, group, or subheading disappear. Subheadings and groups without a matching tile disappear with them.
-- Matching documentation pages from the site search appear below the tiles.
+- Matching documentation pages from the site search appear below the tiles, including the pages of matching [tags](Tags.md).
 - ++enter++ opens the best match, which the hint below the field names. Without a match, it searches the web.
 - ++option+enter++ on macOS or ++alt+enter++ on Windows and Linux searches the web directly, even when a link matches.
 - Hold ++cmd++ or ++ctrl++ as well to open the result in a new tab.

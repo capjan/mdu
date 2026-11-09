@@ -39,4 +39,14 @@ internal static class NavigationPage
         .OrderBy(page => page.NavigationOrder.HasValue ? 0 : 1)
         .ThenBy(page => page.NavigationOrder)
         .ThenBy(GetTitle, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>All pages below <paramref name="pages"/>, depth first in navigation order, hidden pages included.</summary>
+    public static IEnumerable<MarkdownFile> Flatten(IEnumerable<MarkdownFile> pages)
+    {
+        foreach (var page in OrderPages(pages))
+        {
+            yield return page;
+            foreach (var child in Flatten(page.Children)) yield return child;
+        }
+    }
 }
