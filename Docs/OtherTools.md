@@ -27,7 +27,7 @@ What each tool needs and brings without extra plugins:
 | Markdown linter | Built in (`mdu lint`) | Plugins | Plugins | Plugins | — |
 | Diagrams | Static SVG at build time, no JavaScript | Mermaid in the browser | Mermaid in the browser | Plugins | Mermaid in the browser |
 | PDF export | Built in (`mdu pdf`) | Plugins | Plugins | Plugins | Built in |
-| Source files | Plain Markdown | Markdown with extensions | MDX | Markdown and MDX | Markdown with extensions |
+| Page format | Markdown with extensions | Markdown with extensions | MDX | Markdown and MDX | Markdown with extensions |
 
 > [!TIP]
 > Coming from Material for MkDocs? MDU understands the same icon shortcodes, and [`mdu fix`](./Usage/fix.md#migrating-mkdocs-material-markdown) converts admonitions, tabs, card grids, and `.pages` files to portable Markdown.

@@ -73,7 +73,7 @@ Prefer a standalone executable or Docker? See the [installation guide](https://c
 
 - **Install it your way.** As a standalone executable, a .NET tool, or a Docker image.
 - **Everything included.** Theme, navigation, search, and icons work out of the box, with no plugins to choose.
-- **Plain Markdown.** Your files stay portable and readable on GitHub, GitLab, or in any editor.
+- **Portable Markdown.** Callouts use the GitHub syntax and diagrams are code blocks, so your files stay readable on GitHub, GitLab, or in any editor.
 - **Checked in CI.** `mdu lint` finds broken links, wrong link casing, and unknown tags before you publish.
 - **Diagrams without JavaScript.** Mermaid flowcharts, sequence and state diagrams, and PlantUML component diagrams become static SVG with light and dark themes.
 - **PDF included.** `mdu pdf` exports the whole site as one document.
