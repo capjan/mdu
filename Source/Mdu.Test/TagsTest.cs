@@ -542,13 +542,17 @@ public class TagsTest
     [Fact]
     public void PagesWithoutUrlAreNamedWithoutLink()
     {
+        var numbered = new MarkdownFile(new FileInfo("Start.md"), null) { Title = "1. Getting started" };
+        Assert.Equal("\n- 1\\. Getting started (not in this PDF)\n", TagListBlock.Render([numbered],
+            new TagListOptions(["Security"], [], null), TagListStyle.Pdf, _ => null, _ => string.Empty, null));
+
         var pages = new[] { "Inside", "Outside" }
             .Select(title => new MarkdownFile(new FileInfo($"{title}.md"), null) { Title = title }).ToArray();
 
         var markdown = TagListBlock.Render(pages, new TagListOptions(["Security"], [], null), TagListStyle.Pdf,
             page => page.Title == "Inside" ? "Inside.html" : null, _ => string.Empty, null);
 
-        Assert.Equal("\n- [Inside](<Inside.html>)\n- Outside\n", markdown);
+        Assert.Equal("\n- [Inside](<Inside.html>)\n- Outside (not in this PDF)\n", markdown);
     }
 
     [Fact]

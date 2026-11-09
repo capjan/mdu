@@ -53,6 +53,9 @@ public static partial class TagListBlock
     [GeneratedRegex(@"[\\`*_{}\[\]<>()#+!|~]")]
     private static partial Regex MarkdownPunctuation();
 
+    [GeneratedRegex(@"^(\d*)([.)=-])")]
+    private static partial Regex LineStart();
+
     /// <summary>The <c>tags</c> code blocks of a page; <paramref name="markdown"/> may include the front matter.</summary>
     public static IReadOnlyList<TagListBlockSource> Find(string markdown)
     {
@@ -169,7 +172,10 @@ public static partial class TagListBlock
         foreach (var page in shown)
         {
             var title = Escape(NavigationPage.RemoveIconShortcodes(NavigationPage.GetTitle(page)).Trim());
-            var link = url(page) is { } target ? $"[{title}](<{target}>)" : title;
+            // Without a link, the title starts the list item, so a leading "1." or "-" must not start a nested list.
+            var link = url(page) is { } target
+                ? $"[{title}](<{target}>)"
+                : LineStart().Replace(title, "$1\\$2", 1) + (style == TagListStyle.Pdf ? " (not in this PDF)" : string.Empty);
             if (style == TagListStyle.Page)
             {
                 var detail = string.Join(" · ", new[] { area(page), page.Description }.Where(text => !string.IsNullOrWhiteSpace(text)));

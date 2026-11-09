@@ -4,6 +4,7 @@ using Markdown.Renderer;
 using Markdig;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
+using System.Text;
 using System.Text.RegularExpressions;
 using YamlDotNet.RepresentationModel;
 using Mdu.Commands.Settings;
@@ -52,14 +53,16 @@ public class FixCommand
 
         var pathComparer = MarkdownLinks.PathComparer;
         var tagsPage = FindTagsPage(rootPath);
-        var hadMaterialTagsPage = tagsPage is not null && MaterialTagsMarker.IsMatch(File.ReadAllText(tagsPage));
+        var tagsPageBefore = tagsPage is null ? null : File.ReadAllText(tagsPage);
+        var hadMaterialTagsPage = tagsPageBefore is not null &&
+                                  MigrateMaterialTagsPage(RemoveSimpleFrontMatter(tagsPageBefore).Trim(), () => []) is not null;
         var migrationChanges = MigrateMkDocsContent(rootPath, settings.IncludeHidden, pathComparer);
         if (migrationChanges < 0) return 1;
         var glossaryMigrationChanges = MigrateMkDocsGlossary(rootPath);
         migrationChanges += glossaryMigrationChanges;
-        // A vocabulary needs at least one tag; without tagged pages the page only loses its listing marker.
-        if (hadMaterialTagsPage && File.ReadAllText(tagsPage!) is var migratedTags &&
-            !MaterialTagsMarker.IsMatch(migratedTags) && Regex.IsMatch(migratedTags, @"^##[ \t]+\S", RegexOptions.Multiline) &&
+        // A vocabulary needs at least one tag; without tagged pages the page only loses its listing markers.
+        if (hadMaterialTagsPage && File.ReadAllText(tagsPage!) is var migratedTags && migratedTags != tagsPageBefore &&
+            DefinesTags(migratedTags) &&
             AddContentSetting(rootPath, "content.tags", Path.GetFileName(tagsPage!), "the MkDocs tags page") > 0)
         {
             Console.WriteLine($"Migrated the MkDocs tags page to the tag vocabulary in mdu.yml: {Path.GetFileName(tagsPage)}");
@@ -841,33 +844,80 @@ public class FixCommand
         if (FindTagsPage(rootPath) is { } tagsPath)
         {
             var existing = updated.GetValueOrDefault(tagsPath) ?? File.ReadAllText(tagsPath);
-            if (MaterialTagsMarker.Matches(existing) is { Count: > 0 } markers)
+            if (MigrateMaterialTagsPage(RemoveSimpleFrontMatter(existing).Trim(), () => ReadPageTags(rootPath)) is { } body)
             {
-                // The page becomes the tag vocabulary: one heading per tag in place of the listing marker. MDU writes
-                // the listings itself, as tag pages, so the page keeps only what authors write: the descriptions.
-                // Each marker lists the tags of its include option, or all tags, without those of its exclude option. A
-                // tag gets a heading when any marker of the page lists it.
-                var pageTags = Directory.EnumerateFiles(rootPath, "*.md", SearchOption.AllDirectories)
-                    .SelectMany(page => ReadMetadata(page).TryGetValue("tags", out var value)
-                        ? value.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                        : [])
-                    .ToArray();
-                var listings = markers.Select(marker => (Include: ReadMarkerTags(marker.Value, "include"),
-                    Exclude: (ReadMarkerTags(marker.Value, "exclude") ?? []).Select(TagCatalog.Normalize).ToHashSet())).ToArray();
-                var tags = listings.SelectMany(listing => (listing.Include ?? pageTags)
-                        .Where(tag => !listing.Exclude.Contains(TagCatalog.Normalize(tag))))
-                    .Order(StringComparer.OrdinalIgnoreCase)
-                    .ThenBy(tag => tag, StringComparer.Ordinal)
-                    .DistinctBy(TagCatalog.Normalize)
-                    .ToArray();
-                var headings = string.Join(Environment.NewLine + Environment.NewLine, tags.Select(tag => $"## {tag}"));
-                var body = MaterialTagsMarker.Replace(RemoveSimpleFrontMatter(existing).Trim(), headings.Replace("$", "$$", StringComparison.Ordinal), 1);
-                body = MaterialTagsMarker.Replace(body, string.Empty).Trim();
-                if (!Regex.IsMatch(body, @"^#\s", RegexOptions.Multiline)) body = "# Tags" + Environment.NewLine + Environment.NewLine + body;
                 updated[tagsPath] = ReplaceMarkdownBody(existing, body + Environment.NewLine, tagsPath);
                 changes++;
             }
         }
+    }
+
+    private static bool DefinesTags(string markdown)
+    {
+        try
+        {
+            TagCatalog.Parse(markdown);
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    private static string[] ReadPageTags(string rootPath) =>
+        Directory.EnumerateFiles(rootPath, "*.md", SearchOption.AllDirectories)
+            .SelectMany(page => ReadMetadata(page).TryGetValue("tags", out var value)
+                ? value.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                : [])
+            .ToArray();
+
+    /// <summary>
+    /// Turns a Material tags page into the tag vocabulary. Every listing marker becomes one heading per tag it lists:
+    /// those of its <c>include</c> option, or all tags of the pages, without those of its <c>exclude</c> option. MDU
+    /// writes the listings itself, as tag pages, so the page keeps what authors wrote around the markers. Their own
+    /// second-level headings become third-level ones, because a second-level heading defines a tag. Returns null when
+    /// the page has no marker outside code.
+    /// </summary>
+    public static string? MigrateMaterialTagsPage(string body, Func<IReadOnlyList<string>> pageTags)
+    {
+        var document = Markdig.Markdown.Parse(body, new MarkdownPipelineBuilder().UsePreciseSourceLocation().Build());
+        var code = document.Descendants<CodeBlock>().Select(block => (block.Span.Start, block.Span.End))
+            .Concat(document.Descendants<CodeInline>().Select(inline => (inline.Span.Start, inline.Span.End)))
+            .ToArray();
+        bool InCode(int position) => code.Any(span => position >= span.Start && position <= span.End);
+
+        var markers = MaterialTagsMarker.Matches(body).Where(marker => !InCode(marker.Index)).ToArray();
+        if (markers.Length == 0) return null;
+
+        var edits = new List<(int Start, int Length, string Text)>();
+        foreach (var heading in document.Descendants<HeadingBlock>().Where(heading => heading is { Level: 2, IsSetext: false }))
+            edits.Add((heading.Span.Start, 0, "#"));
+
+        // A tag that several markers list gets its heading at the first of them, so the vocabulary defines it once.
+        var assigned = new HashSet<string>(StringComparer.Ordinal);
+        var allTags = new Lazy<IReadOnlyList<string>>(pageTags);
+        foreach (var marker in markers)
+        {
+            var exclude = (ReadMarkerTags(marker.Value, "exclude") ?? []).Select(TagCatalog.Normalize).ToHashSet();
+            var tags = (ReadMarkerTags(marker.Value, "include") ?? allTags.Value)
+                .Where(tag => !exclude.Contains(TagCatalog.Normalize(tag)))
+                .Order(StringComparer.OrdinalIgnoreCase)
+                .ThenBy(tag => tag, StringComparer.Ordinal)
+                .DistinctBy(TagCatalog.Normalize)
+                .Where(tag => assigned.Add(TagCatalog.Normalize(tag)))
+                .ToArray();
+            edits.Add((marker.Index, marker.Length,
+                string.Join(Environment.NewLine + Environment.NewLine, tags.Select(tag => $"## {tag}"))));
+        }
+
+        var output = new StringBuilder(body);
+        foreach (var (start, length, text) in edits.OrderByDescending(edit => edit.Start))
+            output.Remove(start, length).Insert(start, text);
+        var migrated = Regex.Replace(output.ToString().Trim(), @"(\r?\n){3,}", Environment.NewLine + Environment.NewLine);
+        return Regex.IsMatch(migrated, @"^#\s", RegexOptions.Multiline)
+            ? migrated
+            : "# Tags" + Environment.NewLine + Environment.NewLine + migrated;
     }
 
     /// <summary>The tags page of a Material site at the documentation root, <c>Tags.md</c> in any letter case.</summary>

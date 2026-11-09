@@ -771,7 +771,7 @@ public class FixCommandTest
     [InlineData("Tags.md", "<!-- material/tags { include: [Release, Future] } -->", "---\ntags: [Beta, Release]\n---\n# A\n", "## Future\n\n## Release\n", true)]
     [InlineData("Tags.md", "<!-- material/tags { exclude: [Beta] } -->", "---\ntags: [Beta, Release]\n---\n# A\n", "## Release\n", true)]
     // Every marker counts: a tag gets a heading when any of them lists it.
-    [InlineData("Tags.md", "<!-- material/tags { include: [Release] } -->\n\n<!-- material/tags { include: [Beta] } -->", "---\ntags: [Beta, Release, Other]\n---\n# A\n", "## Beta\n\n## Release\n", true)]
+    [InlineData("Tags.md", "<!-- material/tags { include: [Release] } -->\n\n<!-- material/tags { include: [Beta] } -->", "---\ntags: [Beta, Release, Other]\n---\n# A\n", "## Release\n\n## Beta\n", true)]
     public void MigratesTheMaterialTagsPageOnlyWhenItDefinesTags(string fileName, string marker, string page, string headings, bool registered)
     {
         var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
@@ -797,6 +797,57 @@ public class FixCommandTest
             Console.SetOut(originalOut);
             Directory.Delete(root, recursive: true);
         }
+    }
+
+    [Fact]
+    public void MaterialTagsPageKeepsItsSectionsAndCodeExamples()
+    {
+        var page = """
+            # Tags
+
+            Topics of the blog.
+
+            ## Releases
+
+            <!-- material/tags { include: [Release, Beta] } -->
+
+            ## Guides
+
+            Write `<!-- material/tags -->` to list all tags:
+
+            ```markdown
+            <!-- material/tags -->
+            ```
+
+            <!-- material/tags { include: [Guide, Release] } -->
+            """;
+
+        var migrated = FixCommand.MigrateMaterialTagsPage(page, () => ["Guide", "Release", "Other"])!.ReplaceLineEndings("\n");
+
+        // Own sections become third-level headings; each marker gets the tags it lists that no earlier marker listed.
+        Assert.Equal("""
+            # Tags
+
+            Topics of the blog.
+
+            ### Releases
+
+            ## Beta
+
+            ## Release
+
+            ### Guides
+
+            Write `<!-- material/tags -->` to list all tags:
+
+            ```markdown
+            <!-- material/tags -->
+            ```
+
+            ## Guide
+            """.ReplaceLineEndings("\n"), migrated);
+        Assert.Equal(["Beta", "Release", "Guide"], Markdown.Renderer.TagCatalog.Parse(migrated).Definitions.Select(tag => tag.Name));
+        Assert.Null(FixCommand.MigrateMaterialTagsPage("# Tags\n\n```\n<!-- material/tags -->\n```\n", () => ["Release"]));
     }
 
     private static GraphBuilder CreateGraphBuilder() =>
