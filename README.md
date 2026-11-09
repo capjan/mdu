@@ -71,7 +71,8 @@ Prefer a standalone executable or Docker? See the [installation guide](https://c
 
 ## Why MDU
 
-- **One tool, nothing else to set up.** A standalone executable, a .NET tool, or a Docker image — themes, search, diagrams, and PDF export are included.
+- **Install it your way.** As a standalone executable, a .NET tool, or a Docker image.
+- **Everything included.** Theme, navigation, search, and icons work out of the box, with no plugins to choose.
 - **Plain Markdown.** Your files stay portable and readable on GitHub, GitLab, or in any editor.
 - **Checked in CI.** `mdu lint` finds broken links, wrong link casing, and unknown tags before you publish.
 - **Diagrams without JavaScript.** Mermaid flowcharts, sequence and state diagrams, and PlantUML component diagrams become static SVG with light and dark themes.
