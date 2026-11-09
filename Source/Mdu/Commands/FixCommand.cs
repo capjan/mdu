@@ -1,5 +1,6 @@
 using Mdu.Service.PageTree.Extensions;
 using Markdown.Linter;
+using Markdown.Renderer;
 using Markdig;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
@@ -14,6 +15,9 @@ namespace Mdu.Commands;
 
 public class FixCommand
 {
+    // Material for MkDocs lists tags where this comment stands, also with options such as { include: [...] }.
+    private static readonly Regex MaterialTagsMarker = new(@"<!--\s*material/tags\b.*?-->", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+
     private static readonly Regex FrontMatterBlock = new(
         @"\A---[ \t]*\r?\n(?<yaml>[\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)",
         RegexOptions.Compiled);
@@ -47,10 +51,20 @@ public class FixCommand
         }
 
         var pathComparer = MarkdownLinks.PathComparer;
+        var tagsPage = FindTagsPage(rootPath);
+        var hadMaterialTagsPage = tagsPage is not null && MaterialTagsMarker.IsMatch(File.ReadAllText(tagsPage));
         var migrationChanges = MigrateMkDocsContent(rootPath, settings.IncludeHidden, pathComparer);
         if (migrationChanges < 0) return 1;
         var glossaryMigrationChanges = MigrateMkDocsGlossary(rootPath);
         migrationChanges += glossaryMigrationChanges;
+        // A vocabulary needs at least one tag; without tagged pages the page only loses its listing marker.
+        if (hadMaterialTagsPage && File.ReadAllText(tagsPage!) is var migratedTags &&
+            !MaterialTagsMarker.IsMatch(migratedTags) && Regex.IsMatch(migratedTags, @"^##[ \t]+\S", RegexOptions.Multiline) &&
+            AddContentSetting(rootPath, "content.tags", Path.GetFileName(tagsPage!), "the MkDocs tags page") > 0)
+        {
+            Console.WriteLine($"Migrated the MkDocs tags page to the tag vocabulary in mdu.yml: {Path.GetFileName(tagsPage)}");
+            migrationChanges++;
+        }
 
         var graph = _graphBuilder.CreateGraph(new VisitorSettings
         {
@@ -286,6 +300,28 @@ public class FixCommand
             return 0;
         }
 
+        string relativePath;
+        try
+        {
+            relativePath = Path.GetRelativePath(rootPath, source.Path)
+                .Replace(Path.DirectorySeparatorChar, '/');
+        }
+        catch (ArgumentException exception)
+        {
+            Console.Error.WriteLine($"Could not migrate MkDocs glossary because it is on a different volume: {exception.Message}");
+            return 0;
+        }
+        if (AddContentSetting(rootPath, "content.glossary", relativePath, "MkDocs glossary") == 0) return 0;
+        Console.WriteLine($"Migrated MkDocs glossary configuration to mdu.yml: {relativePath}");
+        return 1;
+    }
+
+    /// <summary>
+    /// Adds a setting such as <c>content.glossary</c> to mdu.yml unless it is already set. Returns 1 when the file changed;
+    /// <paramref name="what"/> names the migrated item in error messages.
+    /// </summary>
+    private static int AddContentSetting(string rootPath, string key, string value, string what)
+    {
         var mduPath = Path.Combine(rootPath, "mdu.yml");
         var contents = File.Exists(mduPath) ? File.ReadAllText(mduPath) : string.Empty;
         var hasFlowMapping = false;
@@ -298,37 +334,26 @@ public class FixCommand
             }
             catch (YamlDotNet.Core.YamlException exception)
             {
-                Console.Error.WriteLine($"Could not migrate MkDocs glossary because mdu.yml is invalid: {exception.Message}");
+                Console.Error.WriteLine($"Could not migrate {what} because mdu.yml is invalid: {exception.Message}");
                 return 0;
             }
 
             var root = yaml.Documents.FirstOrDefault()?.RootNode;
             if (root is YamlMappingNode mapping)
             {
-                if (SiteConfigurationReader.ReadSettings(mapping, out _).ContainsKey("content.glossary")) return 0;
+                if (SiteConfigurationReader.ReadSettings(mapping, out _).ContainsKey(key)) return 0;
                 if (mapping.Style == YamlDotNet.Core.Events.MappingStyle.Flow)
                     hasFlowMapping = true;
             }
             else if (root is not null && root is not YamlScalarNode { Value: null or "" })
             {
-                Console.Error.WriteLine("Could not migrate MkDocs glossary because mdu.yml must contain a YAML mapping.");
+                Console.Error.WriteLine($"Could not migrate {what} because mdu.yml must contain a YAML mapping.");
                 return 0;
             }
         }
 
-        string relativePath;
-        try
-        {
-            relativePath = Path.GetRelativePath(rootPath, source.Path)
-                .Replace(Path.DirectorySeparatorChar, '/');
-        }
-        catch (ArgumentException exception)
-        {
-            Console.Error.WriteLine($"Could not migrate MkDocs glossary because it is on a different volume: {exception.Message}");
-            return 0;
-        }
         var newline = contents.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
-        var glossaryEntry = $"content.glossary: '{relativePath.Replace("'", "''", StringComparison.Ordinal)}'";
+        var entry = $"{key}: '{value.Replace("'", "''", StringComparison.Ordinal)}'";
         if (hasFlowMapping)
         {
             var openingBrace = contents.IndexOf('{');
@@ -337,18 +362,18 @@ public class FixCommand
                 contents.AsSpan(openingBrace, closingBrace - openingBrace).Contains('\n') ||
                 contents.AsSpan(openingBrace, closingBrace - openingBrace).Contains('\r'))
             {
-                Console.Error.WriteLine("Could not migrate MkDocs glossary because mdu.yml uses an unsupported multi-line flow mapping.");
+                Console.Error.WriteLine($"Could not migrate {what} because mdu.yml uses an unsupported multi-line flow mapping.");
                 return 0;
             }
 
             var beforeClosingBrace = contents[..closingBrace].TrimEnd();
             var separator = beforeClosingBrace.EndsWith('{') ? "" : beforeClosingBrace.EndsWith(',') ? " " : ", ";
-            contents = contents.Insert(closingBrace, separator + glossaryEntry);
+            contents = contents.Insert(closingBrace, separator + entry);
         }
         else
         {
             if (contents.Length > 0 && !contents.EndsWith('\n')) contents += newline;
-            contents += glossaryEntry + newline;
+            contents += entry + newline;
         }
         try
         {
@@ -356,21 +381,20 @@ public class FixCommand
             migratedYaml.Load(new StringReader(contents));
             var migratedRoot = migratedYaml.Documents.FirstOrDefault()?.RootNode;
             if (migratedRoot is not YamlMappingNode migratedMapping ||
-                !SiteConfigurationReader.ReadSettings(migratedMapping, out _).TryGetValue("content.glossary", out var migratedGlossary) ||
-                migratedGlossary is not YamlScalarNode { Value: var migratedGlossaryPath } ||
-                migratedGlossaryPath != relativePath)
+                !SiteConfigurationReader.ReadSettings(migratedMapping, out _).TryGetValue(key, out var migratedValue) ||
+                migratedValue is not YamlScalarNode { Value: var migratedText } ||
+                migratedText != value)
             {
-                Console.Error.WriteLine("Could not migrate MkDocs glossary because the glossary entry could not be verified in mdu.yml.");
+                Console.Error.WriteLine($"Could not migrate {what} because the {key} entry could not be verified in mdu.yml.");
                 return 0;
             }
         }
         catch (YamlDotNet.Core.YamlException exception)
         {
-            Console.Error.WriteLine($"Could not migrate MkDocs glossary because the updated mdu.yml would be invalid: {exception.Message}");
+            Console.Error.WriteLine($"Could not migrate {what} because the updated mdu.yml would be invalid: {exception.Message}");
             return 0;
         }
         File.WriteAllText(mduPath, contents);
-        Console.WriteLine($"Migrated MkDocs glossary configuration to mdu.yml: {relativePath}");
         return 1;
     }
 
@@ -814,41 +838,50 @@ public class FixCommand
             }
         }
 
-        var tagsPath = Path.Combine(rootPath, "Tags.md");
-        if (File.Exists(tagsPath))
+        if (FindTagsPage(rootPath) is { } tagsPath)
         {
             var existing = updated.GetValueOrDefault(tagsPath) ?? File.ReadAllText(tagsPath);
-            if (existing.Contains("material/tags", StringComparison.OrdinalIgnoreCase))
+            if (MaterialTagsMarker.Match(existing) is { Success: true } marker)
             {
-                var tagGroups = new SortedDictionary<string, List<(string RelativePath, string Title)>>(StringComparer.OrdinalIgnoreCase);
-                foreach (var page in Directory.EnumerateFiles(rootPath, "*.md", SearchOption.AllDirectories))
-                {
-                    var metadata = ReadMetadata(page);
-                    if (metadata.TryGetValue("tags", out var tags))
-                    {
-                        var fullPath = Path.GetFullPath(page);
-                        var targetPath = movedPaths.GetValueOrDefault(fullPath, fullPath);
-                        foreach (var tag in tags.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-                        {
-                            if (!tagGroups.TryGetValue(tag, out var entries)) tagGroups[tag] = entries = new List<(string, string)>();
-                            entries.Add((Path.GetRelativePath(rootPath, targetPath).Replace(Path.DirectorySeparatorChar, '/'),
-                                metadata.GetValueOrDefault("title", Path.GetFileNameWithoutExtension(page))));
-                        }
-                    }
-                }
-
-                var lines = new List<string> { "# Tags", string.Empty };
-                foreach (var (tag, entries) in tagGroups)
-                {
-                    lines.Add($"## {tag}");
-                    lines.AddRange(entries.OrderBy(entry => entry.Title, StringComparer.OrdinalIgnoreCase)
-                        .Select(entry => $"- [{entry.Title}]({EncodeRelativePath(entry.RelativePath)})"));
-                    lines.Add(string.Empty);
-                }
-                updated[tagsPath] = ReplaceMarkdownBody(existing, string.Join(Environment.NewLine, lines).TrimEnd() + Environment.NewLine, tagsPath);
+                // The page becomes the tag vocabulary: one heading per tag in place of the listing marker. MDU writes
+                // the listings itself, as tag pages, so the page keeps only what authors write: the descriptions.
+                var include = ReadMarkerTags(marker.Value, "include");
+                var exclude = ReadMarkerTags(marker.Value, "exclude") ?? [];
+                var tags = (include ?? Directory.EnumerateFiles(rootPath, "*.md", SearchOption.AllDirectories)
+                        .SelectMany(page => ReadMetadata(page).TryGetValue("tags", out var value)
+                            ? value.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                            : []))
+                    .Where(tag => !exclude.Any(excluded => TagCatalog.Normalize(excluded) == TagCatalog.Normalize(tag)))
+                    .Order(StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(tag => tag, StringComparer.Ordinal)
+                    .DistinctBy(TagCatalog.Normalize)
+                    .ToArray();
+                var headings = string.Join(Environment.NewLine + Environment.NewLine, tags.Select(tag => $"## {tag}"));
+                var body = MaterialTagsMarker.Replace(RemoveSimpleFrontMatter(existing).Trim(), headings.Replace("$", "$$", StringComparison.Ordinal), 1);
+                body = MaterialTagsMarker.Replace(body, string.Empty).Trim();
+                if (!Regex.IsMatch(body, @"^#\s", RegexOptions.Multiline)) body = "# Tags" + Environment.NewLine + Environment.NewLine + body;
+                updated[tagsPath] = ReplaceMarkdownBody(existing, body + Environment.NewLine, tagsPath);
                 changes++;
             }
         }
+    }
+
+    /// <summary>The tags page of a Material site at the documentation root, <c>Tags.md</c> in any letter case.</summary>
+    private static string? FindTagsPage(string rootPath) => Directory.Exists(rootPath)
+        ? Directory.EnumerateFiles(rootPath, "*.md")
+            .Where(path => Path.GetFileName(path).Equals("Tags.md", StringComparison.OrdinalIgnoreCase))
+            .Order(StringComparer.Ordinal)
+            .FirstOrDefault()
+        : null;
+
+    // The tags of an option such as "{ include: [Release, Beta] }" in the listing marker; null without the option.
+    private static string[]? ReadMarkerTags(string marker, string option)
+    {
+        var match = Regex.Match(marker, $@"\b{option}\s*:\s*\[(?<tags>[^\]]*)\]");
+        return match.Success
+            ? match.Groups["tags"].Value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(tag => tag.Trim('"', '\'')).Where(tag => tag.Length > 0).ToArray()
+            : null;
     }
 
     private static Dictionary<string, string> ReadMetadata(string path)

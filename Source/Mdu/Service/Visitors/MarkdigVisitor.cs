@@ -172,7 +172,9 @@ public partial class MarkdigVisitor : BaseVisitor
 
         var outputDirectory = Path.GetDirectoryName(Path.GetFullPath(outputFileName))!;
         var prepared = _preparedPages.Remove(entity, out var pending) ? pending : PreparePage(entity, outputFileName);
-        var markdown = prepared.Markdown;
+        var dashboard = Dashboard.ReadFrontMatter(entity.FrontMatter);
+        // After the search index: the titles that a tags block lists belong to the search entries of their own pages.
+        var markdown = ExpandTagLists(entity, prepared.Markdown, outputDirectory, dashboard is not null);
         var specificationPages = prepared.Specifications;
 
         var navigation = BuildNavigation(entity, outputFileName);
@@ -202,7 +204,7 @@ public partial class MarkdigVisitor : BaseVisitor
                     topNavigation,
                     GetLastModified(entity),
                     pdfUrl,
-                    Dashboard.ReadFrontMatter(entity.FrontMatter),
+                    dashboard,
                     pdfDownloadUrls,
                     pdfDownloadNames,
                     GetGlossaryScope(entity),
@@ -562,12 +564,8 @@ public partial class MarkdigVisitor : BaseVisitor
         FilePathInfo.CreateRenderFileInfo(_rootPath, _outPath, page.FileInfo, ".html", page.SiteRelativePath)
             .OutputFullFilePath;
 
-    private static string GetRelativeUrl(string currentDirectory, string pagePath)
-    {
-        var relativeUrl = Path.GetRelativePath(currentDirectory, pagePath)
-            .Replace(Path.DirectorySeparatorChar, '/');
-        return string.Join('/', relativeUrl.Split('/').Select(Uri.EscapeDataString));
-    }
+    private static string GetRelativeUrl(string currentDirectory, string pagePath) =>
+        MarkdownLinks.GetRelativeUrl(currentDirectory, pagePath);
 
     private string GetSiteRelativeUrl(string pagePath)
     {

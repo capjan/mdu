@@ -39,6 +39,14 @@ public class TagCatalogTest
     }
 
     [Fact]
+    public void IgnoresTheFrontMatterOfTheVocabularyPage()
+    {
+        var catalog = TagCatalog.Parse("---\nnavigation:\n  visible: false\n---\n\n# Tags\n\n## Security\n");
+
+        Assert.Equal(["Security"], catalog.Definitions.Select(tag => tag.Name));
+    }
+
+    [Fact]
     public void OnlyASingleLineAliasListCountsAsAliases()
     {
         var catalog = TagCatalog.Parse("""

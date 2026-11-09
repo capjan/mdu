@@ -102,8 +102,8 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         }
     }
 
-    private string? GetTagLine(MarkdownFile page) =>
-        Tags.For(page) is { Count: > 0 } tags ? string.Join(" · ", tags.Select(tag => tag.Name)) : null;
+    private string? GetTagNames(MarkdownFile page) =>
+        Tags.For(page) is { Count: > 0 } tags ? string.Join('\n', tags.Select(tag => tag.Name)) : null;
 
     public int WriteSitePdf(string rootPath, string outputPath, IEnumerable<MarkdownFile> graph) =>
         WritePdf(rootPath, outputPath, Flatten(rootPath, graph), includeFrontMatter: true);
@@ -187,7 +187,9 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         PdfSourceSection[] sections;
         try
         {
-            sections = files.Where(item => IsPdfVisible(item.File.FrontMatter))
+            var exported = files.Where(item => IsPdfVisible(item.File.FrontMatter)).ToArray();
+            var exportedPages = exported.Select(item => item.File).ToHashSet();
+            sections = exported
                 .Select(item =>
                 {
                     var source = RemoveFrontMatter(item.File.ReadMarkdown(), item.File.FrontMatter);
@@ -206,12 +208,13 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
                         item.File.SourceRootPath,
                         includeSpecificationPageLink: false,
                         excludedBlockStarts: excludedBlocks);
+                    markdown = ExpandTagLists(rootPath, item.File, markdown, exportedPages);
                     return new PdfSourceSection(
                         PdfSelection.GetPdfTitle(rootPath, item.File, markdown, pdfRenderer.ExcludesTitleHeading),
                         GetRelativeHtmlPath(rootPath, item.File),
                         markdown,
                         item.Depth,
-                        GetTagLine(item.File));
+                        GetTagNames(item.File));
                 })
                 .ToArray();
         }
@@ -366,6 +369,18 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
             foreach (var child in Flatten(rootPath, file.Children, depth + 1)) yield return child;
         }
     }
+
+    // In the PDF, a tags block is a plain list whose links lead to the pages within the document, so it lists only
+    // the pages of this export.
+    private string ExpandTagLists(string rootPath, MarkdownFile page, string markdown, IReadOnlySet<MarkdownFile> exportedPages) =>
+        TagListBlock.Expand(markdown, block => Tags.Check(block) is { } error
+            ? TagListBlock.RenderError(error)
+            : TagListBlock.Render(Tags.Select(block.Options!, page).Where(exportedPages.Contains).ToArray(), block.Options!,
+                TagListStyle.Pdf,
+                target => MarkdownLinks.GetRelativeUrl(
+                    Path.GetDirectoryName(Path.Combine(rootPath, GetRelativeHtmlPath(rootPath, page)))!,
+                    Path.Combine(rootPath, GetRelativeHtmlPath(rootPath, target))),
+                _ => string.Empty, null));
 
     private static string GetRelativeHtmlPath(string rootPath, MarkdownFile file)
     {

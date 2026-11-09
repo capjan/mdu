@@ -76,8 +76,53 @@ This documentation uses its own [vocabulary](../Tags.md) as an example.
 > [!NOTE]
 > The tag pages need the `tags` folder of the output. If the documentation has a folder or a page of that name, such as `tags.md`, and a page uses tags, `mdu render` stops with an error. Rename the folder or page in that case. Relative links in a tag description keep working on the tag page.
 
+- **The PDF properties** list the tags of the exported pages as keywords, so file managers and document search can find the PDF by them.
+
+## List tagged pages on any page
+
+A `tags` code block lists the pages that carry a tag, such as on a hub page that collects a topic. The list is written when the site is rendered, so it never goes out of date:
+
+~~~markdown title="Markdown"
+```tags
+tags: [PDF]
+exclude: [Migration]
+limit: 6
+```
+~~~
+
+This block lists the pages of this documentation that carry the tag **PDF** but not **Migration**:
+
+```tags
+tags: [PDF]
+exclude: [Migration]
+limit: 6
+```
+
+| Option | Default | Effect |
+| --- | --- | --- |
+| `tags` | Required | One tag or a list. A page must carry all of them. |
+| `exclude` | None | One tag or a list. Pages with any of them are left out. |
+| `limit` | `6` | The number of pages shown; `0` shows all. When pages are left out, a link leads to the tag page. |
+
+The pages appear in navigation order as cards with their area and `description`. The page with the block is never listed itself. The block also works inside a callout or a list item. With a vocabulary, the tags of the block must be defined there, like the tags of a page.
+
+- **On a [dashboard](Dashboard.md)**, the pages become tiles of the group the block is in. The page `icon` and `description` become the tile's icon and subtitle.
+- **In the PDF**, the block is a plain list of the pages that are part of the same export, with links to them within the document.
+- **On GitHub**, the block stays a readable code block with its options.
+
+## Check the tags
+
+`mdu tags` lists every tag with the number of pages that carry it and the areas they belong to, most used first. Unused tags of the vocabulary appear with `0`:
+
+```text
+$ mdu tags docs
+Security    11  Operations, Development, Reference
+Kubernetes   6  Operations, Development
+Incident     0  only in Tags.md
+```
+
+`mdu lint` warns about tags that only one page carries and about vocabulary tags that no page carries ([`MDU028`](../Usage/lint/Rules.md#mdu028-unusedtag)). A tag page with a single entry leads nowhere.
+
 ## Migrating from Material for MkDocs
 
-The `tags` front matter of Material for MkDocs works unchanged. To check the tags against a list, move the names of `tags_allowed` into a vocabulary page as described above.
-
-`mdu fix` replaces the `<!-- material/tags -->` marker of a root `Tags.md` with a static list of links. The tag pages make that list unnecessary: before you use the page as the vocabulary, replace each list below a tag heading with a description of the tag.
+The `tags` front matter of Material for MkDocs works unchanged. `mdu fix` turns a `Tags.md` or `tags.md` at the documentation root with the `<!-- material/tags -->` marker into the vocabulary: the marker becomes one heading per tag that the pages use, and `content.tags` is added to `mdu.yml`. The `include` and `exclude` options of the marker decide which tags get a heading. Without tagged pages, `mdu fix` only removes the marker. Add a description below each heading afterwards. To check the tags against a list as with `tags_allowed`, keep only the allowed names in the vocabulary.

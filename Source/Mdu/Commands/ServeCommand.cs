@@ -667,6 +667,7 @@ public sealed class ServeCommand
             var previousInvalidNavigationPlacement = page.InvalidNavigationPlacement;
             var previousTags = page.Tags;
             var previousDescription = page.Description;
+            var previousIcon = page.Icon;
             _dataPreparationVisitor.Process(page, depth);
             var dependencies = ReadPageDependencies(page);
             // Pages that already import a repository are handled above, so a set source means a newly added import.
@@ -680,7 +681,8 @@ public sealed class ServeCommand
                 previousInvalidNavigationPlacement != page.InvalidNavigationPlacement ||
                 // Tags appear on the tag pages and in the search of every page, and the vocabulary defines them.
                 !previousTags.SequenceEqual(page.Tags, StringComparer.Ordinal) ||
-                page.Tags.Count > 0 && !previousDescription.Equals(page.Description, StringComparison.Ordinal) ||
+                page.Tags.Count > 0 && (!previousDescription.Equals(page.Description, StringComparison.Ordinal) ||
+                                        !previousIcon.Equals(page.Icon, StringComparison.Ordinal)) ||
                 _siteTags.VocabularyPath is not null && PathComparer.Equals(pagePath, _siteTags.VocabularyPath) ||
                 !_pdfTitlesByPage.TryGetValue(pagePath, out var previousPdfTitle) ||
                 !previousPdfTitle.Equals(dependencies.PdfTitle, StringComparison.Ordinal))

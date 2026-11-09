@@ -40,6 +40,17 @@ internal static class NavigationPage
         .ThenBy(page => page.NavigationOrder)
         .ThenBy(GetTitle, StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// The first navigation level a page belongs to, such as "Operations" for Operations/Backups.md. With a single root
+    /// page, that is the level below it; the root page is its own area.
+    /// </summary>
+    public static MarkdownFile GetArea(MarkdownFile page, IReadOnlyCollection<MarkdownFile> roots)
+    {
+        var chain = page.Parents().Append(page).ToArray();
+        var depth = roots.Count == 1 ? 1 : 0;
+        return chain.Length > depth ? chain[depth] : chain[0];
+    }
+
     /// <summary>All pages below <paramref name="pages"/>, depth first in navigation order, hidden pages included.</summary>
     public static IEnumerable<MarkdownFile> Flatten(IEnumerable<MarkdownFile> pages)
     {

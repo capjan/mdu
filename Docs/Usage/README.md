@@ -63,6 +63,7 @@ Once the pages stand, give the site your name, logo, and colors with an optional
 | --- | --- | --- |
 | [new](new.md) | `mdu new [directory]` | Create a starter documentation project |
 | [tree](tree.md) | `mdu tree [path]` | Print the detected page structure. Aliases: `print`, `print-tree` |
+| [tags](tags.md) | `mdu tags [path]` | List the tags with their pages and areas |
 | [lint](./lint/README.md) | `mdu lint [path]` | Check pages and local links against the [rules](./lint/Rules.md). Alias: `l` |
 | [fix](fix.md) | `mdu fix [path]` | Migrate MkDocs syntax and apply automatic fixes |
 | [render](render.md) | `mdu render [path] [outpath]` | Write a static HTML site. Alias: `r` |
@@ -88,7 +89,7 @@ mdu serve --port 8080
 
 ## Common options
 
-`tree`, `lint`, `fix`, `render`, `serve`, and `pdf` share these options:
+`tree`, `tags`, `lint`, `fix`, `render`, `serve`, and `pdf` share these options:
 
 | Option | Effect |
 | --- | --- |

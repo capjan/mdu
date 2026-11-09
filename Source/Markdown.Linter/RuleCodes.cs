@@ -31,4 +31,5 @@ public static class RuleCodes
     public const string InvalidPageNavigation = "MDU025";
     public const string UnknownTag = "MDU026";
     public const string TagSpelling = "MDU027";
+    public const string UnusedTag = "MDU028";
 }

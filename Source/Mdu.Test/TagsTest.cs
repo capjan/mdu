@@ -331,6 +331,218 @@ public class TagsTest
         });
     }
 
+    [Fact]
+    public void LintWarnsAboutTagsWithOnePageAndUnusedVocabularyEntries()
+    {
+        var files = StandardSite();
+        files["Operations/Backups.md"] = "---\ntags: [Security, Audit]\n---\n# Encrypt backups\n";
+        WithSite(files, root =>
+        {
+            var receiver = new ConsoleLintErrorReceiver();
+            new LinterVisitor(receiver).Prepare(CreateGraph(root), root);
+            var unused = receiver.Diagnostics.Where(diagnostic => diagnostic.Message.StartsWith(RuleCodes.UnusedTag, StringComparison.Ordinal)).ToArray();
+
+            Assert.All(unused, diagnostic => Assert.True(diagnostic.IsWarning));
+            var single = Assert.Single(unused, diagnostic => diagnostic.Message.Contains("'Audit' is only used on this page", StringComparison.Ordinal));
+            Assert.EndsWith(Path.Combine("Operations", "Backups.md"), single.FilePath);
+            Assert.Equal(2, single.LineNumber);
+            var notUsed = Assert.Single(unused, diagnostic => diagnostic.Message.Contains("'Incident' is not used on any page", StringComparison.Ordinal));
+            Assert.EndsWith("Tags.md", notUsed.FilePath);
+            Assert.Equal(15, notUsed.LineNumber);
+        });
+    }
+
+    [Fact]
+    public void TagsCommandListsTagsByUseWithTheirAreas()
+    {
+        WithSite(StandardSite(), root =>
+        {
+            var originalOut = Console.Out;
+            using var output = new StringWriter();
+            Console.SetOut(output);
+            int result;
+            try
+            {
+                result = new TagsCommand(new GraphBuilder(new DataPreparationVisitor(new MarkdownDocumentReader())))
+                    .Execute(new VisitorSettings { RootPath = root, SearchPattern = "*.md" });
+            }
+            finally
+            {
+                Console.SetOut(originalOut);
+            }
+
+            Assert.Equal(0, result);
+            Assert.Equal(
+                "Security    3  Development, Operations\n" +
+                "Kubernetes  2  Development, Operations\n" +
+                "Incident    0  only in Tags.md\n",
+                output.ToString().ReplaceLineEndings("\n"));
+        });
+    }
+
+    [Fact]
+    public void TagsBlockListsTheTaggedPagesAsCards()
+    {
+        var files = StandardSite();
+        files["Hub.md"] = """
+            ---
+            tags: [Security]
+            ---
+            # Security hub
+
+            ```tags
+            tags: [Security]
+            limit: 2
+            ```
+
+            ```tags
+            tags: [Security, Kubernetes]
+            exclude: k8s
+            ```
+
+            ```tags
+            tags: Kubernetes
+            limit: 0
+            ```
+            """;
+        WithSite(files, root =>
+        {
+            var (result, errors) = Render(root);
+            Assert.True(result == 0, errors);
+            var hub = File.ReadAllText(Path.Combine(root, "site", "Hub.html"));
+
+            Assert.DoesNotContain("<code", hub);
+            var lists = hub.Split("<div class=\"tag-list\">").Skip(1).Select(list => list[..list.IndexOf("</div>", StringComparison.Ordinal)]).ToArray();
+            Assert.Equal(2, lists.Length);
+            // The hub itself carries the tag but is not listed; the pages follow the navigation.
+            Assert.Equal(["Manage secrets", "Encrypt backups"], LinkTexts(lists[0]));
+            Assert.Contains("<span class=\"tag-list-detail\">Development</span>", lists[0]);
+            Assert.Contains("<p class=\"tag-list-more\"><a href=\"tags/security.html\">All pages tagged Security</a></p>", hub);
+            Assert.Contains("No other pages are tagged Security and Kubernetes without k8s yet.", hub);
+            Assert.Equal(["Manage secrets", "Rotate certificates"], LinkTexts(lists[1]));
+            Assert.Contains("<span class=\"tag-list-detail\">Operations · Renew TLS certificates.</span>", lists[1]);
+            Assert.Equal(1, hub.Split("tag-list-more").Length - 1);
+
+            using var index = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "site", "search-index.json")));
+            Assert.DoesNotContain(index.RootElement.EnumerateArray(), entry =>
+                entry.GetProperty("url").GetString()!.StartsWith("Hub.html", StringComparison.Ordinal) &&
+                entry.GetProperty("text").GetString()!.Contains("Manage secrets", StringComparison.Ordinal));
+        });
+
+        static string[] LinkTexts(string html) =>
+            System.Text.RegularExpressions.Regex.Matches(html, "<a href=\"[^\"]+\">([^<]+)</a>").Select(match => match.Groups[1].Value).ToArray();
+    }
+
+    [Theory]
+    [InlineData("> [!TIP]\n> ```tags\n> tags: X\n> ```\n", "> [!TIP]\n> \n> - a\n> - b\n> \n")]
+    [InlineData("- Topic\n\n  ```tags\n  tags: X\n  ```\n", "- Topic\n\n  \n  - a\n  - b\n  \n")]
+    [InlineData("```tags title=\"Hub\"\ntags: X\n```\n", "\n- a\n- b\n\n")]
+    public void TagsBlocksInContainersKeepTheirPrefixes(string markdown, string expected) =>
+        Assert.Equal(expected, TagListBlock.Expand(markdown, _ => "\n- a\n- b\n"));
+
+    [Fact]
+    public void TagsBlockInACalloutStaysInTheCallout()
+    {
+        var files = StandardSite();
+        files["Hub.md"] = "# Hub\n\n> [!TIP]\n> Related pages:\n>\n> ```tags\n> tags: Kubernetes\n> ```\n\nAfter.\n";
+        WithSite(files, root =>
+        {
+            Assert.Equal(0, Render(root).Result);
+            var hub = File.ReadAllText(Path.Combine(root, "site", "Hub.html"));
+            var callout = hub[hub.IndexOf("markdown-alert-tip", StringComparison.Ordinal)..hub.IndexOf("After.", StringComparison.Ordinal)];
+
+            Assert.Contains("<div class=\"tag-list\">", callout);
+            Assert.Contains(">Rotate certificates</a>", callout);
+            Assert.DoesNotContain("&gt;", callout);
+        });
+    }
+
+    [Fact]
+    public void TagsBlockOnADashboardBecomesTiles()
+    {
+        var files = StandardSite();
+        files["Start.md"] = "---\nlayout: dashboard\n---\n# Start\n\n## Security\n\n```tags\ntags: Security\n```\n";
+        files["Development/Secrets.md"] = "---\ndescription: Keep secrets in the cluster.\nicon: material-key\ntags: [Security, Kubernetes]\n---\n# Manage secrets\n";
+        WithSite(files, root =>
+        {
+            Assert.Equal(0, Render(root).Result);
+            var dashboard = File.ReadAllText(Path.Combine(root, "site", "Start.html"));
+
+            Assert.Equal(3, dashboard.Split("class=\"dashboard-tile\"").Length - 1);
+            Assert.Contains("Keep secrets in the cluster.", dashboard);
+            Assert.DoesNotContain("tag-list", dashboard);
+        });
+    }
+
+    [Theory]
+    [InlineData("tags: [Securty]", 6, "MDU026: The tags block uses tag 'Securty', which is not defined in Tags.md. Did you mean 'Security'?")]
+    [InlineData("tags: [Security]\nexclude: [Billing]", 6, "MDU026: The tags block uses tag 'Billing', which is not defined in Tags.md.")]
+    [InlineData("tag: Security", 6, "MDU026: The tags block does not know the option 'tag'. Use 'tags', 'exclude', and 'limit'.")]
+    [InlineData("tags: [Security]\nlimit: few", 6, "MDU026: 'limit' in the tags block must be a whole number, or 0 for no limit.")]
+    public void UnusableTagsBlocksAreLintErrorsAndStopRendering(string options, int line, string message)
+    {
+        var files = StandardSite();
+        files["Hub.md"] = $"---\ntitle: Hub\n---\n# Hub\n\n```tags\n{options}\n```\n";
+        WithSite(files, root =>
+        {
+            var diagnostic = Assert.Single(Lint(root));
+            Assert.Equal(message, diagnostic.Message);
+            Assert.Equal(line, diagnostic.LineNumber);
+            Assert.EndsWith("Hub.md", diagnostic.FilePath);
+
+            var (result, errors) = Render(root);
+            Assert.Equal(1, result);
+            Assert.Contains($"Error: Hub.md: {message["MDU026: ".Length..]}", errors);
+        });
+    }
+
+    [Fact]
+    public void PdfTagListOnlyListsPagesOfTheExport()
+    {
+        var files = StandardSite();
+        files["Operations/Hub.md"] = "# Ops hub\n\n```tags\ntags: Security\nlimit: 0\n```\n";
+        WithSite(files, root =>
+        {
+            var output = Path.Combine(root, "ops.pdf");
+            var (result, _) = Capture(() => new PdfCommand(new GraphBuilder(new DataPreparationVisitor(new MarkdownDocumentReader())),
+                    new PdfRenderer(new HtmlRenderer()))
+                .Execute(new RenderCommandSettings { RootPath = root, OutputPath = output, SearchPattern = "*.md", PdfRootPage = "Operations/README.md" }));
+
+            Assert.Equal(0, result);
+            var pdf = System.Text.Encoding.Latin1.GetString(File.ReadAllBytes(output));
+            Assert.Contains(Hex("Encrypt"), pdf);
+            Assert.DoesNotContain(Hex("Manage"), pdf);
+        });
+
+        static string Hex(string text) => Convert.ToHexString(System.Text.Encoding.Latin1.GetBytes(text));
+    }
+
+    [Fact]
+    public void RelativeUrlsEscapeSegmentsButNotParentFolders() =>
+        Assert.Equal("../Setup/Install%20Guide.html",
+            MarkdownLinks.GetRelativeUrl(Path.Combine(Path.GetTempPath(), "docs", "Usage"),
+                Path.Combine(Path.GetTempPath(), "docs", "Setup", "Install Guide.html")));
+
+    [Fact]
+    public void PdfListsTheTaggedPagesWithLinksIntoTheDocument()
+    {
+        var files = StandardSite();
+        files["Hub.md"] = "# Hub\n\n```tags\ntags: Kubernetes\n```\n";
+        WithSite(files, root =>
+        {
+            var graph = CreateGraph(root);
+            var tags = SiteTags.Load(root, SiteConfigurationReader.ReadForContent(root), graph);
+            var hub = graph.SelectMany(page => page.Children.Prepend(page)).Single(page => page.Title == "Hub");
+            var block = Assert.Single(TagListBlock.Find(hub.ReadMarkdown()));
+
+            var markdown = TagListBlock.Render(tags.Select(block.Options!, hub), block.Options!, TagListStyle.Pdf,
+                page => page.SiteRelativePath!.Replace('\\', '/'), _ => "Area", "tags/kubernetes.html");
+
+            Assert.Equal("\n- [Manage secrets](<Development/Secrets.md>)\n- [Rotate certificates](<Operations/Certificates.md>) — Renew TLS certificates.\n",
+                markdown);
+        });
+    }
+
     private static (int Result, string Errors) Capture(Func<int> action)
     {
         var originalOut = Console.Out;
