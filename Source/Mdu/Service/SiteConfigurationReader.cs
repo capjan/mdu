@@ -16,7 +16,7 @@ public static class SiteConfigurationReader
         "site.attribution.visible",
         "site.colors.light.background", "site.colors.light.text", "site.colors.light.primary",
         "site.colors.dark.background", "site.colors.dark.text", "site.colors.dark.primary",
-        "content.glossary", "content.icons",
+        "content.glossary", "content.icons", "content.tags",
         "diagrams.limits.elements", "diagrams.limits.links"
     ];
 
@@ -50,6 +50,7 @@ public static class SiteConfigurationReader
             AttributionVisible = !includeHtmlSettings || ReadAttributionVisible(settings),
             Glossary = ReadGlossary(settings),
             Icons = ReadIcons(settings),
+            Tags = ReadTagsSetting(settings),
             MaxDiagramElements = ReadDiagramLimit(settings, "elements"),
             MaxDiagramLinks = ReadDiagramLimit(settings, "links"),
             LogoLight = ReadAsset(settings, "site.logo", "light"),
@@ -84,6 +85,17 @@ public static class SiteConfigurationReader
 
     public static string? GetGlossaryPath(string rootPath, SiteConfiguration configuration) =>
         configuration.Glossary is null ? null : Path.GetFullPath(configuration.Glossary, rootPath);
+
+    /// <summary>Returns the tag vocabulary file of <c>content.tags</c>, or null when the site has none.</summary>
+    /// <exception cref="InvalidOperationException">The configured file does not exist.</exception>
+    public static string? ResolveTagsPath(string rootPath, SiteConfiguration configuration)
+    {
+        if (configuration.Tags is null) return null;
+        var path = Path.GetFullPath(configuration.Tags, rootPath);
+        if (!File.Exists(path))
+            throw new InvalidOperationException($"Configured tag vocabulary does not exist: {path}");
+        return path;
+    }
 
     /// <summary>Reads only the <c>content.glossary</c> setting, so errors in unrelated settings of the file do not matter.</summary>
     public static string? ReadGlossarySetting(string rootPath)
@@ -316,6 +328,14 @@ public static class SiteConfigurationReader
         if (!settings.TryGetValue("content.glossary", out var node)) return null;
         if (node is not YamlScalarNode scalar || string.IsNullOrWhiteSpace(scalar.Value))
             throw new InvalidOperationException("The 'content.glossary' setting in mdu.yml must be a Markdown file path.");
+        return scalar.Value;
+    }
+
+    private static string? ReadTagsSetting(Dictionary<string, YamlNode> settings)
+    {
+        if (!settings.TryGetValue("content.tags", out var node)) return null;
+        if (node is not YamlScalarNode scalar || string.IsNullOrWhiteSpace(scalar.Value))
+            throw new InvalidOperationException("The 'content.tags' setting in mdu.yml must be a Markdown file path.");
         return scalar.Value;
     }
 

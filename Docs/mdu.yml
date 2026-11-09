@@ -3,3 +3,5 @@ site:
   logo:
     light: assets/mdu-logo-light.svg
     dark: assets/mdu-logo-dark.svg
+content:
+  tags: Tags.md

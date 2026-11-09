@@ -42,6 +42,8 @@ public sealed class ServeCommand
     private readonly GitLastModifiedCache _gitDates = new();
 
     private MarkdownFile[] _navigationRoots = Array.Empty<MarkdownFile>();
+    private SiteTags _siteTags = SiteTags.Empty;
+    private IReadOnlyList<string> _tagPagePaths = Array.Empty<string>();
     private IReadOnlyCollection<string> _siteMediaProviders = Array.Empty<string>();
     private RenderCommandSettings _settings = new();
     private string _rootPath = string.Empty;
@@ -202,6 +204,18 @@ public sealed class ServeCommand
         SiteConfigurationReader.UseDiagramLimits(siteConfiguration);
         var graph = _graphBuilder.CreateGraph(_settings, glossaryPath, requireImportedGlossaries: true);
         _navigationRoots = graph;
+        // Unlike mdu render, the preview keeps running with tag errors, so that they can be fixed while it runs.
+        try
+        {
+            _siteTags = SiteTags.Load(_rootPath, siteConfiguration, graph);
+        }
+        catch (InvalidOperationException exception)
+        {
+            Console.Error.WriteLine($"Error: Could not read the tag vocabulary: {exception.Message}");
+            _siteTags = SiteTags.Build(_rootPath, graph, null, null);
+        }
+        _siteTags.Report(_rootPath);
+        _pdfCommand.Tags = _siteTags;
 
         _renderer.PrepareBasePath(_outputPath, siteConfiguration);
         SiteConfigurationReader.CopyAssets(_rootPath, _outputPath, siteConfiguration);
@@ -226,8 +240,10 @@ public sealed class ServeCommand
             _searchIndexBuilder,
             _navigationRoots,
             _siteMediaProviders,
-            _gitDates.Read(_rootPath));
+            _gitDates.Read(_rootPath),
+            _siteTags);
         rendererVisitor.PrepareSearchIndex();
+        rendererVisitor.AddTagsToSearchIndex();
         SchedulePdfs(reuseUnchanged: false);
         // Keep the last usable generation available until the replacement is prepared successfully.
         _pendingPages.Clear();
@@ -249,6 +265,7 @@ public sealed class ServeCommand
         _searchIndexBuilder.WriteIndex(_outputPath);
         // Replace the shared navigation only after every step that can still fail, right before pages render.
         rendererVisitor.PrepareNavigation();
+        _tagPagePaths = rendererVisitor.WriteTagPages();
         var initialPage = _pendingOutputs.GetValueOrDefault(Path.Combine(_outputPath, "index.html")) ??
             _pendingOutputs.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase)
                 .Select(entry => entry.Value).FirstOrDefault();
@@ -648,6 +665,8 @@ public sealed class ServeCommand
             var previousNavigationExpanded = page.NavigationExpanded;
             var previousNavigationPlacement = page.NavigationPlacement;
             var previousInvalidNavigationPlacement = page.InvalidNavigationPlacement;
+            var previousTags = page.Tags;
+            var previousDescription = page.Description;
             _dataPreparationVisitor.Process(page, depth);
             var dependencies = ReadPageDependencies(page);
             // Pages that already import a repository are handled above, so a set source means a newly added import.
@@ -659,6 +678,10 @@ public sealed class ServeCommand
                 previousNavigationExpanded != page.NavigationExpanded ||
                 previousNavigationPlacement != page.NavigationPlacement ||
                 previousInvalidNavigationPlacement != page.InvalidNavigationPlacement ||
+                // Tags appear on the tag pages and in the search of every page, and the vocabulary defines them.
+                !previousTags.SequenceEqual(page.Tags, StringComparer.Ordinal) ||
+                page.Tags.Count > 0 && !previousDescription.Equals(page.Description, StringComparison.Ordinal) ||
+                _siteTags.VocabularyPath is not null && PathComparer.Equals(pagePath, _siteTags.VocabularyPath) ||
                 !_pdfTitlesByPage.TryGetValue(pagePath, out var previousPdfTitle) ||
                 !previousPdfTitle.Equals(dependencies.PdfTitle, StringComparison.Ordinal))
             {
@@ -686,7 +709,8 @@ public sealed class ServeCommand
                 _searchIndexBuilder,
                 _navigationRoots,
                 _siteMediaProviders,
-                _gitDates.Read(_rootPath));
+                _gitDates.Read(_rootPath),
+                _siteTags);
 
             rendererVisitor.Process(page, depth);
             var specPages = rendererVisitor.OpenApiSpecPagePaths.GetValueOrDefault(page) ?? Array.Empty<string>();
@@ -892,6 +916,7 @@ public sealed class ServeCommand
         currentFiles.UnionWith(_renderer.IconSearchAssets);
         currentFiles.UnionWith(_renderer.ImageZoomAssets);
         currentFiles.UnionWith(_renderer.SiteAssetPaths);
+        currentFiles.UnionWith(_tagPagePaths);
 
         foreach (var page in _pages.Values)
         {

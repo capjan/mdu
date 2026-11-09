@@ -6,6 +6,7 @@ public sealed class SiteConfiguration
     public bool AttributionVisible { get; set; } = true;
     public string? Glossary { get; set; }
     public string? Icons { get; set; }
+    public string? Tags { get; set; }
     public int? MaxDiagramElements { get; set; }
     public int? MaxDiagramLinks { get; set; }
     public string? LogoLight { get; set; }

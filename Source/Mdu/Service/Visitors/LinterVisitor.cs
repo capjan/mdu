@@ -48,6 +48,7 @@ public class LinterVisitor: IVisitor<MarkdownFile>
         ReportDuplicateTopNavigationTitles(graph);
         ReportMissingSectionReadmes(pages);
         ReportMkDocsPagesFiles(pages);
+        ReportTags(graph);
         return;
 
         void Visit(IEnumerable<MarkdownFile> currentPages, NavigationTitleGroup siblingTitles)
@@ -81,6 +82,41 @@ public class LinterVisitor: IVisitor<MarkdownFile>
                 }
             }
         }
+    }
+
+    private void ReportTags(MarkdownFile[] graph)
+    {
+        var tags = SiteTags.TryLoad(_rootPath, graph, out var vocabularyError);
+        if (vocabularyError is not null)
+            ErrorReceiver.Add(Path.Combine(_rootPath, "mdu.yml"), 1, $"{RuleCodes.UnknownTag}: Could not read the tag vocabulary: {vocabularyError}");
+        foreach (var problem in tags.Problems)
+        {
+            var line = FindTagLine(problem.Page, problem.Tag);
+            if (problem.IsWarning)
+                ErrorReceiver.AddWarning(problem.Page.FileInfo.FullName, line, $"{RuleCodes.TagSpelling}: {problem.Message}");
+            else
+                ErrorReceiver.Add(problem.Page.FileInfo.FullName, line, $"{RuleCodes.UnknownTag}: {problem.Message}");
+        }
+    }
+
+    // The front matter line that names the tag, or the line of the tags key; the front matter starts on line 1.
+    private static int FindTagLine(MarkdownFile page, string? tag)
+    {
+        var lines = page.FrontMatter.Split('\n');
+        var key = Array.FindIndex(lines, line => line.TrimStart().StartsWith("tags:", StringComparison.Ordinal));
+        if (key < 0) return 1;
+        if (tag is null) return key + 1;
+        for (var index = key; index < lines.Length; index++)
+        {
+            if (index > key && lines[index].Length > 0 && !char.IsWhiteSpace(lines[index][0]) && lines[index][0] != '-') break;
+            if (TagsOnLine(index == key ? lines[index].TrimStart()["tags:".Length..] : lines[index]).Contains(tag)) return index + 1;
+        }
+        return key + 1;
+
+        // The tags a line names: "- Security", "[Security, k8s]", or "Security", each possibly quoted.
+        static IEnumerable<string> TagsOnLine(string line) => line.Trim().TrimStart('-').Trim().Trim('[', ']')
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(item => item.Trim('"', '\'').Trim());
     }
 
     private sealed class NavigationTitleGroup

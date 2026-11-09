@@ -55,9 +55,30 @@ public sealed class SearchIndexBuilder
         _iconText.Clear();
     }
 
-    public void AddPage(string title, string url, string markdown)
+    public void AddPage(string title, string url, string markdown, IReadOnlyList<string>? tags = null)
     {
         _entries.RemoveAll(entry => entry.PageUrl.Equals(url, StringComparison.Ordinal));
+        var firstEntry = _entries.Count;
+        AddPageEntries(title, url, markdown);
+        if (tags is not { Count: > 0 }) return;
+        var pageTags = tags.ToArray();
+        for (var index = firstEntry; index < _entries.Count; index++)
+            _entries[index] = _entries[index] with { Tags = pageTags };
+    }
+
+    /// <summary>Adds the entry of a tag page, which the search lists before the pages when the query names the tag.</summary>
+    public void AddTag(string name, string url, string description, IReadOnlyList<string> aliases, int pageCount)
+    {
+        _entries.RemoveAll(entry => entry.PageUrl.Equals(url, StringComparison.Ordinal));
+        _entries.Add(new SearchIndexEntry(name, string.Empty, url, url, WhitespaceRegex.Replace(description, " ").Trim(), string.Join(" ", aliases))
+        {
+            Kind = "tag",
+            Count = pageCount
+        });
+    }
+
+    private void AddPageEntries(string title, string url, string markdown)
+    {
         var firstEntry = _entries.Count;
         var document = Markdig.Markdown.Parse(markdown, _pipeline);
         var parts = document.Descendants().All(IsSupportedNode)
@@ -672,7 +693,12 @@ internal sealed record SearchIndexEntry(
     string Url,
     [property: JsonIgnore] string PageUrl,
     string Text,
-    string Code);
+    string Code)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string[]? Tags { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? Kind { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public int? Count { get; init; }
+}
 
 [JsonSerializable(typeof(List<SearchIndexEntry>))]
 internal partial class SearchIndexJsonContext : JsonSerializerContext

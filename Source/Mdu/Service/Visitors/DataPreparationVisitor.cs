@@ -37,6 +37,8 @@ public class DataPreparationVisitor: IVisitor<MarkdownFile>
         entity.NavigationExpanded = navigationSettings.Expanded;
         entity.NavigationPlacement = navigationSettings.Placement;
         entity.InvalidNavigationPlacement = navigationSettings.InvalidPlacement;
+        entity.Tags = navigationSettings.Tags ?? Array.Empty<string>();
+        entity.HasInvalidTags = navigationSettings.InvalidTags;
         return true;
     }
 
@@ -60,6 +62,7 @@ public class DataPreparationVisitor: IVisitor<MarkdownFile>
             var description = ReadScalar(metadata, "description");
             var icon = ReadScalar(metadata, "icon");
             var (importSource, mergeImportedNavigation) = ReadImportSettings(metadata);
+            var (tags, invalidTags) = ReadTags(metadata);
             YamlMappingNode? navigation = null;
             if (metadata.Children.TryGetValue(new YamlScalarNode("navigation"), out var navigationNode))
                 navigation = navigationNode as YamlMappingNode;
@@ -103,7 +106,7 @@ public class DataPreparationVisitor: IVisitor<MarkdownFile>
                 : null;
 
             return new FrontMatterSettings(title, description, icon, importSource, navigationTitle, order, visible, expanded,
-                placement, invalidPlacement, mergeImportedNavigation);
+                placement, invalidPlacement, mergeImportedNavigation, tags, invalidTags);
         }
         catch (YamlException)
         {
@@ -132,6 +135,23 @@ public class DataPreparationVisitor: IVisitor<MarkdownFile>
         return (source, mergeNavigation);
     }
 
+    // "tags: Security" is one tag; a list holds several. Anything else is reported by mdu lint and ignored.
+    private static (IReadOnlyList<string> Tags, bool Invalid) ReadTags(YamlMappingNode metadata)
+    {
+        if (!metadata.Children.TryGetValue(new YamlScalarNode("tags"), out var node)) return (Array.Empty<string>(), false);
+        if (node is YamlScalarNode scalar)
+            return string.IsNullOrWhiteSpace(scalar.Value) ? (Array.Empty<string>(), false) : ([scalar.Value.Trim()], false);
+        if (node is not YamlSequenceNode sequence) return (Array.Empty<string>(), true);
+        var tags = new List<string>();
+        var invalid = false;
+        foreach (var item in sequence.Children)
+        {
+            if (item is YamlScalarNode { Value: { } value } && !string.IsNullOrWhiteSpace(value)) tags.Add(value.Trim());
+            else invalid = true;
+        }
+        return (tags.DistinctBy(TagCatalog.Normalize).ToArray(), invalid);
+    }
+
     private static string? ReadScalar(YamlMappingNode mapping, string key) =>
         mapping.Children.TryGetValue(new YamlScalarNode(key), out var value) && value is YamlScalarNode scalar
             ? scalar.Value
@@ -148,5 +168,7 @@ public class DataPreparationVisitor: IVisitor<MarkdownFile>
         bool? Expanded = null,
         NavigationPlacement Placement = NavigationPlacement.Sidebar,
         string? InvalidPlacement = null,
-        bool MergeImportedNavigation = false);
+        bool MergeImportedNavigation = false,
+        IReadOnlyList<string>? Tags = null,
+        bool InvalidTags = false);
 }

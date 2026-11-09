@@ -1435,6 +1435,18 @@ body:has(.site-layout.sidebar-open)::before {
     line-height: 1.35;
 }
 
+.search-result-kind {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.search-result-tags {
+    display: block;
+    margin-top: 0.3rem;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+}
+
 .search-result-snippet {
     display: -webkit-box;
     margin-top: 0.25rem;
@@ -5198,6 +5210,143 @@ body:has(.image-lightbox[open]) {
 .page-edit-link:focus-visible {
     outline: 2px solid var(--link);
     outline-offset: 3px;
+}
+
+/* Tags below the page title and on the tag pages: neutral pills, so the title stays the first thing to read. */
+.markdown-content .page-tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    margin: -0.55rem 0 1.5rem;
+    padding: 0;
+    list-style: none;
+}
+
+.markdown-content .page-tags li {
+    margin: 0;
+}
+
+.page-tags-icon {
+    display: inline-flex;
+    color: var(--text-secondary);
+}
+
+.page-tags-icon svg {
+    width: 0.95rem;
+    height: 0.95rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-linejoin: round;
+    stroke-width: 1.4;
+}
+
+.page-tags-icon circle {
+    fill: currentColor;
+    stroke: none;
+}
+
+.markdown-content a.page-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-height: 1.65rem;
+    padding: 0.1rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--text-body);
+    font-size: 0.8125rem;
+    line-height: 1.3;
+    text-decoration: none;
+    transition: border-color 120ms ease, color 120ms ease;
+}
+
+.markdown-content a.page-tag:hover {
+    border-color: var(--link);
+    color: var(--link);
+    text-decoration: none;
+}
+
+/* Pills keep their own radius for the focus ring instead of the 2px of inline text links. */
+.markdown-content a.page-tag:focus-visible {
+    border-radius: 999px;
+}
+
+.page-tag-count {
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+@media (pointer: coarse) {
+    .markdown-content a.page-tag {
+        min-height: 2rem;
+    }
+}
+
+.markdown-content .tag-page-summary,
+.markdown-content .tag-overview-link {
+    color: var(--text-secondary);
+    font-size: 0.9375rem;
+}
+
+.tag-page-related {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+    margin: 1rem 0 0;
+}
+
+/* The first group heading would otherwise lose its top margin to the rule for a first h2 on the page. */
+.markdown-content > :is(.tag-page-summary, .tag-page-related) + h2 {
+    margin-top: 2rem;
+}
+
+.tag-page-related-label {
+    color: var(--text-secondary);
+    font-size: 0.8125rem;
+}
+
+.markdown-content .tag-page-related .page-tags {
+    margin: 0;
+}
+
+.markdown-content .tag-page-list,
+.markdown-content .tag-overview-list {
+    display: grid;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.markdown-content .tag-page-list li,
+.markdown-content .tag-overview-list li {
+    display: grid;
+    gap: 0.1rem 1rem;
+    margin: 0;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.markdown-content .tag-overview-list li {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+}
+
+.tag-page-detail,
+.tag-overview-description {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.tag-overview-description {
+    grid-column: 1 / -1;
+}
+
+.tag-overview-count {
+    color: var(--text-secondary);
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
 }
 
 .on-this-page {

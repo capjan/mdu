@@ -52,4 +52,8 @@ public class MarkdownFile: INode<MarkdownFile>
     public NavigationPlacement NavigationPlacement { get; set; }
     public string? InvalidNavigationPlacement { get; set; }
     public bool IsOnlyReadmeInSection { get; set; }
+    /// <summary>The tags of the front matter, as written; empty without them.</summary>
+    public IReadOnlyList<string> Tags { get; set; } = Array.Empty<string>();
+    /// <summary>True when the front matter has a <c>tags</c> value that is neither one tag nor a list of tags.</summary>
+    public bool HasInvalidTags { get; set; }
 }

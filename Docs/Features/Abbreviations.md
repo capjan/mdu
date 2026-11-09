@@ -1,3 +1,7 @@
+---
+tags: [Migration]
+---
+
 # Abbreviations
 
 Markdig's abbreviation syntax adds a tooltip to matching terms. MDU uses the same preview placement and styling as footnotes.

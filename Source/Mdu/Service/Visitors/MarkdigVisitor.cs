@@ -10,7 +10,7 @@ using Mdu.Service.PageTree.Extensions;
 
 namespace Mdu.Service.Visitors;
 
-public class MarkdigVisitor : BaseVisitor
+public partial class MarkdigVisitor : BaseVisitor
 {
     public MarkdigVisitor(
         string rootPath, 
@@ -20,8 +20,10 @@ public class MarkdigVisitor : BaseVisitor
         SearchIndexBuilder searchIndexBuilder,
         MarkdownFile[]? navigationRoots = null,
         IReadOnlyCollection<string>? siteMediaProviders = null,
-        IReadOnlyDictionary<string, DateTimeOffset>? lastModifiedDates = null) : base(rootPath, outPath, ".html")
+        IReadOnlyDictionary<string, DateTimeOffset>? lastModifiedDates = null,
+        SiteTags? siteTags = null) : base(rootPath, outPath, ".html")
     {
+        _siteTags = siteTags ?? SiteTags.Empty;
         _rootPath = rootPath;
         _outPath = outPath;
         _htmlFoundation = htmlFoundation;
@@ -58,6 +60,7 @@ public class MarkdigVisitor : BaseVisitor
     private readonly IReadOnlyDictionary<string, DateTimeOffset> _lastModifiedDates;
     private readonly Dictionary<MarkdownFile, IReadOnlyList<string>> _openApiSpecPagePaths = new();
     private readonly Dictionary<MarkdownFile, PreparedPage> _preparedPages = new();
+    private readonly SiteTags _siteTags;
 
     public IReadOnlyCollection<string> SiteMediaProviders => _siteMediaProviders;
     public IReadOnlyDictionary<MarkdownFile, IReadOnlyList<string>> OpenApiSpecPagePaths => _openApiSpecPagePaths;
@@ -69,6 +72,17 @@ public class MarkdigVisitor : BaseVisitor
         // Generated navigation, scripts and styles live in _mdu; site pages must not be written there.
         var collision = _pageOutputPaths.FirstOrDefault(path => ReservedOutput.Contains(_outPath, path));
         if (collision is not null) throw ReservedOutput.Collision(_outPath, collision);
+        // Redirects count too: a page tags.md has the redirect tags/index.html. The redirect of the vocabulary page leads
+        // where tags/index.html leads anyway.
+        if (_siteTags.Tags.Count > 0 && _pageOutputs
+                .SelectMany(item => ReferenceEquals(item.Page, _siteTags.VocabularyPage)
+                    ? [item.OutputPath]
+                    : new[] { item.OutputPath, GetAliasPath(item.Page, item.OutputPath) })
+                .OfType<string>()
+                .FirstOrDefault(IsInTagFolder) is { } tagCollision)
+            throw new InvalidOperationException(
+                $"'{Path.GetRelativePath(_outPath, tagCollision)}' would be written into the '{SiteTags.Folder}' output folder, " +
+                "which holds the tag pages. Rename or move the documentation page or folder of that name.");
         var first = _navigationRoots.FirstOrDefault();
         if (first is null)
         {
@@ -100,7 +114,8 @@ public class MarkdigVisitor : BaseVisitor
             RemoveFrontMatter(page.ReadMarkdown(), page.FrontMatter), page.FileInfo.FullName,
             out var specifications, page.SourceRootPath, Path.GetFileName(outputFileName),
             GetOutputSiblings(_pageOutputs, Path.GetDirectoryName(outputFileName)!));
-        _searchIndexBuilder.AddPage(NavigationPage.GetTitle(page), GetSiteRelativeUrl(outputFileName), markdown);
+        _searchIndexBuilder.AddPage(NavigationPage.GetTitle(page), GetSiteRelativeUrl(outputFileName), markdown,
+            _siteTags.For(page).Select(tag => tag.Name).ToArray());
         return new PreparedPage(markdown, specifications);
     }
 
@@ -192,7 +207,11 @@ public class MarkdigVisitor : BaseVisitor
                     pdfDownloadNames,
                     GetGlossaryScope(entity),
                     ImageZoom.ReadFrontMatter(entity.FrontMatter),
-                    pageNavigation: PageNavigation.ReadFrontMatter(entity.FrontMatter)).GetAwaiter().GetResult();
+                    pageNavigation: PageNavigation.ReadFrontMatter(entity.FrontMatter),
+                    pageTags: GetTagLinks(_siteTags.For(entity), outputDirectory),
+                    tagSectionLinks: ReferenceEquals(entity, _siteTags.VocabularyPage)
+                        ? GetTagLinks(_siteTags.Tags, outputDirectory)
+                        : null).GetAwaiter().GetResult();
 
             File.Move(temporaryPath, outputFileName, true);
             WriteAliasPage(entity, outputFileName);
@@ -320,21 +339,22 @@ public class MarkdigVisitor : BaseVisitor
 
     private void WriteAliasPage(MarkdownFile page, string outputFileName)
     {
-        if (!string.IsNullOrWhiteSpace(page.AliasRelativePath))
-        {
-            var importAliasPath = Path.GetFullPath(Path.Combine(_outPath, page.AliasRelativePath));
-            WriteRedirect(importAliasPath, outputFileName);
-            return;
-        }
+        if (GetAliasPath(page, outputFileName) is { } aliasPath) WriteRedirect(aliasPath, outputFileName);
+    }
 
-        if (page.FileInfo.Name.Equals("README.md", StringComparison.OrdinalIgnoreCase)) return;
+    /// <summary>The redirect that makes <c>Page/</c> lead to <c>Page.html</c>, or null when the page has none.</summary>
+    private string? GetAliasPath(MarkdownFile page, string outputFileName)
+    {
+        if (!string.IsNullOrWhiteSpace(page.AliasRelativePath))
+            return Path.GetFullPath(Path.Combine(_outPath, page.AliasRelativePath));
+
+        if (page.FileInfo.Name.Equals("README.md", StringComparison.OrdinalIgnoreCase)) return null;
         var aliasDirectory = Path.Combine(page.FileInfo.DirectoryName!, Path.GetFileNameWithoutExtension(page.FileInfo.Name));
         if (Directory.Exists(aliasDirectory) && Directory.EnumerateFiles(aliasDirectory).Any(filePath =>
                 Path.GetFileName(filePath).Equals("README.md", StringComparison.OrdinalIgnoreCase) ||
-                Path.GetFileName(filePath).Equals("index.md", StringComparison.OrdinalIgnoreCase))) return;
+                Path.GetFileName(filePath).Equals("index.md", StringComparison.OrdinalIgnoreCase))) return null;
 
-        var aliasPath = Path.Combine(Path.GetDirectoryName(outputFileName)!, Path.GetFileNameWithoutExtension(outputFileName), "index.html");
-        WriteRedirect(aliasPath, outputFileName);
+        return Path.GetFullPath(Path.Combine(Path.GetDirectoryName(outputFileName)!, Path.GetFileNameWithoutExtension(outputFileName), "index.html"));
     }
 
     private static void WriteRedirect(string aliasPath, string outputFileName)

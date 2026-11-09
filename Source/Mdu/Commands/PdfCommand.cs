@@ -14,6 +14,8 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
     private readonly Dictionary<string, PdfSourceSection[]> _sitePdfSections = new(MarkdownLinks.PathComparer);
     private readonly Dictionary<MarkdownFile, (string Markdown, IReadOnlyList<string> Links)> _pagePdfLinks = new();
     public IReadOnlyCollection<string> GeneratedSitePdfPaths { get; private set; } = Array.Empty<string>();
+    /// <summary>The tags of the site, shown below each page title. mdu render and mdu serve set them; mdu pdf loads them.</summary>
+    public SiteTags Tags { get; set; } = SiteTags.Empty;
 
     public int Execute(RenderCommandSettings settings)
     {
@@ -44,9 +46,10 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         var defaultOutputName = singleFilePath is null ? "documentation.pdf" : $"{Path.GetFileNameWithoutExtension(singleFilePath)}.pdf";
         var outputPath = Path.GetFullPath(settings.OutputPath ?? Path.Combine(Environment.CurrentDirectory, defaultOutputName));
         // Like mdu render, the PDF is not written without the custom icons that its pages use.
+        Markdown.Renderer.Res.Model.SiteConfiguration siteConfiguration;
         try
         {
-            var siteConfiguration = SiteConfigurationReader.ReadForContent(rootPath);
+            siteConfiguration = SiteConfigurationReader.ReadForContent(rootPath);
             SiteConfigurationReader.UseCustomIcons(rootPath, siteConfiguration);
             SiteConfigurationReader.UseDiagramLimits(siteConfiguration);
         }
@@ -70,6 +73,15 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
             Console.Error.WriteLine($"Could not resolve Markdown sources: {exception.Message}");
             return 1;
         }
+        try
+        {
+            Tags = SiteTags.Load(rootPath, siteConfiguration, graph);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            Console.Error.WriteLine($"Could not read the tag vocabulary: {exception.Message}");
+            return 1;
+        }
         var files = Flatten(rootPath, graph);
         if (singleFilePath is not null)
             files = files.Where(item => Path.GetFullPath(item.File.FileInfo.FullName).Equals(singleFilePath, StringComparison.Ordinal));
@@ -78,7 +90,10 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
             if (settings.PdfRootPage is not null)
                 files = Flatten(rootPath, [PdfSelection.FindPage(rootPath, graph,
                     OperatingSystem.IsWindows() ? settings.PdfRootPage.Replace('\\', '/') : settings.PdfRootPage)]);
-            return WritePdf(rootPath, outputPath, files, includeFrontMatter: singleFilePath is null);
+            var selected = files.ToArray();
+            // Only the tags of the exported pages matter, not those of other pages in the folder.
+            if (Tags.Report(rootPath, selected.Select(item => item.File))) return 1;
+            return WritePdf(rootPath, outputPath, selected, includeFrontMatter: singleFilePath is null);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
@@ -86,6 +101,9 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
             return 1;
         }
     }
+
+    private string? GetTagLine(MarkdownFile page) =>
+        Tags.For(page) is { Count: > 0 } tags ? string.Join(" · ", tags.Select(tag => tag.Name)) : null;
 
     public int WriteSitePdf(string rootPath, string outputPath, IEnumerable<MarkdownFile> graph) =>
         WritePdf(rootPath, outputPath, Flatten(rootPath, graph), includeFrontMatter: true);
@@ -192,7 +210,8 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
                         PdfSelection.GetPdfTitle(rootPath, item.File, markdown, pdfRenderer.ExcludesTitleHeading),
                         GetRelativeHtmlPath(rootPath, item.File),
                         markdown,
-                        item.Depth);
+                        item.Depth,
+                        GetTagLine(item.File));
                 })
                 .ToArray();
         }

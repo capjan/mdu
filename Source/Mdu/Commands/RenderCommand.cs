@@ -92,6 +92,19 @@ public class RenderCommand
             return 1;
         }
 
+        SiteTags siteTags;
+        try
+        {
+            siteTags = SiteTags.Load(rootPath, siteConfiguration, graph);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            Console.Error.WriteLine($"Could not read the tag vocabulary: {exception.Message}");
+            return 1;
+        }
+        if (siteTags.Report(rootPath)) return 1;
+        _pdfCommand.Tags = siteTags;
+
         _renderer.PrepareBasePath(outPath, siteConfiguration);
         SearchClientAsset.WriteTo(outPath);
         _searchIndexBuilder.Clear();
@@ -107,7 +120,7 @@ public class RenderCommand
                 return 1;
 
             Console.WriteLine($"Rendering {nodeCount} Files");
-            RenderNodesToHtml(rootPath, outPath, graph, settings.EditPageRoot);
+            RenderNodesToHtml(rootPath, outPath, graph, settings.EditPageRoot, siteTags);
             _searchIndexBuilder.WriteIndex(outPath);
 
             return 0;
@@ -123,12 +136,16 @@ public class RenderCommand
         string rootPath,
         string outPath,
         MarkdownFile[] graph,
-        string editPageRoot)
+        string editPageRoot,
+        SiteTags siteTags)
     {
-        var rendererVisitor = new MarkdigVisitor(rootPath, outPath, _renderer, editPageRoot, _searchIndexBuilder, graph);
+        var rendererVisitor = new MarkdigVisitor(rootPath, outPath, _renderer, editPageRoot, _searchIndexBuilder, graph,
+            siteTags: siteTags);
         rendererVisitor.PrepareNavigation();
-        
+
         graph.Visit(rendererVisitor);
+        rendererVisitor.AddTagsToSearchIndex();
+        rendererVisitor.WriteTagPages();
     }
 
     private static void CopyAssets(string rootPath, string outPath, MarkdownFile[] graph)
