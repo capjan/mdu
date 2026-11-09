@@ -31,7 +31,6 @@ Everything on these pages is written in ordinary Markdown. Each page shows the s
 - [Navigation](Navigation.md) - Sidebar, top tabs, breadcrumbs, ordering, and the page footer
 - [Dashboard](Dashboard.md) - A start page of link tiles with logos, filter, and web search
 - [Tags](Tags.md) - Connect pages across sections with tag pages and a checked vocabulary
-- [Tags](Tags.md) - Connect pages across sections with tag pages and a checked vocabulary
 
 ## Compose
 
