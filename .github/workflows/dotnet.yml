@@ -4,6 +4,14 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
+# A newer push to a pull request supersedes its running checks. Every push to main gets its own group, so its runs are neither cancelled nor queued, because Pages deploys from them.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   conventional-commits:
     name: Conventional commits
@@ -37,7 +45,7 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: 10.0.402 # Temporary pin: the 10.0.403 download returns HTTP 409.
+        global-json-file: global.json
 
     - name: Test
       run: dotnet test Mdu.sln --configuration Release
@@ -55,7 +63,7 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: 10.0.402 # Temporary pin: the 10.0.403 download returns HTTP 409.
+        global-json-file: global.json
 
     - name: Test case-only page rename, PDF selection, and generated file handling
       run: dotnet test Source/Mdu.Test/Mdu.Test.csproj --configuration Release --filter "FullyQualifiedName~PageCommandTest.RenamesAPageWhenOnlyTheCaseChanges|FullyQualifiedName~PageCommandTest.CaseOnlyRenameDoesNotResolveCaseDifferentAncestorsOutsideDocsRoot|FullyQualifiedName~PdfCommandTest|FullyQualifiedName~SitePdfTest" --blame-hang --blame-hang-timeout 2m
@@ -70,7 +78,7 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: 10.0.402 # Temporary pin: the 10.0.403 download returns HTTP 409.
+        global-json-file: global.json
 
     - name: Install Native AOT prerequisites
       run: sudo apt-get update && sudo apt-get install --yes clang zlib1g-dev
