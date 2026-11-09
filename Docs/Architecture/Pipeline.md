@@ -36,9 +36,12 @@ This keeps preview readiness separate from completion of the whole site. [Perfor
 
 | Command | Outcome |
 | --- | --- |
+| `new` | Creates a starter documentation project |
 | `lint` | Reports content and structure problems |
 | `fix` | Applies supported source migrations and automatic fixes |
-| `page move` | Moves pages and updates their links |
 | `pdf` | Generates a complete PDF from the selected pages |
+| `page move` | Moves pages and updates their links |
+| `page links` | Lists the links that point to a file |
+| `check-site` | Checks local links, assets, and anchors in a rendered site, including content added after rendering |
 
 The [implementation details](Details/Pipeline.md) explain visitors, dependencies, caching, recovery, and the remaining scheduling limits.

@@ -15,7 +15,7 @@ MDU (Markdown Documentation Utility) is a tool that turns a folder of ordinary M
 
 ## Get started
 
-- [Setup](Setup/README.md) - Choose a .NET tool or portable installation
+- [Setup](Setup/README.md) - Choose a .NET tool, Docker image, or portable executable
 - [Usage](./Usage/README.md) - Run the commands and preview your site
 - [Configuration](./Usage/configuration.md) - Give the site your name, logo, and colors with one optional file
 - [Publish](./Publish/README.md) - Host the generated site on GitHub, GitLab, or any web server
@@ -32,6 +32,7 @@ MDU (Markdown Documentation Utility) is a tool that turns a folder of ordinary M
 | [mdu render](./Usage/render.md) | Generates the static site |
 | [mdu pdf](./Usage/pdf.md) | Combines all pages into one PDF |
 | [mdu page](./Usage/page.md) | Moves pages and updates every link to them |
+| [mdu check-site](./Usage/check-site.md) | Checks links, assets, and anchors in the finished site |
 
 ## Write and organize content
 

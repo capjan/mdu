@@ -31,7 +31,7 @@ The [technology decision](Technology.md) defines the permitted tools and the con
 
 The preview should start quickly and show saved changes promptly. The latest save wins; navigation and search stay consistent, and unfinished downloads are clearly identified. Repeated editing should keep memory use bounded.
 
-[Performance benchmarks](Benchmarks.md) contains the **starting commands and the target-versus-measured table**. It also explains which measurements describe the native release and which describe portable execution.
+[Performance benchmarks](Benchmarks.md) contains the **starting commands and the target-versus-measured table**. It also explains which measurements describe the native release and which describe framework-dependent execution.
 
 ## Explore the architecture
 

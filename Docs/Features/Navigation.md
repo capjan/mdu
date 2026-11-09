@@ -109,4 +109,4 @@ Fetch the full history in GitHub Actions with `fetch-depth: 0`:
 
 In GitLab CI, set the `GIT_DEPTH` variable to `0` for the job that renders the site.
 
-Every page ends with a **Made with MDU** line that links to the MDU project page. The line is part of the built-in template and cannot be turned off.
+Every page ends with a **Made with MDU** line that links to the MDU project page. Set [`site.attribution.visible: false`](../Usage/configuration.md#site) in `mdu.yml` to remove it.

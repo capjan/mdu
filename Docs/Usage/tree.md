@@ -12,7 +12,7 @@ navigation.order: 1
 mdu tree [PATH] [options]
 ```
 
-The alias `mdu print` runs the same command. See [Paths and file search](README.md#paths-and-file-search) for the default source folder and [common options](README.md#common-options) for `--pattern` and `--hidden`.
+The aliases `mdu print` and `mdu print-tree` run the same command. See [Paths and file search](README.md#paths-and-file-search) for the default source folder and [common options](README.md#common-options) for `--pattern` and `--hidden`.
 
 ## Example
 
@@ -20,7 +20,10 @@ The alias `mdu print` runs the same command. See [Paths and file search](README.
 $ mdu tree ./ProjectDocs/Usage
 Usage
   fix
+  new
+  check-site
   render
+  Configuration
   tree
   pdf
   page

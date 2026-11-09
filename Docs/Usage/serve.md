@@ -8,7 +8,7 @@ navigation.order: 5
 
 The preview becomes available once the first page, navigation and search are ready. Other pages are completed in the background or when requested, followed by PDFs. A status message shows when downloads are being updated or have failed; those downloads return HTTP 503 until successfully regenerated, so an old PDF cannot be mistaken for the current version.
 
-A PDF generation error, including during the initial build, keeps the preview running so you can fix the source and save again. This changes the earlier behavior that exited with code 1 on an initial PDF error. Use [`mdu render`](render.md) or [`mdu pdf`](pdf.md) when you need a command that fails if required PDF output cannot be generated. Errors that prevent the initial HTML preview or server from starting still exit with code 1.
+A PDF generation error, including during the initial build, keeps the preview running so you can fix the source and save again. Use [`mdu render`](render.md) or [`mdu pdf`](pdf.md) when you need a command that fails if required PDF output cannot be generated. Errors that prevent the initial HTML preview or server from starting still exit with code 1.
 
 The output uses the same [generated files](render.md#generated-files) as `mdu render`, including the reserved `_mdu` folder.
 

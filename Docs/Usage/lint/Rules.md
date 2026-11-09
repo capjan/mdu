@@ -33,7 +33,7 @@ navigation:
 | `MDU020` | `UnusedFootnote` | Warning | Every footnote definition is reachable from a reference in page text. | — |
 | `MDU021` | `DuplicateFootnote` | Warning | A footnote label is defined only once per page. | — |
 | `MDU022` | `LocalFragmentExists` | Error | A link fragment matches an anchor on the target page. | — |
-| `MDU023` | `DiagramTooLarge` | Warning | A PlantUML component diagram stays within the size limits. |
+| `MDU023` | `DiagramTooLarge` | Warning | A PlantUML component diagram stays within the size limits. | [Size limits](../../Features/Diagrams.md#size-limits) |
 | `MDU024` | `InvalidImageZoom` | Error | `images.zoom` in the front matter is `true` or `false`, and `images` itself is not a boolean. | — |
 | `MDU025` | `InvalidPageNavigation` | Error | `page.breadcrumbs`, `page.pagination`, and `page.toc` in the front matter accept `true` or `false`. | — |
 
@@ -93,12 +93,6 @@ A same-page link may differ from a heading id in letter case only; MDU points it
 
 Fix the fragment, or add an explicit id to the heading when existing links must keep their spelling.
 
-## Informational output
-
-The linter also lists pages marked `navigation.visible: false` that no visible page links to. These orphaned pages are informational; they do not have a rule code and do not affect the exit code.
-
-[Back to lint](README.md)
-
 ## MDU023: DiagramTooLarge
 
 This warning points to a PlantUML component diagram above the [size limits](../../Features/Diagrams.md#size-limits). MDU does not draw such a diagram, and the block stays a code block. Split the diagram or raise [`diagrams.limits`](../configuration.md#diagrams) in `mdu.yml`; warnings do not make `mdu lint` fail.
@@ -112,3 +106,9 @@ The [`images.zoom`](../../Features/Images.md#turn-off-the-viewer) front matter s
 ## MDU025: InvalidPageNavigation
 
 Use `true` or `false` for each page navigation setting. Both dotted keys and keys nested under `page` are supported. For example, replace `page.toc: off` with `page.toc: false`.
+
+## Informational output
+
+The linter also lists pages marked `navigation.visible: false` that no visible page links to. These orphaned pages are informational; they do not have a rule code and do not affect the exit code.
+
+[Back to lint](README.md)

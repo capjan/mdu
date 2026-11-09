@@ -31,9 +31,10 @@ flowchart LR
 | --- | --- |
 | Markdig advanced extensions | Pipe and grid tables, footnotes, task lists, emphasis extras, heading IDs, automatic links, and attribute lists |
 | `HeadingIdExtension` | Keeps a leading number in heading IDs, as GitHub and MkDocs do: `## 3.1 Overview` gets `31-overview` |
+| `SharedAbbreviationsExtension` | Definitions from the [shared glossary](../../Features/Abbreviations.md#shared-glossary); added only when `content.glossary` is set, and imported pages use the glossary of their import |
 | `ScrollableTableExtension` | Wraps wide tables in a horizontally scrollable container |
 | `RenderedMathExtension` | [Math](../../Features/Math.md) as inline SVG |
-| `GitHubAlertExtension` | [Callouts](../../Features/Callouts.md) with GitHub's alert syntax |
+| `GitHubAlertExtension` | [Callouts](../../Features/Callouts.md) with GitHub's alert syntax, and `[!RESULT]` blocks below examples |
 | `ShortcodeExtension` | [Icons and emojis](../../Features/Icons-and-Emojis.md) from shortcodes |
 | `KeysExtension` | [Keyboard keys](../../Features/Keyboard-Keys/README.md) such as ++ctrl+alt+del++ |
 | `HighlighterExtension` | The code block renderer below |
@@ -52,6 +53,9 @@ flowchart TD
     Lang -->|math| Math[Formula as SVG]
     Lang -->|mermaid, plantuml, context| Diagram{Supported syntax?}
     Diagram -->|Yes| Svg[Diagram as SVG]
+    Lang -->|isometric| Iso{Supported syntax?}
+    Iso -->|Yes| IsoHtml[Phase controls and SVG]
+    Iso -->|No| Code
     Diagram -->|No| Code
     Lang -->|anything else| Code[Highlighted code with copy button]
     click Search href "../../Features/Icons-and-Emojis.md#search"
@@ -59,6 +63,7 @@ flowchart TD
     click OpenApi href "../../Features/OpenAPI.md"
     click Math href "../../Features/Math.md"
     click Svg href "../../Features/Diagrams.md"
+    click IsoHtml href "../../Features/Diagrams.md#isometric-diagrams"
     click Code href "../../Features/CodeBlocks.md"
 ```
 
@@ -113,6 +118,8 @@ The generated site consists of static HTML and shared local assets. Small local 
 - the collapsible sidebar, top navigation tabs, and a drawer on narrow screens;
 - client-side search with links to the matching section and highlighted hits;
 - copy buttons for code blocks and footnote previews;
+- the image viewer with zoom, panning, and gallery browsing;
+- playback of isometric diagram phases;
 - the consent dialog for embedded videos.
 
 `SiteNavigation` renders the navigation markup in C# once. The shared script inserts that markup before navigation controls initialize, adjusts relative URLs, and applies the page's current/ancestor/top-section state. It needs no fetch request or server endpoint and also works when opening a local HTML file. Page state uses URLs rather than positions in the tree, so a structural rebuild cannot accidentally highlight a different entry on a page awaiting refresh. Ordinary `serve` content edits leave the shared navigation and runtime files untouched; navigation changes rebuild them after the new generation has been prepared, right before its pages render. `serve` removes shared files that no page uses any more when the site is rebuilt.

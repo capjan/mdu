@@ -8,7 +8,7 @@ For starting commands and the target/result tables, use [Performance benchmarks]
 
 ## Reference and workload scope
 
-The reference environment is an Apple M4 with 16 GiB RAM, macOS arm64, .NET SDK 10.0.403 / runtime 10.0.14. Acceptance uses the native .NET release build; portable execution has separate startup/build budgets. Both share editing, correctness, and memory requirements.
+The reference environment is an Apple M4 with 16 GiB RAM, macOS arm64, .NET SDK 10.0.403 / runtime 10.0.14. Acceptance uses the native .NET release build; framework-dependent execution has separate startup/build budgets. Both share editing, correctness, and memory requirements.
 
 The frozen acceptance sites have 7, 54, and 503 pages. The large site repeats mixed templates, including a 12-component diagram and an eight-operation API specification; it does not represent every possible 500-page site. An ordinary edit changes one page without changing shared navigation or configuration. Larger content, shared dependencies, PDFs, imports, and slow storage need separately labelled workloads and budgets.
 
@@ -37,7 +37,7 @@ dotnet run --project Tools/Performance -c Release --no-build -- --mode summary -
 
 This collects 300 observations per edit kind per site across three server processes, including the first edit. Browser readiness means expected DOM text retained across two animation frames, including normal live reload. Browser launch is outside CLI startup timing. Shared configuration changes, Git history, PDFs, and functional browser interactions have separate procedures.
 
-For a comparable portable run, generate the same frozen inputs into a separate working folder and omit `--cli` from the browser command. Always distinguish current-checkout comparisons from reproducing the historical measured executable.
+For a comparable framework-dependent run, generate the same frozen inputs into a separate working folder and omit `--cli` from the browser command. Always distinguish current-checkout comparisons from reproducing the historical measured executable.
 
 ## Memory and additional checks
 
