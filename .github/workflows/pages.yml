@@ -72,7 +72,7 @@ jobs:
         if: steps.recheck.outputs.deploy == 'true'
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.402 # Temporary pin: the 10.0.403 download returns HTTP 409.
+          global-json-file: global.json
 
       - name: Configure GitHub Pages
         if: steps.recheck.outputs.deploy == 'true'

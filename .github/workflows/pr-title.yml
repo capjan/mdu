@@ -1,0 +1,27 @@
+name: Pull request title
+
+# Squash merges use the pull request title as the commit message on main, which git-cliff reads for versions and release notes.
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  conventional-title:
+    name: Conventional pull request title
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check pull request title
+      env:
+        TITLE: ${{ github.event.pull_request.title }}
+      run: |
+        if ! printf '%s\n' "$TITLE" | grep -Eq '^[[:lower:]][[:lower:][:digit:]-]*(\([^()]+\))?!?: [^[:space:]].*$'; then
+          echo "::error::Pull request titles must follow Conventional Commits: <type>[optional scope][!]: <description>"
+          printf '%s\n' "$TITLE"
+          exit 1
+        fi

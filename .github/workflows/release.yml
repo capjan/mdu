@@ -107,7 +107,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.402 # Temporary pin: the 10.0.403 download returns HTTP 409.
+          global-json-file: global.json
 
       - name: Test
         run: dotnet test Mdu.sln --configuration Release
@@ -135,7 +135,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.402 # Temporary pin: the 10.0.403 download returns HTTP 409.
+          global-json-file: global.json
 
       - name: Install Native AOT prerequisites on Linux
         if: runner.os == 'Linux'
@@ -226,7 +226,7 @@ jobs:
 
   release:
     name: Pack, publish, and create release
-    needs: [prepare-release, test, build-native]
+    needs: [prepare-release, test, build-native, publish-docker-image]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -240,7 +240,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.402 # Temporary pin: the 10.0.403 download returns HTTP 409.
+          global-json-file: global.json
 
       - name: Pack
         env:
@@ -335,8 +335,8 @@ jobs:
 
   publish-docker-image:
     name: Build Docker Hub image (${{ matrix.platform }})
-    needs: [prepare-release, test, build-native, release]
-    if: needs.release.result == 'success'
+    # Pushes the images by digest only, so they stay untagged until the release job has published everything else.
+    needs: [prepare-release, test]
     strategy:
       fail-fast: false
       matrix:
@@ -409,11 +409,12 @@ jobs:
             /tmp/digests/${{ matrix.arch }}
             /tmp/digests/ci-${{ matrix.arch }}
           if-no-files-found: error
-          retention-days: 1
+          # Long enough for “Re-run failed jobs” after a failed release on a later day.
+          retention-days: 7
 
   publish-docker:
     name: Publish Docker Hub manifest
-    needs: [prepare-release, publish-docker-image]
+    needs: [prepare-release, publish-docker-image, release]
     runs-on: ubuntu-latest
     permissions:
       contents: read
