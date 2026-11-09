@@ -17,5 +17,17 @@ MDU focuses on one job: publishing a folder of plain Markdown with a single tool
 | [VuePress](https://vuepress.vuejs.org/) | Vue | Documentation with Vue components in Markdown |
 | [Zensical](https://zensical.org/) | Python, Rust | Successor to Material for MkDocs from the same team |
 
+## How MDU compares
+
+What each tool needs and brings without extra plugins:
+
+| | MDU | Material for MkDocs | Docusaurus | Starlight | DocFX |
+| --- | --- | --- | --- | --- | --- |
+| Runtime to build the site | None (standalone executable) or .NET | Python | Node.js | Node.js | .NET |
+| Markdown linter | Built in (`mdu lint`) | Plugins | Plugins | Plugins | — |
+| Diagrams | Static SVG at build time, no JavaScript | Mermaid in the browser | Mermaid in the browser | Plugins | Mermaid in the browser |
+| PDF export | Built in (`mdu pdf`) | Plugins | Plugins | Plugins | Built in |
+| Source files | Plain Markdown | Markdown with extensions | MDX | Markdown and MDX | Markdown with extensions |
+
 > [!TIP]
 > Coming from Material for MkDocs? MDU understands the same icon shortcodes, and [`mdu fix`](./Usage/fix.md#migrating-mkdocs-material-markdown) converts admonitions, tabs, card grids, and `.pages` files to portable Markdown.
