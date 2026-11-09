@@ -77,6 +77,8 @@ Rules `MDU007`–`MDU014` identify MkDocs-specific syntax and structure that nee
 
 Visible sibling pages must have unique navigation names, ignoring letter case. The name comes from `navigation.title` when set, or otherwise from the page title. Set a distinct `navigation.title` on one of the pages when two entries would otherwise look the same. Hidden pages are excluded, and their visible children are compared under the next visible parent. Tabs share one top bar, so tabs from an import with [`mdu.import.navigation: merge`](../../Features/Repository-Imports.md#merging-top-navigation) must also differ from every other tab; the error is reported on the later tab in tab order.
 
+Each mounted tab is checked separately, including when the same repository folder is imported more than once.
+
 ## MDU020: UnusedFootnote
 
 This warning points to each footnote definition that is not reachable from a reference in page text, directly or through another used footnote. A reference inside an unused footnote does not make its target used. Remove unused definitions or add a reference; warnings do not make `mdu lint` fail.

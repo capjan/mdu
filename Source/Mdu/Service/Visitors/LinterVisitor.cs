@@ -45,7 +45,7 @@ public class LinterVisitor: IVisitor<MarkdownFile>
         var visited = new HashSet<string>(PathComparer);
         Visit(graph, new NavigationTitleGroup());
         _allPages = pages;
-        ReportDuplicateTopNavigationTitles(pages);
+        ReportDuplicateTopNavigationTitles(graph);
         ReportMissingSectionReadmes(pages);
         ReportMkDocsPagesFiles(pages);
         return;
@@ -92,10 +92,10 @@ public class LinterVisitor: IVisitor<MarkdownFile>
     /// Tabs share one top bar. Local tabs are siblings and are covered by the sibling check, but tabs of an import
     /// with mdu.import.navigation: merge sit deeper in the tree, so their labels are compared here.
     /// </summary>
-    private void ReportDuplicateTopNavigationTitles(IEnumerable<MarkdownFile> pages)
+    private void ReportDuplicateTopNavigationTitles(IEnumerable<MarkdownFile> roots)
     {
         var tabs = new Dictionary<string, MarkdownFile>(StringComparer.OrdinalIgnoreCase);
-        foreach (var page in NavigationPage.OrderPages(pages.Where(page =>
+        foreach (var page in NavigationPage.OrderPages(MountedPages(roots).Where(page =>
                      page.NavigationVisible && page.NavigationPlacement == NavigationPlacement.Top &&
                      NavigationPage.IsTopLevel(page, _rootPath))))
         {
@@ -103,6 +103,15 @@ public class LinterVisitor: IVisitor<MarkdownFile>
             if (!tabs.TryAdd(title, page) && !ReferenceEquals(GetVisibleParent(tabs[title]), GetVisibleParent(page)))
                 ErrorReceiver.Add(page.FileInfo.FullName, 1,
                     $"{RuleCodes.DuplicateNavigationTitle}: Top navigation title '{title}' duplicates the tab of page '{GetNavigationEntryPath(tabs[title])}'. Set a unique navigation.title.");
+        }
+
+        static IEnumerable<MarkdownFile> MountedPages(IEnumerable<MarkdownFile> pages)
+        {
+            foreach (var page in pages)
+            {
+                yield return page;
+                foreach (var child in MountedPages(page.Children)) yield return child;
+            }
         }
     }
 

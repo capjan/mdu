@@ -1010,6 +1010,30 @@ public class RepositoryImportTest
         Assert.Single(site.Lint(), error => error.Message.StartsWith("MDU019:", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void RepeatedSourceImportsCheckEveryMountedTab(bool merge)
+    {
+        using var site = MergeNavigationSite.Create(merge: true);
+        site.RepeatImport("Second.md", merge);
+
+        var duplicates = site.Lint().Where(error => error.Message.StartsWith("MDU019:", StringComparison.Ordinal)).ToArray();
+        site.Render();
+
+        Assert.Equal(merge ? 2 : 1, site.TopNavigationLabels("index.html").Count(title => title == "Testhandbuch"));
+        if (merge)
+        {
+            var duplicate = Assert.Single(duplicates);
+            Assert.Equal(site.ImportedPath(Path.Combine("Testhandbuch", "README.md")), duplicate.FilePath);
+            Assert.Contains("Architektur/Testhandbuch/README.md", duplicate.Message);
+        }
+        else
+        {
+            Assert.Empty(duplicates);
+        }
+    }
+
     [Fact]
     public void MergedImportWithoutTopPagesAddsNoTabs()
     {
@@ -1071,6 +1095,11 @@ public class RepositoryImportTest
         public string ImportedPath(string path) => Path.Combine(ImportedDocs, path);
 
         public string LocalPath(string path) => Path.Combine(Docs, path);
+
+        public void RepeatImport(string declaration, bool merge) =>
+            WriteLocal(declaration,
+                $"---\ntitle: Second\nmdu:\n  import:\n    source: {SourceUrl}\n{(merge ? "    navigation: merge\n" : string.Empty)}" +
+                "navigation:\n  placement: top\n  order: 15\n---\n");
 
         public void AddSecondImport(string declaration, bool merge, params (string Path, string Content)[] pages)
         {
