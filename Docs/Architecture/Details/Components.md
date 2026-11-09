@@ -13,10 +13,10 @@ MDU is one solution, `Mdu.sln`, with one executable project and several librarie
 | [mdu](#mdu) | `mdu` command line, page tree, orchestration | all libraries below |
 | [Markdown.Document](#markdown.document) | Reads titles, front matter, and links of a page | Markdig |
 | [Markdown.Linter](#markdown.linter) | Validators for titles, link casing, and link targets | FluentValidation |
-| [Markdown.Renderer](#markdown.renderer) | HTML and PDF rendering, including OpenAPI references | StaticCode.\*, Markdig, Microsoft.OpenApi, AngleSharp |
-| [Markdown.Search](#markdown.search) | Static search index and search script | Markdown.Renderer |
+| [Markdown.Renderer](#markdown.renderer) | HTML and PDF rendering, including OpenAPI references | StaticCode.\*, Markdig, Microsoft.OpenApi, AngleSharp, YamlDotNet, CSharpMath, VectSharp, Cap.Core through StaticCode.Highlighter |
+| [Markdown.Search](#markdown.search) | Static search index and search script | Markdown.Renderer, Markdig, AngleSharp |
 | [StaticCode.Highlighter](#staticcode.highlighter) | Syntax highlighting for code blocks | Cap.Core |
-| [StaticCode.Diagrams](#staticcode.diagrams) | Mermaid, PlantUML, and context diagrams as SVG | StaticCode.Icons |
+| [StaticCode.Diagrams](#staticcode.diagrams) | Mermaid, PlantUML, context, and isometric diagrams as SVG | StaticCode.Icons |
 | [StaticCode.Icons](#staticcode.icons) | Embedded icon sets for shortcodes | — |
 
 ## Project dependencies
@@ -74,7 +74,7 @@ url of Icons is [[#staticcode.icons]]
 The packaged .NET tool `mdu` with the command name `mdu`.
 
 - `Program.cs` defines all commands, aliases, and options with `System.CommandLine` and registers the services with `Microsoft.Extensions.DependencyInjection`.
-- `Commands/` holds one class per command: `LintCommand`, `FixCommand`, `PrintTreeCommand`, `RenderCommand`, `PdfCommand`, `ServeCommand`, and `PageCommand`.
+- `Commands/` holds one class per command: `NewCommand`, `LintCommand`, `CheckSiteCommand`, `FixCommand`, `PrintTreeCommand`, `RenderCommand`, `PdfCommand`, `ServeCommand`, and `PageCommand`.
 - `GraphBuilder`, the tree traversal in `Service/PageTree`, and the visitors in `Service/Visitors` build and walk the [page tree](Pipeline.md#page-tree).
 - `PreviewServer` serves the rendered site for `mdu serve` and pushes reload events to the browser.
 - `MarkdownLinks` finds and rewrites relative Markdown links. `mdu fix`, `mdu page move` (through `PageMover`), and `mdu page links` share it.
@@ -87,7 +87,7 @@ Reads what MDU needs to know about a page without rendering it: the YAML front m
 
 ## Markdown.Linter
 
-Contains the rule codes `MDU001`–`MDU024` and the validators that need only one page and the file system:
+Contains the rule codes `MDU001`–`MDU025` and the validators that need only one page and the file system:
 
 | Validator | Rule |
 | --- | --- |
@@ -111,14 +111,15 @@ A small lexer with lightweight grammars for C#, JavaScript, Swift, TypeScript, P
 
 ## StaticCode.Diagrams
 
-Parses diagram sources and writes SVG. `DiagramRenderer.TryRenderSvg` handles Mermaid flowcharts, sequence, state, and class diagrams, PlantUML component diagrams, and MDU's own context diagrams.
+Parses diagram sources and writes SVG. `DiagramRenderer.TryRenderSvg` handles Mermaid flowcharts, sequence, state, and class diagrams, PlantUML component diagrams, and MDU's own context diagrams. Isometric diagrams are HTML with phase controls around their SVG, so pages render them through `DiagramRenderer.TryRenderHtml`, which also handles all other diagram types.
 
 - Flowcharts use their own layered (Sugiyama) layout in `Layout/LayeredLayout.cs`.
 - PlantUML containers are laid out from the inside out, so nested packages size to their content. Repeated passes line up linked elements across container borders, and each link then takes the shortest way around the elements and labels in its path. Very large diagrams use fewer layout iterations and a smaller search, so their run time grows moderately and the same source always gives the same SVG.
 - Context diagrams place the central system in the middle and its neighbors around it.
+- Isometric diagrams place zones and nodes on a grid and group their links into phases. The phase buttons work with CSS alone; a small script adds playback only on pages with such a diagram.
 - The SVG uses semantic CSS classes so the site stylesheet can theme it for light and dark mode.
 
-When a source uses unsupported syntax, or a component diagram exceeds its size limits, `TryRenderSvg` returns `false` and the block stays a code block.
+When a source uses unsupported syntax, or a component diagram exceeds its size limits, `TryRenderSvg` and `TryRenderHtml` return `false` and the block stays a code block.
 
 ## StaticCode.Icons
 
@@ -129,13 +130,14 @@ Embeds the icon sets behind the [icon shortcodes](../../Features/Icons-and-Emoji
 | Library | Used for | Project |
 | --- | --- | --- |
 | [Markdig](https://github.com/xoofx/markdig) | CommonMark parsing and HTML output | Document, Renderer, Search |
-| [AngleSharp](https://github.com/AngleSharp/AngleSharp) | HTML parsing for PDF rendering | Renderer |
+| [Microsoft.OpenApi](https://github.com/microsoft/OpenAPI.NET) | Reading OpenAPI specifications | Renderer |
+| [AngleSharp](https://github.com/AngleSharp/AngleSharp) | HTML parsing for PDF rendering and the search index | Renderer, Search |
 | [System.CommandLine](https://github.com/dotnet/command-line-api) | Commands, options, and help | mdu |
 | [Microsoft.Extensions.DependencyInjection](https://learn.microsoft.com/dotnet/core/extensions/dependency-injection) | Service registration | mdu |
 | [YamlDotNet](https://github.com/aaubry/YamlDotNet) | Front matter, `mdu.yml`, and `hero` options | mdu, Renderer |
 | [FluentValidation](https://github.com/FluentValidation/FluentValidation) | Lint validators | Linter |
 | [CSharpMath](https://github.com/verybadcat/CSharpMath) and [VectSharp](https://github.com/arklumpus/VectSharp) | Math formulas as SVG | Renderer |
-| Cap.Core | Parser and text helpers | Highlighter |
+| Cap.Core | Parser, text, and resource helpers | Highlighter, Renderer through the Highlighter |
 
 > [!NOTE]
 > These libraries run inside the `mdu` CLI; the rendered site stays plain static HTML, CSS, and JavaScript. The notices for the bundled icon sets and the math renderer ship in `THIRD-PARTY-NOTICES.md` inside the package.

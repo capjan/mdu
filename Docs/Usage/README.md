@@ -62,7 +62,7 @@ Once the pages stand, give the site your name, logo, and colors with an optional
 | Command | Syntax | Purpose |
 | --- | --- | --- |
 | [new](new.md) | `mdu new [directory]` | Create a starter documentation project |
-| [tree](tree.md) | `mdu tree [path]` | Print the detected page structure. Alias: `print` |
+| [tree](tree.md) | `mdu tree [path]` | Print the detected page structure. Aliases: `print`, `print-tree` |
 | [lint](./lint/README.md) | `mdu lint [path]` | Check pages and local links against the [rules](./lint/Rules.md). Alias: `l` |
 | [fix](fix.md) | `mdu fix [path]` | Migrate MkDocs syntax and apply automatic fixes |
 | [render](render.md) | `mdu render [path] [outpath]` | Write a static HTML site. Alias: `r` |
@@ -70,13 +70,14 @@ Once the pages stand, give the site your name, logo, and colors with an optional
 | [pdf](pdf.md) | `mdu pdf [path] [outpath]` | Write one PDF file |
 | [page move](page.md#move-pages-and-folders) | `mdu page move <source> <target>` | Move a page or folder and update every link to it. Alias: `page mv` |
 | [page links](page.md#find-links-to-a-file) | `mdu page links <file>` | List the links that point to a file |
+| [check-site](check-site.md) | `mdu check-site <directory> [--dynamic-fragments <file>]` | Check local links, assets, and anchors in a rendered site |
 
 ## Paths and file search
 
 | | Default |
 | --- | --- |
 | Source folder | `./docs`. Run `mdu new .` to create a starter project, or pass the path explicitly. |
-| Output of `render` and `serve` | `./site`, with `documentation.pdf` when a page contains a PDF Link |
+| Output of `render` and `serve` | `./site`. A [PDF Link](../Features/Pdf-Link.md) to `mdu:pdf` adds `documentation.pdf`, and a link to `mdu:pdf?root=…` adds a topic PDF in `_mdu-pdf/` |
 | Output of `pdf` | `./documentation.pdf` |
 | Pages | Files matching `*.md` |
 

@@ -19,7 +19,7 @@ Everything on these pages is written in ordinary Markdown. Each page shows the s
 
 ## Illustrate
 
-- [Diagrams](Diagrams.md) - Mermaid, PlantUML, and context diagrams as static SVG
+- [Diagrams](Diagrams.md) - Mermaid, PlantUML, context, and isometric diagrams as static SVG
 - [Math](Math.md) - GitHub-compatible formulas as static SVG
 - [Icons and Emojis](Icons-and-Emojis.md) - Thousands of icons, colored logos, and emoji shortcodes
 - [Images](Images.md) - Local and remote images with a zoomable viewer

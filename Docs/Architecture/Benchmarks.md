@@ -8,7 +8,7 @@ Use this page to run a benchmark and compare results with MDU's targets. The com
 
 ## Quick start
 
-You need the **.NET 10 SDK**, a Git checkout of MDU, and **macOS or Linux** for the current resource-measurement tool. Run these commands from the repository root, one after another. This quick run needs no browser and uses the **portable Release build**.
+You need the **.NET 10 SDK**, a Git checkout of MDU, and **macOS or Linux** for the current resource-measurement tool. Run these commands from the repository root, one after another. This quick run needs no browser and uses the **framework-dependent Release build**, the same execution format as the .NET tool.
 
 Choose a disposable working folder outside the checkout: generation replaces its benchmark inputs and outputs.
 
@@ -46,6 +46,8 @@ Reference: **2 November 2026**, Apple M4, 16 GiB RAM, macOS arm64, .NET 10. The 
 
 ### Native release
 
+The native release is a self-contained Native AOT executable built like the [portable binaries](../Setup/Portable-Installation.md). The Docker image is also Native AOT, but it is built for musl with size optimization and invariant globalization, so its timings can differ.
+
 The full acceptance series used seven render processes, three server processes, and 300 observations per edit kind and site. The allocation/retention check was a separate instrumented run.
 
 | Measurement | Target | Measured |
@@ -62,7 +64,7 @@ The full acceptance series used seven render processes, three server processes, 
 
 All these targets were met in that reference run. Browser timing observes the expected page text across two animation frames, not physical display-panel presentation. The finite memory run showed stabilization; it is not proof of unlimited leak freedom.
 
-### Portable Release build
+### Framework-dependent Release build
 
 Compare the quick-start timings with these separate startup/build budgets. Editing targets are shared with the native build.
 
@@ -74,7 +76,7 @@ Compare the quick-start timings with these separate startup/build budgets. Editi
 | Text change available over HTTP, large site, median / p95 | ≤ 50 / 100 ms | 39.4 / 45.4 ms |
 | Text change displayed in browser, large site, p95 | ≤ 150 ms | 84.9 ms |
 
-The [full acceptance report and raw data](https://github.com/capjan/mdu/blob/main/Tools/Performance/results/2026-11-02-acceptance.md) identify the exact source revisions, inputs, distributions, and portable edit results. A [later short review check](https://github.com/capjan/mdu/blob/main/Tools/Performance/results/2026-11-02-review2.md) measured a 1.43 s native large-site render and 379 ms first preview; it did not repeat the p95 series.
+The [full acceptance report and raw data](https://github.com/capjan/mdu/blob/main/Tools/Performance/results/2026-11-02-acceptance.md) identify the exact source revisions, inputs, distributions, and framework-dependent edit results. A [later short review check](https://github.com/capjan/mdu/blob/main/Tools/Performance/results/2026-11-02-review2.md) measured a 1.43 s native large-site render and 379 ms first preview; it did not repeat the p95 series.
 
 ## Further measurements
 

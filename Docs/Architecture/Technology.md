@@ -26,6 +26,6 @@ The local `mdu serve` development server may provide preview-only endpoints, rel
 
 ## Acceptance scope
 
-Native .NET release execution is the accepted reference for startup and complete-render goals. Portable framework-dependent execution retains its own documented startup/build budget; both formats retain the editing, correctness and memory requirements. Results always identify the format. Platform-specific native .NET tool packages are being evaluated as a delivery option; this does not authorize silently dropping portable platform coverage or bypassing signing/notarization.
+Native .NET release execution is the accepted reference for startup and complete-render goals. Framework-dependent execution, as with the .NET tool or `dotnet run`, retains its own documented startup/build budget; both formats retain the editing, correctness and memory requirements. Results always identify the format. Platform-specific native .NET tool packages are being evaluated as a delivery option; this does not authorize silently dropping a currently supported platform or bypassing signing/notarization.
 
 The [benchmark targets and results](Benchmarks.md#targets-and-recorded-results) use a documented reference machine and workloads. Additional platforms must preserve correctness and record their own performance results; identical absolute timings are not assumed. If measurement shows that an agreed goal cannot be met safely, implementation pauses for review of the evidence and alternatives rather than silently relaxing the requirement.
