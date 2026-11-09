@@ -9,6 +9,7 @@ MDU focuses on one job: publishing a folder of plain Markdown with a single tool
 
 | Tool | Built on | Typical use |
 | --- | --- | --- |
+| [DocFX](https://dotnet.github.io/docfx/) | .NET | API reference generated from .NET code, combined with conceptual Markdown docs |
 | [Docusaurus](https://docusaurus.io/) | React, Node.js | Product documentation with MDX components, versions, and translations |
 | [Material for MkDocs](https://squidfunk.github.io/mkdocs-material/) | MkDocs, Python | Feature-rich MkDocs theme; end of life on **May 5, 2027** |
 | [MkDocs](https://www.mkdocs.org/) | Python | Simple project documentation configured in one YAML file |
