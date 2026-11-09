@@ -200,6 +200,11 @@ public class ImageLightboxTest
                 </main>
                 <script>
                 """ + Resources.ImageLightboxScriptContent() + """
+
+                    // In the same script, so no frame or observer report can run before this check.
+                    document.body.dataset.startHiddenTrigger = String(document.getElementById("hidden").classList.contains("image-lightbox-trigger"));
+                    document.body.dataset.startVisibleTrigger = String(document.getElementById("visible").classList.contains("image-lightbox-trigger"));
+                    document.body.dataset.startVisibleTabIndex = String(document.getElementById("visible").tabIndex);
                 </script>
                 <script>
                     const dark = document.getElementById("hidden");
@@ -271,6 +276,10 @@ public class ImageLightboxTest
             Assert.Equal(0, process.ExitCode);
             var body = Regex.Match(output, @"<body\b[^>]*>").Value;
             string Attribute(string name) => Regex.Match(body, $@"\bdata-{Regex.Escape(name)}=""([^""]*)""").Groups[1].Value;
+            // The script decides the tab stops when it runs, not only after the first rendered frame.
+            Assert.Equal("false", Attribute("start-hidden-trigger"));
+            Assert.Equal("true", Attribute("start-visible-trigger"));
+            Assert.Equal("0", Attribute("start-visible-tab-index"));
             Assert.True(Attribute("browser-test") == "complete", $"The browser test did not complete: {body}");
             foreach (var scheme in new[] { "light", "dark" })
             {

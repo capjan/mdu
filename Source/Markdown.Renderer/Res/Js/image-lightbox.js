@@ -512,13 +512,14 @@
         .observe(document.documentElement, { attributes: true, attributeFilter: ["data-color-scheme"] });
     // A change of the shown size, such as in a narrower window or an opened section, can change the answer.
     const sizes = new ResizeObserver((entries) => refresh(entries.map((entry) => entry.target)));
-    for (const image of content.querySelectorAll("img")) {
+    const images = [...content.querySelectorAll("img")];
+    for (const image of images) {
         sizes.observe(image);
         if (!image.complete) image.addEventListener("load", () => refresh([image]), { once: true });
     }
     // The first size report waits for a rendered frame, which a background tab may not draw for a long time. Until
     // then the images would show no zoom cursor and take no keyboard focus, so decide now from the current layout.
-    refresh([...content.querySelectorAll("img")]);
+    refresh(images);
     content.addEventListener("keydown", (event) => {
         if (event.key !== "Enter" && event.key !== " ") return;
         const image = viewerImage(event.target);
