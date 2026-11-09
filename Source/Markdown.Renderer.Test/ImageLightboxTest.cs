@@ -271,7 +271,7 @@ public class ImageLightboxTest
             Assert.Equal(0, process.ExitCode);
             var body = Regex.Match(output, @"<body\b[^>]*>").Value;
             string Attribute(string name) => Regex.Match(body, $@"\bdata-{Regex.Escape(name)}=""([^""]*)""").Groups[1].Value;
-            Assert.Equal("complete", Attribute("browser-test"));
+            Assert.True(Attribute("browser-test") == "complete", $"The browser test did not complete: {body}");
             foreach (var scheme in new[] { "light", "dark" })
             {
                 Assert.Equal("none", Attribute($"{scheme}-hidden-display"));
