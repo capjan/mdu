@@ -27,7 +27,7 @@ public class PdfRendererTest
     public void TagLineFollowsThePageTitle()
     {
         var layout = new PdfLayout(new HtmlRenderer(), "");
-        layout.RenderSection(new PdfSourceSection("Backups", "Backups.html", "# Backups\n\nEncrypted.", Tags: "Security · Incident"));
+        layout.RenderSection(new PdfSourceSection("Backups", "Backups.html", "# Backups\n\nEncrypted.", Tags: "Security\nIncident"));
         var operations = ReadTextOperations(layout.Complete().Pages[0].Content.ToString()).ToArray();
 
         var title = operations.Single(operation => operation.Text == "Backups").Y;
@@ -35,6 +35,20 @@ public class PdfRendererTest
         var body = operations.Single(operation => operation.Text == "Encrypted.").Y;
         Assert.True(title > tags && tags > body, $"title {title}, tags {tags}, body {body}");
         Assert.Contains("Tags: Security · Incident", string.Concat(operations.Select(operation => operation.Text)));
+    }
+
+    [Fact]
+    public void TagsOfAllPagesBecomeTheDocumentKeywords()
+    {
+        using var output = new MemoryStream();
+        new PdfRenderer(new HtmlRenderer()).WritePdf(output, "Manual",
+        [
+            new("Backups", "Backups.html", "# Backups", Tags: "Security\nIncident"),
+            new("Secrets", "Secrets.html", "# Secrets", Tags: "security\nKubernetes"),
+            new("Home", "index.html", "# Home")
+        ]);
+
+        Assert.Contains("/Keywords (Security, Incident, Kubernetes)", Encoding.Latin1.GetString(output.ToArray()));
     }
 
     [Fact]

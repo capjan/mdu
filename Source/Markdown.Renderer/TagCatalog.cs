@@ -16,6 +16,8 @@ public sealed record TagDefinition(string Name, string DescriptionMarkdown, stri
 public sealed class TagCatalog
 {
     private const string AliasPrefix = "Also:";
+    private static readonly System.Text.RegularExpressions.Regex FrontMatter =
+        new(@"\A---[ \t]*\r?\n.*?\r?\n(?:---|\.\.\.)[ \t]*(?:\r?\n|\z)", System.Text.RegularExpressions.RegexOptions.Singleline);
     private static readonly MarkdownPipeline ParsePipeline = HtmlRenderer.CreatePipeline();
     private readonly Dictionary<string, TagDefinition> _byName;
 
@@ -45,6 +47,8 @@ public sealed class TagCatalog
     /// <exception cref="InvalidOperationException">The page defines no tags, or a name or alias twice.</exception>
     public static TagCatalog Parse(string markdown)
     {
+        // The front matter is not part of the vocabulary; Markdig would read its last line as a setext heading.
+        markdown = FrontMatter.Replace(markdown, string.Empty, 1);
         var document = Markdig.Markdown.Parse(markdown, ParsePipeline);
         var definitions = new List<TagDefinition>();
         var byName = new Dictionary<string, TagDefinition>(StringComparer.Ordinal);

@@ -329,7 +329,7 @@ public class FixCommandTest
     }
 
     [Fact]
-    public void MigratesBlogAndTagIndexesToStaticLists()
+    public void MigratesBlogIndexToStaticListAndTagsPageToVocabulary()
     {
         var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
         var posts = Path.Combine(root, "blog", "posts");
@@ -337,7 +337,8 @@ public class FixCommandTest
         try
         {
             File.WriteAllText(Path.Combine(root, "README.md"), "# Docs\n");
-            File.WriteAllText(Path.Combine(root, "Tags.md"), "# Tags\n\n<!-- material/tags -->\n");
+            File.WriteAllText(Path.Combine(root, "Tags.md"), "# Tags\n\nTopics of the blog.\n\n<!-- material/tags { include: [Release] } -->\n");
+            File.WriteAllText(Path.Combine(root, "mdu.yml"), "site:\n  name: Wiki\n");
             File.WriteAllText(Path.Combine(root, "blog", "index.md"), "---\ntitle: Wiki Blog\n---\n# Blog\n");
             File.WriteAllText(Path.Combine(root, "blog", ".pages"), "title: Blog\narrange:\n  - index.md\n");
             File.WriteAllText(Path.Combine(posts, "First.md"), "---\ntitle: First post\ndate: 2026-01-01\ntags:\n  - Release\n---\n# First\n");
@@ -355,8 +356,11 @@ public class FixCommandTest
             Assert.Contains("posts/First.md", blogIndex);
             Assert.Contains("posts/Second.md", blogIndex);
             Assert.DoesNotContain("posts/README.md", blogIndex);
-            Assert.Contains("## Release", File.ReadAllText(Path.Combine(root, "Tags.md")));
-            Assert.Contains("blog/posts/First.md", File.ReadAllText(Path.Combine(root, "Tags.md")));
+            // The tags page becomes the vocabulary: a heading per tag, no listing, registered in mdu.yml.
+            Assert.Equal("# Tags\n\nTopics of the blog.\n\n## Release\n", File.ReadAllText(Path.Combine(root, "Tags.md")).ReplaceLineEndings("\n"));
+            Assert.Equal("site:\n  name: Wiki\ncontent.tags: 'Tags.md'\n", File.ReadAllText(Path.Combine(root, "mdu.yml")).ReplaceLineEndings("\n"));
+            Assert.Equal(0, command.Execute(new VisitorSettings { RootPath = root, SearchPattern = "*.md", IncludeHidden = true }));
+            Assert.Equal("site:\n  name: Wiki\ncontent.tags: 'Tags.md'\n", File.ReadAllText(Path.Combine(root, "mdu.yml")).ReplaceLineEndings("\n"));
         }
         finally
         {
@@ -758,6 +762,92 @@ public class FixCommandTest
         {
             Directory.Delete(root, recursive: true);
         }
+    }
+
+    [Theory]
+    // Material sites usually name the page tags.md; a site without tagged pages gets no vocabulary.
+    [InlineData("tags.md", "<!-- material/tags -->", "---\ntags: [Beta, Release]\n---\n# A\n", "## Beta\n\n## Release\n", true)]
+    [InlineData("Tags.md", "<!-- material/tags -->", "# A\n", "", false)]
+    [InlineData("Tags.md", "<!-- material/tags { include: [Release, Future] } -->", "---\ntags: [Beta, Release]\n---\n# A\n", "## Future\n\n## Release\n", true)]
+    [InlineData("Tags.md", "<!-- material/tags { exclude: [Beta] } -->", "---\ntags: [Beta, Release]\n---\n# A\n", "## Release\n", true)]
+    // Every marker counts: a tag gets a heading when any of them lists it.
+    [InlineData("Tags.md", "<!-- material/tags { include: [Release] } -->\n\n<!-- material/tags { include: [Beta] } -->", "---\ntags: [Beta, Release, Other]\n---\n# A\n", "## Release\n\n## Beta\n", true)]
+    public void MigratesTheMaterialTagsPageOnlyWhenItDefinesTags(string fileName, string marker, string page, string headings, bool registered)
+    {
+        var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var originalOut = Console.Out;
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "README.md"), "# Docs\n");
+            File.WriteAllText(Path.Combine(root, "A.md"), page);
+            File.WriteAllText(Path.Combine(root, fileName), $"# Tags\n\n{marker}\n");
+            Console.SetOut(TextWriter.Null);
+
+            new FixCommand(CreateGraphBuilder(), new LinterVisitor(new ConsoleLintErrorReceiver()))
+                .Execute(new VisitorSettings { RootPath = root, SearchPattern = "*.md", IncludeHidden = true });
+
+            Assert.Equal(("# Tags\n\n" + headings).TrimEnd() + "\n", File.ReadAllText(Path.Combine(root, fileName)).ReplaceLineEndings("\n"));
+            var configuration = Path.Combine(root, "mdu.yml");
+            Assert.Equal(registered ? $"content.tags: '{fileName}'\n" : null,
+                File.Exists(configuration) ? File.ReadAllText(configuration).ReplaceLineEndings("\n") : null);
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void MaterialTagsPageKeepsItsSectionsAndCodeExamples()
+    {
+        var page = """
+            # Tags
+
+            Topics of the blog.
+
+            ## Releases
+
+            <!-- material/tags { include: [Release, Beta] } -->
+
+            ## Guides
+
+            Write `<!-- material/tags -->` to list all tags:
+
+            ```markdown
+            <!-- material/tags -->
+            ```
+
+            <!-- material/tags { include: [Guide, Release] } -->
+            """;
+
+        var migrated = FixCommand.MigrateMaterialTagsPage(page, () => ["Guide", "Release", "Other"])!.ReplaceLineEndings("\n");
+
+        // Own sections become third-level headings; each marker gets the tags it lists that no earlier marker listed.
+        Assert.Equal("""
+            # Tags
+
+            Topics of the blog.
+
+            ### Releases
+
+            ## Beta
+
+            ## Release
+
+            ### Guides
+
+            Write `<!-- material/tags -->` to list all tags:
+
+            ```markdown
+            <!-- material/tags -->
+            ```
+
+            ## Guide
+            """.ReplaceLineEndings("\n"), migrated);
+        Assert.Equal(["Beta", "Release", "Guide"], Markdown.Renderer.TagCatalog.Parse(migrated).Definitions.Select(tag => tag.Name));
+        Assert.Null(FixCommand.MigrateMaterialTagsPage("# Tags\n\n```\n<!-- material/tags -->\n```\n", () => ["Release"]));
     }
 
     private static GraphBuilder CreateGraphBuilder() =>

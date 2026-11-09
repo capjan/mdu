@@ -50,6 +50,28 @@ public partial class MarkdigVisitor
         return written;
     }
 
+    /// <summary>Replaces the <c>tags</c> code blocks of a page with the list of the pages they select.</summary>
+    private string ExpandTagLists(MarkdownFile page, string markdown, string outputDirectory, bool dashboard)
+    {
+        var segments = GetSiteRelativeSegments(outputDirectory);
+        return TagListBlock.Expand(markdown, block =>
+        {
+            if (_siteTags.Check(block) is { } error) return TagListBlock.RenderError(error);
+            var options = block.Options!;
+            var allPages = options.Tags.Count == 1 && options.Exclude.Count == 0 && _siteTags.Find(options.Tags[0]) is { } tag
+                ? GetRelativeUrl(segments, [SiteTags.Folder, tag.Slug + ".html"])
+                : null;
+            return TagListBlock.Render(_siteTags.Select(options, page), options,
+                dashboard ? TagListStyle.Dashboard : TagListStyle.Page,
+                target => GetRelativeUrl(segments, GetSiteRelativeSegments(GetOutputPagePath(GetRenderPath(target)))),
+                // A section page is its own area; repeating its title would add nothing.
+                target => NavigationPage.GetArea(target, _navigationRoots) is var area && !ReferenceEquals(area, target)
+                    ? NavigationPage.RemoveIconShortcodes(NavigationPage.GetTitle(area)).Trim()
+                    : string.Empty,
+                allPages);
+        });
+    }
+
     private IReadOnlyList<PageTagLink>? GetTagLinks(IReadOnlyList<SiteTag> tags, string fromDirectory)
     {
         if (tags.Count == 0) return null;
@@ -67,7 +89,7 @@ public partial class MarkdigVisitor
     {
         var folderSegments = GetSiteRelativeSegments(folder);
         var groups = tag.Pages
-            .GroupBy(GetArea)
+            .GroupBy(page => NavigationPage.GetArea(page, _navigationRoots))
             .ToArray();
         var output = new StringBuilder();
         output.Append($"<h1>{Encode(tag.Name)}</h1>\n\n");
@@ -148,14 +170,6 @@ public partial class MarkdigVisitor
         {
             if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
         }
-    }
-
-    // The first level below the root page, such as "Operations" for Operations/Backups.md; the root page is its own area.
-    private MarkdownFile? GetArea(MarkdownFile page)
-    {
-        var chain = page.Parents().Append(page).ToArray();
-        var depth = _navigationRoots.Length == 1 ? 1 : 0;
-        return chain.Length > depth ? chain[depth] : chain[0];
     }
 
     // The trail below the root page, such as "Operations › Backups"; every page is below the root page anyway.

@@ -5343,6 +5343,50 @@ body:has(.image-lightbox[open]) {
     grid-column: 1 / -1;
 }
 
+/* A tags code block: the pages of a tag as cards that fill the row and stack on narrow screens. */
+.markdown-content .tag-list > ul {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+    gap: 0.75rem;
+    margin: 1rem 0;
+    padding: 0;
+    list-style: none;
+}
+
+.markdown-content .tag-list li {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin: 0;
+    padding: 0.8rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+}
+
+.markdown-content .tag-list li > a,
+.markdown-content .tag-list li > p > a {
+    font-weight: 600;
+}
+
+.markdown-content .tag-list li > p {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin: 0;
+}
+
+.tag-list-detail {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.45;
+}
+
+.markdown-content .tag-list-more,
+.markdown-content .tag-list-empty {
+    color: var(--text-secondary);
+    font-size: 0.9375rem;
+}
+
 .tag-overview-count {
     color: var(--text-secondary);
     font-size: 0.8125rem;

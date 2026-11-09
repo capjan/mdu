@@ -11,7 +11,8 @@ public sealed record SiteTag(string Name, string Slug, TagDefinition? Definition
 }
 
 /// <summary>A tag that a page uses wrongly. Errors stop mdu render and mdu pdf; warnings only inform.</summary>
-public sealed record TagProblem(MarkdownFile Page, string Message, bool IsWarning, string? Tag = null);
+/// <param name="Line">The line of a <c>tags</c> code block the problem is in; null for the front matter.</param>
+public sealed record TagProblem(MarkdownFile Page, string Message, bool IsWarning, string? Tag = null, int? Line = null);
 
 /// <summary>
 /// Collects the tags of all pages and checks them against the vocabulary of <c>content.tags</c>. With a vocabulary,
@@ -47,6 +48,38 @@ public sealed class SiteTags
     public bool HasErrors => Problems.Any(problem => !problem.IsWarning);
 
     public IReadOnlyList<SiteTag> For(MarkdownFile page) => _pageTags.GetValueOrDefault(page) ?? [];
+
+    /// <summary>The tag a name or alias stands for, or null when no page carries it.</summary>
+    public SiteTag? Find(string name)
+    {
+        var key = TagCatalog.Normalize(Catalog?.Find(name)?.Name ?? name);
+        return Tags.FirstOrDefault(tag => tag.Key == key);
+    }
+
+    /// <summary>
+    /// The pages of a <c>tags</c> code block in navigation order: they carry every tag of <c>tags</c> and none of
+    /// <c>exclude</c>. The page that shows the list is left out.
+    /// </summary>
+    public IReadOnlyList<MarkdownFile> Select(TagListOptions options, MarkdownFile listingPage)
+    {
+        var required = options.Tags.Select(Find).ToArray();
+        if (required.Any(tag => tag is null)) return [];
+        var excluded = options.Exclude.Select(Find).OfType<SiteTag>().SelectMany(tag => tag.Pages).ToHashSet();
+        return required[0]!.Pages
+            .Where(page => !ReferenceEquals(page, listingPage) && !excluded.Contains(page) &&
+                           required.Skip(1).All(tag => tag!.Pages.Contains(page)))
+            .ToArray();
+    }
+
+    /// <summary>The reason a <c>tags</c> code block cannot list pages, such as an unknown tag; null when it can.</summary>
+    public string? Check(TagListBlockSource block) =>
+        block.Error ?? (Catalog is null ? null : block.Options!.Tags.Concat(block.Options.Exclude)
+            .Where(name => Catalog.Find(name) is null)
+            .Select(name => $"The tags block uses tag '{name}', which is not defined in {VocabularyName}." +
+                            (Catalog.Suggest(name) is { } suggestion ? $" Did you mean '{suggestion}'?" : string.Empty))
+            .FirstOrDefault());
+
+    private string VocabularyName => VocabularyPath is null ? "the tag vocabulary" : Path.GetFileName(VocabularyPath);
 
     /// <summary>Reads the vocabulary of the site, if any, and collects the tags of the pages.</summary>
     /// <exception cref="InvalidOperationException">The vocabulary does not exist or is not valid.</exception>
@@ -152,7 +185,13 @@ public sealed class SiteTags
         var byKey = tags.ToDictionary(tag => tag.Key);
         var ordered = uses.GroupBy(use => use.Page).ToDictionary(group => group.Key,
             group => (IReadOnlyList<SiteTag>)group.Select(use => byKey[use.Key]).Distinct().ToArray());
-        return new SiteTags(tags, ordered, problems, catalog, vocabularyPath, vocabularyPage);
+        var siteTags = new SiteTags(tags, ordered, problems, catalog, vocabularyPath, vocabularyPage);
+        // The tags code blocks follow the same vocabulary as the front matter.
+        foreach (var page in pages)
+        foreach (var block in TagListBlock.Find(page.ReadMarkdown()))
+            if (siteTags.Check(block) is { } message)
+                problems.Add(new TagProblem(page, message, false, Line: block.Line));
+        return siteTags;
 
         static bool IsAccepted(string spelling, string name, TagDefinition? definition) =>
             spelling == name || definition?.Aliases.Contains(spelling, StringComparer.Ordinal) == true;

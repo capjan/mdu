@@ -91,11 +91,31 @@ public class LinterVisitor: IVisitor<MarkdownFile>
             ErrorReceiver.Add(Path.Combine(_rootPath, "mdu.yml"), 1, $"{RuleCodes.UnknownTag}: Could not read the tag vocabulary: {vocabularyError}");
         foreach (var problem in tags.Problems)
         {
-            var line = FindTagLine(problem.Page, problem.Tag);
+            var line = problem.Line ?? FindTagLine(problem.Page, problem.Tag);
             if (problem.IsWarning)
                 ErrorReceiver.AddWarning(problem.Page.FileInfo.FullName, line, $"{RuleCodes.TagSpelling}: {problem.Message}");
             else
                 ErrorReceiver.Add(problem.Page.FileInfo.FullName, line, $"{RuleCodes.UnknownTag}: {problem.Message}");
+        }
+
+        // A tag page with a single entry leads nowhere, and an unused vocabulary entry promises pages that do not exist.
+        foreach (var tag in tags.Tags.Where(tag => tag.Pages.Count == 1))
+        {
+            var page = tag.Pages[0];
+            var spelling = page.Tags.FirstOrDefault(name =>
+                (tags.Catalog?.Find(name)?.Name ?? name).Equals(tag.Name, StringComparison.OrdinalIgnoreCase)) ?? tag.Name;
+            ErrorReceiver.AddWarning(page.FileInfo.FullName, FindTagLine(page, spelling),
+                $"{RuleCodes.UnusedTag}: Tag '{tag.Name}' is only used on this page. Tag related pages as well, or remove it.");
+        }
+        if (tags.Catalog is null || tags.VocabularyPath is null) return;
+        var used = tags.Tags.Select(tag => tag.Name).ToHashSet(StringComparer.Ordinal);
+        var vocabularyLines = File.ReadAllLines(tags.VocabularyPath);
+        foreach (var definition in tags.Catalog.Definitions.Where(definition => !used.Contains(definition.Name)))
+        {
+            var line = Array.FindIndex(vocabularyLines, text =>
+                text.StartsWith("## ", StringComparison.Ordinal) && text[3..].Trim() == definition.Name);
+            ErrorReceiver.AddWarning(tags.VocabularyPath, line + 1 > 0 ? line + 1 : 1,
+                $"{RuleCodes.UnusedTag}: Tag '{definition.Name}' is not used on any page. Tag pages with it, or remove it.");
         }
     }
 

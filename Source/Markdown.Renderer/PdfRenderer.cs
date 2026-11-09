@@ -6,7 +6,7 @@ using Markdown.Renderer.MarkdigExtension;
 
 namespace Markdown.Renderer;
 
-/// <param name="Tags">The tags of the page, joined for the line below its title; null without tags.</param>
+/// <param name="Tags">The tag names of the page, one per line, for the line below its title and the keywords; null without tags.</param>
 public sealed record PdfSourceSection(string Title, string RelativeHtmlPath, string Markdown, int Depth = 0, string? Tags = null);
 
 /// <summary>Writes a paginated PDF from the HTML fragment produced by MDU's Markdown pipeline.</summary>
@@ -79,7 +79,10 @@ public sealed class PdfRenderer(HtmlRenderer htmlRenderer)
                 pair => pair.Value with { PageIndex = pair.Value.PageIndex + frontMatter.Pages.Count },
                 StringComparer.Ordinal);
             PdfLayout.AddFooters(pages);
-            PdfFileWriter.Write(output, _coverTitle, pages, destinations);
+            // The tags of the exported pages describe the document for file managers and search tools.
+            var keywords = string.Join(", ", _sections.SelectMany(section => section.Tags?.Split('\n') ?? [])
+                .Distinct(StringComparer.OrdinalIgnoreCase));
+            PdfFileWriter.Write(output, _coverTitle, pages, destinations, PdfEncoding.PrintableEmojiText(keywords));
         }
 
         private string GetDescription(string markdown)
@@ -169,7 +172,7 @@ internal sealed class PdfLayout
         // The tags follow the page title; a page whose title is excluded from the PDF starts with them.
         var title = Array.FindIndex(blocks, block => block is XmlElement { LocalName: "h1" });
         RenderBlocks(blocks[..(title + 1)], 0);
-        WriteParagraph([new PdfRun(PdfEncoding.PrintableEmojiText($"Tags: {section.Tags}"), PdfTextStyle.Muted)], 9, 0, title < 0 ? 0 : 2, 10);
+        WriteParagraph([new PdfRun(PdfEncoding.PrintableEmojiText($"Tags: {string.Join(" · ", section.Tags.Split('\n'))}"), PdfTextStyle.Muted)], 9, 0, title < 0 ? 0 : 2, 10);
         RenderBlocks(blocks[(title + 1)..], 0);
     }
 
@@ -1317,7 +1320,8 @@ internal static class PdfFileWriter
         Stream output,
         string title,
         IReadOnlyList<PdfPageContent> pages,
-        IReadOnlyDictionary<string, PdfDestination> destinations)
+        IReadOnlyDictionary<string, PdfDestination> destinations,
+        string? keywords = null)
     {
         var objects = new List<byte[]?> { null };
         int Reserve()
@@ -1371,7 +1375,8 @@ internal static class PdfFileWriter
         }
         objects[pagesId] = Encoding.ASCII.GetBytes($"<< /Type /Pages /Kids [{string.Join(' ', pageIds.Select(id => $"{id} 0 R"))}] /Count {pageIds.Length} >>");
         objects[catalogId] = Encoding.ASCII.GetBytes($"<< /Type /Catalog /Pages {pagesId} 0 R >>");
-        var infoId = Add($"<< /Title ({PdfString(title)}) /Producer (MDU) >>");
+        var keywordEntry = string.IsNullOrWhiteSpace(keywords) ? string.Empty : $" /Keywords ({PdfString(keywords)})";
+        var infoId = Add($"<< /Title ({PdfString(title)}){keywordEntry} /Producer (MDU) >>");
 
         using var writer = new BinaryWriter(output, Encoding.ASCII, leaveOpen: true);
         writer.Write(Encoding.Latin1.GetBytes("%PDF-1.7\n%\xE2\xE3\xCF\xD3\n"));

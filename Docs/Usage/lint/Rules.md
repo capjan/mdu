@@ -38,6 +38,7 @@ navigation:
 | `MDU025` | `InvalidPageNavigation` | Error | `page.breadcrumbs`, `page.pagination`, and `page.toc` in the front matter accept `true` or `false`. | — |
 | `MDU026` | `UnknownTag` | Error | Every tag is defined in the tag vocabulary, and `tags` is one tag or a list of tags. | [Tags](../../Features/Tags.md#define-the-vocabulary) |
 | `MDU027` | `TagSpelling` | Warning | A tag is written like its name in the vocabulary, or like most pages write it. | [Tags](../../Features/Tags.md#tag-a-page) |
+| `MDU028` | `UnusedTag` | Warning | A tag is carried by more than one page, and every vocabulary tag by at least one. | [Tags](../../Features/Tags.md#check-the-tags) |
 
 ## MDU001: HeadingRequired
 
@@ -115,11 +116,15 @@ Use `true` or `false` for each page navigation setting. Both dotted keys and key
 
 With a [tag vocabulary](../../Features/Tags.md#define-the-vocabulary) set in `content.tags`, every tag in the front matter must be one of its names or aliases. The error points to the line of the tag and suggests the closest defined name. Correct the spelling, or add the tag as a second-level heading to the vocabulary. `mdu render` and `mdu pdf` stop with the same error.
 
-The rule also reports a `tags` value that is neither one tag nor a list of tags, such as a mapping, and a vocabulary that cannot be read.
+The rule also checks the tags and options of [`tags` code blocks](../../Features/Tags.md#list-tagged-pages-on-any-page) and points to the line of the block. It reports a `tags` value that is neither one tag nor a list of tags, such as a mapping, and a vocabulary that cannot be read.
 
 ## MDU027: TagSpelling
 
 This warning points to a tag that differs from its name only in letter case or spacing, such as `kubernetes` for `Kubernetes`. The page is still listed under the tag. Without a vocabulary, the spelling most pages use is the name. Write the tag like the name so that the source stays consistent.
+
+## MDU028: UnusedTag
+
+This warning points to a tag that only one page carries, and to a tag of the vocabulary that no page carries. Its tag page would list a single page or none, so it helps nobody find related pages. Tag the other pages that belong to the topic, or remove the tag. Warnings do not make `mdu lint` fail.
 
 ## Informational output
 

@@ -50,7 +50,7 @@ layout: dashboard
 | `---` | Starts a new row of groups |
 | A list item without a link | A note between the tiles |
 
-Groups with subtitles use large tiles; groups without them use compact rows. A compact row always shows the whole name first and the host only in the space that is left. Groups in a row share the width and wrap on narrow screens. Links to `.md` files point to the rendered pages, and all links open in the same tab unless you set `open: new-tab`.
+Groups with subtitles use large tiles; groups without them use compact rows. A compact row always shows the whole name first and the host only in the space that is left. Groups in a row share the width and wrap on narrow screens. Links to `.md` files point to the rendered pages, and all links open in the same tab unless you set `open: new-tab`. A [`tags` code block](Tags.md#list-tagged-pages-on-any-page) in a group fills it with the pages that carry a tag.
 
 ## Icons
 

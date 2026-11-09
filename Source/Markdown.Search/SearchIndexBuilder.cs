@@ -672,7 +672,7 @@ public sealed class SearchIndexBuilder
         var language = languageEnd < 0 ? info : info[..languageEnd];
 
         return language.ToLowerInvariant() is not (
-            "mermaid" or "plantuml" or "puml" or "context" or "isometric" or "hero" or "icon-search" or "openapi");
+            "mermaid" or "plantuml" or "puml" or "context" or "isometric" or "hero" or "icon-search" or "openapi" or "tags");
     }
 
     private static void NormalizeMarkdownLinks(CodeInline code)

@@ -32,6 +32,7 @@ registrations.AddScoped<RenderCommand>();
 registrations.AddScoped<PdfCommand>();
 registrations.AddScoped<ServeCommand>();
 registrations.AddScoped<PageCommand>();
+registrations.AddScoped<TagsCommand>();
 
 using var services = registrations.BuildServiceProvider();
 
@@ -104,6 +105,13 @@ var treePath = AddRootPathArgument(treeCommand, "Root folder containing Markdown
 treeCommand.SetAction(parseResult =>
     services.GetRequiredService<PrintTreeCommand>().Execute(
         GetVisitorSettings(parseResult, treePath, treePattern, treeHidden)));
+
+var tagsCommand = new Command("tags", "Lists the tags of the pages with the number of pages and the areas that use them.");
+var (tagsPattern, tagsHidden) = AddVisitorOptions(tagsCommand);
+var tagsPath = AddRootPathArgument(tagsCommand, "Root folder containing Markdown files. Defaults to ./docs.");
+tagsCommand.SetAction(parseResult =>
+    services.GetRequiredService<TagsCommand>().Execute(
+        GetVisitorSettings(parseResult, tagsPath, tagsPattern, tagsHidden)));
 
 var renderCommand = new Command("render", "Renders Markdown files to a static HTML site.");
 renderCommand.Aliases.Add("r");
@@ -212,6 +220,7 @@ serveCommand.SetAction(parseResult =>
         parseResult.GetValue(noBrowser)));
 rootCommand.Subcommands.Add(serveCommand);
 rootCommand.Subcommands.Add(treeCommand);
+rootCommand.Subcommands.Add(tagsCommand);
 
 var pageCommand = new Command("page", "Moves Markdown pages with their links and shows which pages link to a file.");
 var pageMoveCommand = new Command("move", "Moves a page or a folder and updates the links of all pages.");

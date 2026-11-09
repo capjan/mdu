@@ -21,6 +21,12 @@ public static class MarkdownLinks
     private static readonly Regex Scheme = new(@"^[A-Za-z][A-Za-z0-9+.-]*:", RegexOptions.Compiled);
     private static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder().UseFootnotes().UsePreciseSourceLocation().Build();
 
+    /// <summary>The URL of a file relative to a folder, with each path segment escaped, such as <c>../Setup/Install%20Guide.html</c>.</summary>
+    public static string GetRelativeUrl(string fromDirectory, string toPath) =>
+        string.Join('/', Path.GetRelativePath(fromDirectory, toPath)
+            .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            .Select(Uri.EscapeDataString));
+
     public static bool IsMarkdownFile(string path) =>
         Path.GetExtension(path).Equals(".md", StringComparison.OrdinalIgnoreCase) ||
         Path.GetExtension(path).Equals(".markdown", StringComparison.OrdinalIgnoreCase);

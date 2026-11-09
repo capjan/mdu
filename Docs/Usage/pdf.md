@@ -5,7 +5,7 @@ navigation.order: 45
 
 # pdf
 
-`mdu pdf` writes your documentation to a single PDF file. It uses the same Markdown pipeline as `mdu render`, so code highlighting, icons, keyboard keys, math, callouts, and supported diagrams appear in the PDF too. The PDF writer is built in, so export works out of the box and offline. A page with [tags](../Features/Tags.md) shows them in a line below its title.
+`mdu pdf` writes your documentation to a single PDF file. It uses the same Markdown pipeline as `mdu render`, so code highlighting, icons, keyboard keys, math, callouts, and supported diagrams appear in the PDF too. The PDF writer is built in, so export works out of the box and offline. A page with [tags](../Features/Tags.md) shows them in a line below its title. The tags of all exported pages become the keywords of the PDF.
 
 > [!TIP]
 > To offer the PDF as a download on your website, add a [PDF Link](../Features/Pdf-Link.md) to a page. `mdu render` and `mdu serve` then generate the PDF for you.
