@@ -841,17 +841,21 @@ public class FixCommand
         if (FindTagsPage(rootPath) is { } tagsPath)
         {
             var existing = updated.GetValueOrDefault(tagsPath) ?? File.ReadAllText(tagsPath);
-            if (MaterialTagsMarker.Match(existing) is { Success: true } marker)
+            if (MaterialTagsMarker.Matches(existing) is { Count: > 0 } markers)
             {
                 // The page becomes the tag vocabulary: one heading per tag in place of the listing marker. MDU writes
                 // the listings itself, as tag pages, so the page keeps only what authors write: the descriptions.
-                var include = ReadMarkerTags(marker.Value, "include");
-                var exclude = ReadMarkerTags(marker.Value, "exclude") ?? [];
-                var tags = (include ?? Directory.EnumerateFiles(rootPath, "*.md", SearchOption.AllDirectories)
-                        .SelectMany(page => ReadMetadata(page).TryGetValue("tags", out var value)
-                            ? value.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                            : []))
-                    .Where(tag => !exclude.Any(excluded => TagCatalog.Normalize(excluded) == TagCatalog.Normalize(tag)))
+                // Each marker lists the tags of its include option, or all tags, without those of its exclude option. A
+                // tag gets a heading when any marker of the page lists it.
+                var pageTags = Directory.EnumerateFiles(rootPath, "*.md", SearchOption.AllDirectories)
+                    .SelectMany(page => ReadMetadata(page).TryGetValue("tags", out var value)
+                        ? value.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                        : [])
+                    .ToArray();
+                var listings = markers.Select(marker => (Include: ReadMarkerTags(marker.Value, "include"),
+                    Exclude: (ReadMarkerTags(marker.Value, "exclude") ?? []).Select(TagCatalog.Normalize).ToHashSet())).ToArray();
+                var tags = listings.SelectMany(listing => (listing.Include ?? pageTags)
+                        .Where(tag => !listing.Exclude.Contains(TagCatalog.Normalize(tag))))
                     .Order(StringComparer.OrdinalIgnoreCase)
                     .ThenBy(tag => tag, StringComparer.Ordinal)
                     .DistinctBy(TagCatalog.Normalize)

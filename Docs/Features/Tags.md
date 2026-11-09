@@ -102,12 +102,12 @@ limit: 6
 | --- | --- | --- |
 | `tags` | Required | One tag or a list. A page must carry all of them. |
 | `exclude` | None | One tag or a list. Pages with any of them are left out. |
-| `limit` | `6` | The number of pages shown; `0` shows all. When pages are left out, a link leads to the tag page. |
+| `limit` | `6` on pages, all on dashboards and in the PDF | The number of pages shown; `0` shows all. On a page, a link leads to the tag page when pages are left out. |
 
 The pages appear in navigation order as cards with their area and `description`. The page with the block is never listed itself. The block also works inside a callout or a list item. With a vocabulary, the tags of the block must be defined there, like the tags of a page.
 
 - **On a [dashboard](Dashboard.md)**, the pages become tiles of the group the block is in. The page `icon` and `description` become the tile's icon and subtitle.
-- **In the PDF**, the block is a plain list of the pages that are part of the same export, with links to them within the document.
+- **In the PDF**, the block is a plain list. Pages of the same export link to their place in the document; the others are named without a link.
 - **On GitHub**, the block stays a readable code block with its options.
 
 ## Check the tags
@@ -125,4 +125,4 @@ Incident     0  only in Tags.md
 
 ## Migrating from Material for MkDocs
 
-The `tags` front matter of Material for MkDocs works unchanged. `mdu fix` turns a `Tags.md` or `tags.md` at the documentation root with the `<!-- material/tags -->` marker into the vocabulary: the marker becomes one heading per tag that the pages use, and `content.tags` is added to `mdu.yml`. The `include` and `exclude` options of the marker decide which tags get a heading. Without tagged pages, `mdu fix` only removes the marker. Add a description below each heading afterwards. To check the tags against a list as with `tags_allowed`, keep only the allowed names in the vocabulary.
+The `tags` front matter of Material for MkDocs works unchanged. `mdu fix` turns a `Tags.md` or `tags.md` at the documentation root with the `<!-- material/tags -->` marker into the vocabulary: the marker becomes one heading per tag that the pages use, and `content.tags` is added to `mdu.yml`. The `include` and `exclude` options of the markers decide which tags get a heading; with several markers, a tag gets a heading when any of them lists it. Without tagged pages, `mdu fix` only removes the marker. Add a description below each heading afterwards. To check the tags against a list as with `tags_allowed`, keep only the allowed names in the vocabulary.

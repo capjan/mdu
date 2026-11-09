@@ -497,7 +497,7 @@ public class TagsTest
     }
 
     [Fact]
-    public void PdfTagListOnlyListsPagesOfTheExport()
+    public void PdfTagListNamesPagesOutsideTheExportToo()
     {
         var files = StandardSite();
         files["Operations/Hub.md"] = "# Ops hub\n\n```tags\ntags: Security\nlimit: 0\n```\n";
@@ -511,10 +511,60 @@ public class TagsTest
             Assert.Equal(0, result);
             var pdf = System.Text.Encoding.Latin1.GetString(File.ReadAllBytes(output));
             Assert.Contains(Hex("Encrypt"), pdf);
-            Assert.DoesNotContain(Hex("Manage"), pdf);
+            // Manage secrets is not part of the Operations export, but the list still names it.
+            Assert.Contains(Hex("Manage"), pdf);
+            Assert.DoesNotContain(Hex("other"), pdf);
         });
 
         static string Hex(string text) => Convert.ToHexString(System.Text.Encoding.Latin1.GetBytes(text));
+    }
+
+    [Theory]
+    // Only pages link to the tag page for the rest, so only they show six entries without a limit.
+    [InlineData(TagListStyle.Page, null, 6)]
+    [InlineData(TagListStyle.Dashboard, null, 8)]
+    [InlineData(TagListStyle.Pdf, null, 8)]
+    [InlineData(TagListStyle.Dashboard, 3, 3)]
+    [InlineData(TagListStyle.Page, 0, 8)]
+    public void DefaultLimitOnlyAppliesToPages(TagListStyle style, int? limit, int shown)
+    {
+        var pages = Enumerable.Range(1, 8)
+            .Select(index => new MarkdownFile(new FileInfo($"Page{index}.md"), null) { Title = $"Page {index}" })
+            .ToArray();
+
+        var markdown = TagListBlock.Render(pages, new TagListOptions(["Security"], [], limit), style,
+            page => page.Title.Replace(' ', '-') + ".html", _ => string.Empty, "tags/security.html");
+
+        Assert.Equal(shown, markdown.Split("\n- ").Length - 1);
+        Assert.Equal(style == TagListStyle.Page && shown < 8, markdown.Contains("All pages tagged Security", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void PagesWithoutUrlAreNamedWithoutLink()
+    {
+        var pages = new[] { "Inside", "Outside" }
+            .Select(title => new MarkdownFile(new FileInfo($"{title}.md"), null) { Title = title }).ToArray();
+
+        var markdown = TagListBlock.Render(pages, new TagListOptions(["Security"], [], null), TagListStyle.Pdf,
+            page => page.Title == "Inside" ? "Inside.html" : null, _ => string.Empty, null);
+
+        Assert.Equal("\n- [Inside](<Inside.html>)\n- Outside\n", markdown);
+    }
+
+    [Fact]
+    public void SectionPageCardsShowNoAreaOfTheirOwn()
+    {
+        var files = StandardSite();
+        files["Operations/README.md"] = "---\ndescription: Day-to-day operations.\ntags: [Kubernetes]\n---\n# Operations\n";
+        files["Hub.md"] = "# Hub\n\n```tags\ntags: Kubernetes\n```\n";
+        WithSite(files, root =>
+        {
+            Assert.Equal(0, Render(root).Result);
+            var hub = File.ReadAllText(Path.Combine(root, "site", "Hub.html"));
+
+            Assert.Contains("<span class=\"tag-list-detail\">Day-to-day operations.</span>", hub);
+            Assert.Contains("<span class=\"tag-list-detail\">Operations · Renew TLS certificates.</span>", hub);
+        });
     }
 
     [Fact]

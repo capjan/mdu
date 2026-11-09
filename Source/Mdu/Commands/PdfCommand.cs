@@ -370,14 +370,14 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         }
     }
 
-    // In the PDF, a tags block is a plain list whose links lead to the pages within the document, so it lists only
-    // the pages of this export.
+    // In the PDF, a tags block is a plain list. Pages of this export are linked within the document; the others are
+    // named without a link, because the PDF does not contain them.
     private string ExpandTagLists(string rootPath, MarkdownFile page, string markdown, IReadOnlySet<MarkdownFile> exportedPages) =>
         TagListBlock.Expand(markdown, block => Tags.Check(block) is { } error
             ? TagListBlock.RenderError(error)
-            : TagListBlock.Render(Tags.Select(block.Options!, page).Where(exportedPages.Contains).ToArray(), block.Options!,
+            : TagListBlock.Render(Tags.Select(block.Options!, page), block.Options!,
                 TagListStyle.Pdf,
-                target => MarkdownLinks.GetRelativeUrl(
+                target => !exportedPages.Contains(target) ? null : MarkdownLinks.GetRelativeUrl(
                     Path.GetDirectoryName(Path.Combine(rootPath, GetRelativeHtmlPath(rootPath, page)))!,
                     Path.Combine(rootPath, GetRelativeHtmlPath(rootPath, target))),
                 _ => string.Empty, null));

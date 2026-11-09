@@ -11,7 +11,8 @@ using YamlDotNet.RepresentationModel;
 namespace Mdu.Service;
 
 /// <summary>The options of a <c>tags</c> code block: the pages must carry every tag of <c>tags</c> and none of <c>exclude</c>.</summary>
-public sealed record TagListOptions(IReadOnlyList<string> Tags, IReadOnlyList<string> Exclude, int Limit);
+/// <param name="Limit">The number of pages to show, 0 for all; null when the block does not set it.</param>
+public sealed record TagListOptions(IReadOnlyList<string> Tags, IReadOnlyList<string> Exclude, int? Limit);
 
 /// <summary>A <c>tags</c> code block of a page, with its options or the reason they cannot be used.</summary>
 public sealed record TagListBlockSource(int Start, int Length, int Line, TagListOptions? Options, string? Error);
@@ -40,6 +41,7 @@ public enum TagListStyle
 public static partial class TagListBlock
 {
     public const string Language = "tags";
+    /// <summary>The number of cards a page shows without <c>limit</c>; a link leads to the tag page for the rest.</summary>
     public const int DefaultLimit = 6;
 
     private static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
@@ -99,7 +101,7 @@ public static partial class TagListBlock
 
         IReadOnlyList<string> tags = [];
         IReadOnlyList<string> exclude = [];
-        var limit = DefaultLimit;
+        int? limit = null;
         foreach (var (keyNode, value) in mapping.Children)
         {
             switch ((keyNode as YamlScalarNode)?.Value)
@@ -114,8 +116,9 @@ public static partial class TagListBlock
                     break;
                 case "limit":
                     if (value is not YamlScalarNode { Value: { } text } ||
-                        !int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out limit))
+                        !int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var number))
                         return (null, "'limit' in the tags block must be a whole number, or 0 for no limit.");
+                    limit = number;
                     break;
                 case var key:
                     return (null, $"The tags block does not know the option '{key}'. Use 'tags', 'exclude', and 'limit'.");
@@ -135,18 +138,22 @@ public static partial class TagListBlock
     }
 
     /// <summary>
-    /// Writes the pages as Markdown. A page list gets a link to the tag page when the limit cuts it short; a dashboard
-    /// turns the list into tiles, and the PDF gets plain links.
+    /// Writes the pages as Markdown: cards on a page, tiles on a dashboard, or a plain list in the PDF. A page shows
+    /// <see cref="DefaultLimit"/> cards unless the block sets <c>limit</c>, and links to the tag page for the rest;
+    /// dashboards and the PDF have no such link, so they show all pages unless the block sets a limit.
     /// </summary>
+    /// <param name="url">The link to a page, or null to write its title without a link.</param>
+    /// <param name="area">The navigation area to show for a page, or an empty text for none.</param>
     public static string Render(
         IReadOnlyList<MarkdownFile> pages,
         TagListOptions options,
         TagListStyle style,
-        Func<MarkdownFile, string> url,
+        Func<MarkdownFile, string?> url,
         Func<MarkdownFile, string> area,
         string? allPagesUrl)
     {
-        var shown = options.Limit > 0 ? pages.Take(options.Limit).ToArray() : pages.ToArray();
+        var limit = options.Limit ?? (style == TagListStyle.Page ? DefaultLimit : 0);
+        var shown = limit > 0 ? pages.Take(limit).ToArray() : pages.ToArray();
         var output = new StringBuilder("\n");
         if (shown.Length == 0)
         {
@@ -162,27 +169,23 @@ public static partial class TagListBlock
         foreach (var page in shown)
         {
             var title = Escape(NavigationPage.RemoveIconShortcodes(NavigationPage.GetTitle(page)).Trim());
-            var link = $"[{title}](<{url(page)}>)";
-            switch (style)
+            var link = url(page) is { } target ? $"[{title}](<{target}>)" : title;
+            if (style == TagListStyle.Page)
             {
-                case TagListStyle.Page:
-                    var detail = string.Join(" · ", new[] { area(page), page.Description }.Where(text => !string.IsNullOrWhiteSpace(text)));
-                    output.Append($"- {link}");
-                    if (detail.Length > 0) output.Append($"\n  <span class=\"tag-list-detail\">{HtmlEncoder.Default.Encode(detail)}</span>");
-                    output.Append('\n');
-                    break;
-                case TagListStyle.Dashboard:
-                    var icon = string.IsNullOrWhiteSpace(page.Icon) ? string.Empty : $":{page.Icon.Trim().Trim(':').Replace('/', '-')}: ";
-                    output.Append($"- {icon}{link}");
-                    if (!string.IsNullOrWhiteSpace(page.Description)) output.Append($" — {Escape(page.Description.Trim())}");
-                    output.Append('\n');
-                    break;
-                default:
-                    output.Append($"- {link}");
-                    if (!string.IsNullOrWhiteSpace(page.Description)) output.Append($" — {Escape(page.Description.Trim())}");
-                    output.Append('\n');
-                    break;
+                var detail = string.Join(" · ", new[] { area(page), page.Description }.Where(text => !string.IsNullOrWhiteSpace(text)));
+                output.Append($"- {link}");
+                if (detail.Length > 0) output.Append($"\n  <span class=\"tag-list-detail\">{HtmlEncoder.Default.Encode(detail)}</span>");
             }
+            else
+            {
+                // A dashboard turns the text after the link into the tile's subtitle and an icon before it into its logo.
+                var icon = style == TagListStyle.Dashboard && !string.IsNullOrWhiteSpace(page.Icon)
+                    ? $":{page.Icon.Trim().Trim(':').Replace('/', '-')}: "
+                    : string.Empty;
+                output.Append($"- {icon}{link}");
+                if (!string.IsNullOrWhiteSpace(page.Description)) output.Append($" — {Escape(page.Description.Trim())}");
+            }
+            output.Append('\n');
         }
 
         if (style == TagListStyle.Page)

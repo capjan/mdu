@@ -64,7 +64,10 @@ public partial class MarkdigVisitor
             return TagListBlock.Render(_siteTags.Select(options, page), options,
                 dashboard ? TagListStyle.Dashboard : TagListStyle.Page,
                 target => GetRelativeUrl(segments, GetSiteRelativeSegments(GetOutputPagePath(GetRenderPath(target)))),
-                target => NavigationPage.RemoveIconShortcodes(NavigationPage.GetTitle(NavigationPage.GetArea(target, _navigationRoots))).Trim(),
+                // A section page is its own area; repeating its title would add nothing.
+                target => NavigationPage.GetArea(target, _navigationRoots) is var area && !ReferenceEquals(area, target)
+                    ? NavigationPage.RemoveIconShortcodes(NavigationPage.GetTitle(area)).Trim()
+                    : string.Empty,
                 allPages);
         });
     }

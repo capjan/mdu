@@ -770,6 +770,8 @@ public class FixCommandTest
     [InlineData("Tags.md", "<!-- material/tags -->", "# A\n", "", false)]
     [InlineData("Tags.md", "<!-- material/tags { include: [Release, Future] } -->", "---\ntags: [Beta, Release]\n---\n# A\n", "## Future\n\n## Release\n", true)]
     [InlineData("Tags.md", "<!-- material/tags { exclude: [Beta] } -->", "---\ntags: [Beta, Release]\n---\n# A\n", "## Release\n", true)]
+    // Every marker counts: a tag gets a heading when any of them lists it.
+    [InlineData("Tags.md", "<!-- material/tags { include: [Release] } -->\n\n<!-- material/tags { include: [Beta] } -->", "---\ntags: [Beta, Release, Other]\n---\n# A\n", "## Beta\n\n## Release\n", true)]
     public void MigratesTheMaterialTagsPageOnlyWhenItDefinesTags(string fileName, string marker, string page, string headings, bool registered)
     {
         var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
