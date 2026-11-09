@@ -45,6 +45,7 @@ public class LinterVisitor: IVisitor<MarkdownFile>
         var visited = new HashSet<string>(PathComparer);
         Visit(graph, new NavigationTitleGroup());
         _allPages = pages;
+        ReportDuplicateTopNavigationTitles(pages);
         ReportMissingSectionReadmes(pages);
         ReportMkDocsPagesFiles(pages);
         return;
@@ -85,6 +86,31 @@ public class LinterVisitor: IVisitor<MarkdownFile>
     private sealed class NavigationTitleGroup
     {
         public Dictionary<string, MarkdownFile> Titles { get; } = new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Tabs share one top bar. Local tabs are siblings and are covered by the sibling check, but tabs of an import
+    /// with mdu.import.navigation: merge sit deeper in the tree, so their labels are compared here.
+    /// </summary>
+    private void ReportDuplicateTopNavigationTitles(IEnumerable<MarkdownFile> pages)
+    {
+        var tabs = new Dictionary<string, MarkdownFile>(StringComparer.OrdinalIgnoreCase);
+        foreach (var page in NavigationPage.OrderPages(pages.Where(page =>
+                     page.NavigationVisible && page.NavigationPlacement == NavigationPlacement.Top &&
+                     NavigationPage.IsTopLevel(page, _rootPath))))
+        {
+            var title = NavigationPage.GetTitle(page);
+            if (!tabs.TryAdd(title, page) && !ReferenceEquals(GetVisibleParent(tabs[title]), GetVisibleParent(page)))
+                ErrorReceiver.Add(page.FileInfo.FullName, 1,
+                    $"{RuleCodes.DuplicateNavigationTitle}: Top navigation title '{title}' duplicates the tab of page '{GetNavigationEntryPath(tabs[title])}'. Set a unique navigation.title.");
+        }
+    }
+
+    private static MarkdownFile? GetVisibleParent(MarkdownFile page)
+    {
+        var parent = page.Parent;
+        while (parent is { NavigationVisible: false }) parent = parent.Parent;
+        return parent;
     }
 
     private string GetNavigationEntryPath(MarkdownFile page) =>

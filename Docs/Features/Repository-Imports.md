@@ -42,9 +42,9 @@ navigation:
 ---
 ```
 
-With this option, top navigation eligibility is evaluated relative to the imported source folder, regardless of how deeply it is mounted. Imported pages still need `navigation.placement: top`; only the source root, files directly in the source folder, and first-level folder `README.md` or `index.md` pages qualify. Deeper placements remain lint errors.
+With this option, top navigation eligibility is evaluated relative to the imported source folder, regardless of how deeply it is mounted. Imported pages still need `navigation.placement: top`; only files directly in the source folder and first-level folder `README.md` or `index.md` pages qualify. Deeper placements remain lint errors.
 
-The declaration's front matter still controls the imported root page, including its title and placement. For example, the declaration above provides the *Architecture* tab, while imported `Testhandbuch.md` and `Bestandsverzeichnis.md` pages marked `top` provide their own tabs.
+The declaration's front matter still controls the imported root page, including its title and placement. The root keeps the declaration's position in the combined site, so it can only be a tab when the declaration itself is top-level. For example, the declaration above provides the *Architecture* tab, while imported `Testhandbuch.md` and `Bestandsverzeichnis.md` pages marked `top` provide their own tabs.
 
 Titles, visibility, and ordering use the usual `navigation.*` settings. All tabs share one global order: smaller `navigation.order` values come first, followed by entries without an order sorted by title. A page belongs to its nearest enclosing tab, so selecting an imported tab shows its own sidebar section rather than the enclosing import's section. On compact screens the full tree remains available.
 

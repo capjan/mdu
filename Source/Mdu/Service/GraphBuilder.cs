@@ -109,7 +109,8 @@ public class GraphBuilder
         {
             var sourceRelativePath = Path.GetRelativePath(source.SourceFolderPath, page.FileInfo.FullName);
             page.SiteRelativePath = Path.Combine(mountDirectory, sourceRelativePath);
-            if (importPage.MergeImportedNavigation)
+            // The root keeps its mounted position: its placement comes from the local declaration.
+            if (importPage.MergeImportedNavigation && !ReferenceEquals(page, importedRoot))
                 page.ImportedNavigationRelativePath = sourceRelativePath;
             page.EditPageLink = GetEditPageLink(source, page.FileInfo);
             page.SourceRootPath = source.RepositoryPath;

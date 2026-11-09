@@ -126,7 +126,7 @@ public class DataPreparationVisitor: IVisitor<MarkdownFile>
 
         var mergeNavigation = import.Children.TryGetValue(new YamlScalarNode("navigation"), out var navigation);
         if (mergeNavigation && (navigation is not YamlScalarNode scalar ||
-                                !string.Equals(scalar.Value, "merge", StringComparison.OrdinalIgnoreCase)))
+                                !string.Equals(scalar.Value, "merge", StringComparison.Ordinal)))
             throw new InvalidOperationException("The mdu.import.navigation frontmatter field must be 'merge' when specified.");
 
         return (source, mergeNavigation);

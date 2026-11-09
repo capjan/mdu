@@ -50,7 +50,7 @@ How tabs behave:
 
 A top-level Markdown file can be a tab too; its sidebar section is simply empty.
 
-For [repository imports](Repository-Imports.md#merging-top-navigation), `mdu.import.navigation: merge` also allows tabs that are top-level relative to the imported source folder. The pages keep their mounted URLs and tree positions; the nearest enclosing tab owns each page's sidebar section. Without this option, placement is evaluated against the combined site's folder structure.
+For [repository imports](Repository-Imports.md#merging-top-navigation), `mdu.import.navigation: merge` also allows tabs on imported pages that are top-level relative to the imported source folder; the import root itself keeps the declaration's position. The pages keep their mounted URLs and tree positions; the nearest enclosing tab owns each page's sidebar section. Without this option, placement is evaluated against the combined site's folder structure.
 
 ## Ordering entries
 

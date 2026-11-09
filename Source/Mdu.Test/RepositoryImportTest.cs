@@ -20,6 +20,7 @@ public class RepositoryImportTest
     [InlineData("index.md", "Architektur.md", true, true)]
     [InlineData("README.md", "Architektur/README.md", true, true)]
     [InlineData("README.md", "Area/Architektur.md", true, true)]
+    [InlineData("README.md", "Guides/Architektur.md", true, true)]
     [InlineData("README.md", "Architektur.md", false, true)]
     [InlineData("README.md", "Architektur.md", true, false)]
     public void MergesOnlySourceTopLevelNavigationWhenRequested(string rootFileName, string markerPath, bool merge, bool rootTab)
@@ -33,6 +34,9 @@ public class RepositoryImportTest
         var mount = Path.Combine(Path.GetDirectoryName(markerPath)!, Path.GetFileNameWithoutExtension(markerPath));
         if (Path.GetFileName(markerPath) == "README.md") mount = Path.GetDirectoryName(markerPath)!;
         var mountUrl = mount.Replace(Path.DirectorySeparatorChar, '/');
+        // The import root keeps its mounted position, so it is only a tab when mounted at the top level.
+        var rootIsTab = rootTab && !mount.Contains(Path.DirectorySeparatorChar);
+        var enclosingTab = markerPath.StartsWith("Guides/", StringComparison.Ordinal);
         Directory.CreateDirectory(Path.GetDirectoryName(marker)!);
         Directory.CreateDirectory(Path.Combine(remoteDocs, "Testhandbuch"));
         Directory.CreateDirectory(Path.Combine(remoteDocs, "Operations"));
@@ -42,6 +46,8 @@ public class RepositoryImportTest
         const string sourceUrl = "https://github.com/example/architecture/tree/main/Docs";
         const string otherSourceUrl = "https://github.com/example/other/tree/main/Docs";
         File.WriteAllText(Path.Combine(docs, "README.md"), "# Dashboard\n");
+        if (enclosingTab)
+            File.WriteAllText(Path.Combine(docs, "Guides", "README.md"), "---\nnavigation.placement: top\n---\n# Guides\n");
         File.WriteAllText(Path.Combine(docs, "Other.md"), $"---\nmdu:\n  import:\n    source: {otherSourceUrl}\n---\n");
         File.WriteAllText(Path.Combine(otherRepository, "Docs", "README.md"), "# Other\n");
         File.WriteAllText(Path.Combine(otherRepository, "Docs", "OtherTab.md"),
@@ -93,6 +99,9 @@ public class RepositoryImportTest
             Assert.Contains(placementErrors, error => error.FilePath == Path.Combine(remoteDocs, "Deep", "NotTopLevel.md"));
             Assert.Contains(placementErrors, error => error.FilePath == Path.Combine(docs, mount, "Local.md"));
             Assert.Contains(placementErrors, error => error.FilePath == Path.Combine(otherRepository, "Docs", "OtherTab.md"));
+            Assert.Equal(rootTab && !rootIsTab, placementErrors.Any(error => error.FilePath == Path.Combine(remoteDocs, rootFileName)));
+            if (enclosingTab)
+                Assert.DoesNotContain(placementErrors, error => error.FilePath == Path.Combine(docs, "Guides", "README.md"));
 
             var command = new RenderCommand(builder, new CountNodesVisitor<MarkdownFile>(), new HtmlRenderer(), new SearchIndexBuilder());
             Assert.Equal(0, command.Execute(new RenderCommandSettings { RootPath = docs, OutputPath = site }));
@@ -100,7 +109,7 @@ public class RepositoryImportTest
             var tabs = home.Split("<nav class=\"top-navigation", 2)[1].Split("</nav>", 2)[0];
             foreach (var title in new[] { "Bestandsverzeichnis", "Testhandbuch", "Operations" })
                 Assert.Equal(merge, tabs.Contains($"data-label=\"{title}\"", StringComparison.Ordinal));
-            Assert.Equal(rootTab, tabs.Contains("data-label=\"Architektur\"", StringComparison.Ordinal));
+            Assert.Equal(rootIsTab, tabs.Contains("data-label=\"Architektur\"", StringComparison.Ordinal));
             Assert.DoesNotContain("data-label=\"Replaced root\"", tabs);
             Assert.DoesNotContain("data-label=\"Nested\"", tabs);
             Assert.DoesNotContain("data-label=\"NotTopLevel\"", tabs);
@@ -110,13 +119,15 @@ public class RepositoryImportTest
             if (merge)
             {
                 Assert.Contains($"href=\"{mountUrl}/Bestandsverzeichnis.html\"", tabs);
-                if (rootTab)
+                if (rootIsTab)
                     Assert.True(tabs.IndexOf("data-label=\"Architektur\"", StringComparison.Ordinal) < tabs.IndexOf("data-label=\"Testhandbuch\"", StringComparison.Ordinal));
                 Assert.True(tabs.IndexOf("data-label=\"Testhandbuch\"", StringComparison.Ordinal) < tabs.IndexOf("data-label=\"Bestandsverzeichnis\"", StringComparison.Ordinal));
                 var guide = File.ReadAllText(Path.Combine(site, mount, "Testhandbuch", "Guide.html"));
                 Assert.Contains("aria-current=\"location\" data-label=\"Testhandbuch\"", guide);
-                if (rootTab)
+                if (rootIsTab)
                     Assert.Contains("aria-current=\"false\" data-label=\"Architektur\"", guide);
+                if (enclosingTab)
+                    Assert.Contains("aria-current=\"false\" data-label=\"Guides\"", guide);
                 Assert.Contains("data-top=\"index.html\"", guide);
                 var breadcrumbs = guide.Split("<nav class=\"breadcrumbs\"", 2)[1].Split("</nav>", 2)[0];
                 Assert.Contains(">Architektur</a>", breadcrumbs);
@@ -135,6 +146,8 @@ public class RepositoryImportTest
 
     [Theory]
     [InlineData("unknown")]
+    [InlineData("Merge")]
+    [InlineData("MERGE")]
     [InlineData("false")]
     [InlineData("''")]
     [InlineData("null")]
@@ -909,6 +922,225 @@ public class RepositoryImportTest
         finally
         {
             Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void MergedImportTabsShareOneGlobalOrderWithLocalTabs()
+    {
+        using var site = MergeNavigationSite.Create(merge: true);
+        site.WriteLocal("Alpha.md", "---\nnavigation.placement: top\nnavigation.order: 15\n---\n# Alpha\n");
+        site.WriteLocal("Zeta.md", "---\nnavigation.placement: top\n---\n# Zeta\n");
+        site.WriteImported("Beta.md", "---\nnavigation.placement: top\n---\n# Beta\n");
+
+        site.Render();
+
+        var tabs = site.TopNavigationLabels("index.html");
+        Assert.Equal(["Architektur", "Alpha", "Testhandbuch", "Beta", "Zeta"], tabs);
+    }
+
+    [Fact]
+    public void MergedImportAssignsEachPageToItsNearestTab()
+    {
+        using var site = MergeNavigationSite.Create(merge: true);
+        site.WriteImported("Notes.md", "# Notes\n");
+
+        site.Render();
+
+        var owners = site.SidebarOwners();
+        Assert.Equal("Architektur/Testhandbuch/index.html", owners["Architektur/Testhandbuch/Guide.html"]);
+        Assert.Equal("Architektur/Testhandbuch/index.html", owners["Architektur/Testhandbuch/index.html"]);
+        Assert.Equal("Architektur/index.html", owners["Architektur/Notes.html"]);
+        Assert.Equal("Architektur/index.html", owners["Architektur/index.html"]);
+        Assert.Null(owners["index.html"]);
+    }
+
+    [Fact]
+    public void MergingNavigationKeepsUrlsBreadcrumbsAndSearchEntries()
+    {
+        using var merged = MergeNavigationSite.Create(merge: true);
+        using var plain = MergeNavigationSite.Create(merge: false);
+
+        merged.Render();
+        plain.Render();
+
+        Assert.Equal(plain.OutputFiles(), merged.OutputFiles());
+        Assert.Equal(plain.Breadcrumbs("Architektur/Testhandbuch/Guide.html"), merged.Breadcrumbs("Architektur/Testhandbuch/Guide.html"));
+        var searchFiles = plain.OutputFiles().Where(path => path.Contains("search", StringComparison.OrdinalIgnoreCase)).ToArray();
+        Assert.NotEmpty(searchFiles);
+        foreach (var path in searchFiles)
+            Assert.Equal(plain.ReadOutput(path), merged.ReadOutput(path));
+    }
+
+    [Fact]
+    public void MergedImportTabsReportExpandedSetting()
+    {
+        using var site = MergeNavigationSite.Create(merge: true);
+        site.WriteImported(Path.Combine("Testhandbuch", "README.md"),
+            "---\nnavigation.placement: top\nnavigation.order: 20\nnavigation.expanded: true\n---\n# Testhandbuch\n");
+
+        var errors = site.Lint();
+
+        Assert.Contains(errors, error => error.Message.StartsWith("MDU018:", StringComparison.Ordinal) &&
+                                         error.FilePath == site.ImportedPath(Path.Combine("Testhandbuch", "README.md")));
+        Assert.DoesNotContain(errors, error => error.Message.StartsWith("MDU017:", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void MergedImportTabsMustNotRepeatLocalTabTitles()
+    {
+        using var site = MergeNavigationSite.Create(merge: true);
+        site.WriteLocal("Testing.md", "---\nnavigation.placement: top\nnavigation.title: testhandbuch\n---\n# Testing\n");
+
+        var duplicates = site.Lint().Where(error => error.Message.StartsWith("MDU019:", StringComparison.Ordinal)).ToArray();
+
+        // Tab order decides which page keeps the title: order 20 (imported) comes before the unordered local page.
+        var duplicate = Assert.Single(duplicates);
+        Assert.Equal(site.LocalPath("Testing.md"), duplicate.FilePath);
+        Assert.Contains("Architektur/Testhandbuch/README.md", duplicate.Message);
+    }
+
+    [Fact]
+    public void DuplicateLocalTabsAreReportedOnce()
+    {
+        using var site = MergeNavigationSite.Create(merge: false);
+        site.WriteLocal("Alpha.md", "---\nnavigation.placement: top\n---\n# Same\n");
+        site.WriteLocal("Beta.md", "---\nnavigation.placement: top\n---\n# Same\n");
+
+        Assert.Single(site.Lint(), error => error.Message.StartsWith("MDU019:", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void MergedImportWithoutTopPagesAddsNoTabs()
+    {
+        using var site = MergeNavigationSite.Create(merge: true, importedTabs: false);
+
+        Assert.DoesNotContain(site.Lint(), error => error.Message.StartsWith("MDU017:", StringComparison.Ordinal));
+        site.Render();
+        Assert.Equal(["Architektur"], site.TopNavigationLabels("index.html"));
+    }
+
+    [Fact]
+    public void MergeOptionAppliesOnlyToItsOwnImport()
+    {
+        using var site = MergeNavigationSite.Create(merge: true);
+        site.AddSecondImport("Other.md", merge: false,
+            ("OtherTab.md", "---\nnavigation.placement: top\n---\n# OtherTab\n"));
+
+        var errors = site.Lint();
+        site.Render();
+
+        Assert.Contains(errors, error => error.Message.StartsWith("MDU017:", StringComparison.Ordinal) &&
+                                         error.FilePath.EndsWith(Path.Combine("other", "Docs", "OtherTab.md"), StringComparison.Ordinal));
+        Assert.DoesNotContain("OtherTab", site.TopNavigationLabels("index.html"));
+        Assert.Contains("Testhandbuch", site.TopNavigationLabels("index.html"));
+    }
+
+    /// <summary>A local site with an <c>Architektur.md</c> import declaration and its imported repository.</summary>
+    private sealed class MergeNavigationSite : IDisposable
+    {
+        private readonly string _root;
+        private readonly List<(string Url, ResolvedGitTreeSource Source)> _sources = [];
+        private const string SourceUrl = "https://github.com/example/architecture/tree/main/Docs";
+
+        private MergeNavigationSite(string root) => _root = root;
+
+        private string Docs => Path.Combine(_root, "docs");
+        private string ImportedDocs => Path.Combine(_root, "architecture", "Docs");
+        private string Output => Path.Combine(_root, "site");
+
+        public static MergeNavigationSite Create(bool merge, bool importedTabs = true)
+        {
+            var site = new MergeNavigationSite(CreateTemporaryDirectory());
+            site._sources.Add((SourceUrl, CreateResolvedSource(Path.Combine(site._root, "architecture"), "architecture")));
+            site.WriteLocal("README.md", "# Dashboard\n");
+            site.WriteLocal("Architektur.md",
+                $"---\ntitle: Architektur\nmdu:\n  import:\n    source: {SourceUrl}\n{(merge ? "    navigation: merge\n" : string.Empty)}" +
+                "navigation:\n  placement: top\n  order: 10\n---\n");
+            site.WriteImported("README.md", "# Architecture\n");
+            var placement = importedTabs ? "navigation.placement: top\n" : string.Empty;
+            site.WriteImported(Path.Combine("Testhandbuch", "README.md"), $"---\n{placement}navigation.order: 20\n---\n# Testhandbuch\n");
+            site.WriteImported(Path.Combine("Testhandbuch", "Guide.md"), "# Guide\n");
+            return site;
+        }
+
+        public void WriteLocal(string path, string content) => Write(Path.Combine(Docs, path), content);
+
+        public void WriteImported(string path, string content) => Write(ImportedPath(path), content);
+
+        public string ImportedPath(string path) => Path.Combine(ImportedDocs, path);
+
+        public string LocalPath(string path) => Path.Combine(Docs, path);
+
+        public void AddSecondImport(string declaration, bool merge, params (string Path, string Content)[] pages)
+        {
+            const string url = "https://github.com/example/other/tree/main/Docs";
+            var repository = Path.Combine(_root, "other");
+            _sources.Add((url, CreateResolvedSource(repository, "other")));
+            WriteLocal(declaration, $"---\nmdu:\n  import:\n    source: {url}\n{(merge ? "    navigation: merge\n" : string.Empty)}---\n");
+            Write(Path.Combine(repository, "Docs", "README.md"), "# Other\n");
+            foreach (var (path, content) in pages) Write(Path.Combine(repository, "Docs", path), content);
+        }
+
+        public IReadOnlyList<LintDiagnostic> Lint()
+        {
+            var graph = CreateBuilder().CreateGraph(new VisitorSettings { RootPath = Docs });
+            var receiver = new ConsoleLintErrorReceiver();
+            var linter = new LinterVisitor(receiver);
+            linter.Prepare(graph, Docs);
+            graph.Visit(linter);
+            return receiver.Diagnostics.ToArray();
+        }
+
+        public void Render()
+        {
+            var command = new RenderCommand(CreateBuilder(), new CountNodesVisitor<MarkdownFile>(), new HtmlRenderer(), new SearchIndexBuilder());
+            Assert.Equal(0, command.Execute(new RenderCommandSettings { RootPath = Docs, OutputPath = Output }));
+        }
+
+        public string ReadOutput(string path) => File.ReadAllText(Path.Combine(Output, path));
+
+        public string[] OutputFiles() => Directory.GetFiles(Output, "*", SearchOption.AllDirectories)
+            .Select(path => Path.GetRelativePath(Output, path).Replace(Path.DirectorySeparatorChar, '/'))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        public string[] TopNavigationLabels(string page)
+        {
+            var tabs = ReadOutput(page).Split("<nav class=\"top-navigation", 2)[1].Split("</nav>", 2)[0];
+            return System.Text.RegularExpressions.Regex.Matches(tabs, "data-label=\"([^\"]*)\"")
+                .Select(match => match.Groups[1].Value)
+                .ToArray();
+        }
+
+        public string Breadcrumbs(string page) =>
+            ReadOutput(page).Split("<nav class=\"breadcrumbs\"", 2)[1].Split("</nav>", 2)[0];
+
+        /// <summary>Maps each shared sidebar entry's site-root URL to the URL of the tab that owns it.</summary>
+        public Dictionary<string, string?> SidebarOwners()
+        {
+            var script = File.ReadAllText(Path.Combine(Output, "_mdu", "js", "navigation.js"));
+            var literal = script.Split("content.innerHTML = ", 2)[1].Split(";\n", 2)[0];
+            var markup = System.Text.Json.JsonSerializer.Deserialize<string>(literal)!;
+            var owners = new Dictionary<string, string?>(StringComparer.Ordinal);
+            foreach (var item in markup.Split("<li ").Skip(1))
+            {
+                var href = System.Text.RegularExpressions.Regex.Match(item, "class=\"site-nav-link[^\"]*\" href=\"([^\"]*)\"");
+                if (!href.Success) continue;
+                var owner = System.Text.RegularExpressions.Regex.Match(item.Split('>', 2)[0], "data-top-owner=\"([^\"]*)\"");
+                owners[href.Groups[1].Value] = owner.Success ? owner.Groups[1].Value : null;
+            }
+            return owners;
+        }
+
+        public void Dispose() => Directory.Delete(_root, recursive: true);
+
+        private GraphBuilder CreateBuilder() => CreateGraphBuilder(new FakeSourceResolver(_sources.ToArray()));
+
+        private static void Write(string path, string content)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, content);
         }
     }
 
