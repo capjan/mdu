@@ -30,6 +30,7 @@ public class DataPreparationVisitor: IVisitor<MarkdownFile>
         entity.Description = navigationSettings.Description ?? string.Empty;
         entity.Icon = navigationSettings.Icon ?? string.Empty;
         entity.ImportSource = navigationSettings.ImportSource;
+        entity.MergeImportedNavigation = navigationSettings.MergeImportedNavigation;
         entity.NavigationTitle = navigationSettings.NavigationTitle ?? string.Empty;
         entity.NavigationOrder = navigationSettings.Order;
         entity.NavigationVisible = navigationSettings.Visible;
@@ -58,7 +59,7 @@ public class DataPreparationVisitor: IVisitor<MarkdownFile>
             var title = ReadScalar(metadata, "title");
             var description = ReadScalar(metadata, "description");
             var icon = ReadScalar(metadata, "icon");
-            var importSource = ReadImportSource(metadata);
+            var (importSource, mergeImportedNavigation) = ReadImportSettings(metadata);
             YamlMappingNode? navigation = null;
             if (metadata.Children.TryGetValue(new YamlScalarNode("navigation"), out var navigationNode))
                 navigation = navigationNode as YamlMappingNode;
@@ -102,7 +103,7 @@ public class DataPreparationVisitor: IVisitor<MarkdownFile>
                 : null;
 
             return new FrontMatterSettings(title, description, icon, importSource, navigationTitle, order, visible, expanded,
-                placement, invalidPlacement);
+                placement, invalidPlacement, mergeImportedNavigation);
         }
         catch (YamlException)
         {
@@ -110,11 +111,11 @@ public class DataPreparationVisitor: IVisitor<MarkdownFile>
         }
     }
 
-    private static string? ReadImportSource(YamlMappingNode metadata)
+    private static (string? Source, bool MergeNavigation) ReadImportSettings(YamlMappingNode metadata)
     {
         if (!metadata.Children.TryGetValue(new YamlScalarNode("mdu"), out var mduNode) || mduNode is not YamlMappingNode mdu ||
             !mdu.Children.TryGetValue(new YamlScalarNode("import"), out var importNode))
-            return null;
+            return (null, false);
 
         if (importNode is not YamlMappingNode import)
             throw new InvalidOperationException("The mdu.import frontmatter field must be a mapping with a source URL.");
@@ -123,7 +124,12 @@ public class DataPreparationVisitor: IVisitor<MarkdownFile>
         if (string.IsNullOrWhiteSpace(source))
             throw new InvalidOperationException("The mdu.import.source frontmatter field is required.");
 
-        return source;
+        var mergeNavigation = import.Children.TryGetValue(new YamlScalarNode("navigation"), out var navigation);
+        if (mergeNavigation && (navigation is not YamlScalarNode scalar ||
+                                !string.Equals(scalar.Value, "merge", StringComparison.Ordinal)))
+            throw new InvalidOperationException("The mdu.import.navigation frontmatter field must be 'merge' when specified.");
+
+        return (source, mergeNavigation);
     }
 
     private static string? ReadScalar(YamlMappingNode mapping, string key) =>
@@ -141,5 +147,6 @@ public class DataPreparationVisitor: IVisitor<MarkdownFile>
         bool Visible = true,
         bool? Expanded = null,
         NavigationPlacement Placement = NavigationPlacement.Sidebar,
-        string? InvalidPlacement = null);
+        string? InvalidPlacement = null,
+        bool MergeImportedNavigation = false);
 }

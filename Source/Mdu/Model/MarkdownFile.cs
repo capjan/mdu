@@ -19,6 +19,9 @@ public class MarkdownFile: INode<MarkdownFile>
     public string? SiteRelativePath { get; set; }
     public string? MarkdownContent { get; set; }
     public string? ImportSource { get; set; }
+    public bool MergeImportedNavigation { get; set; }
+    /// <summary>Source-folder-relative navigation path for a merged import; does not change the mounted site URL.</summary>
+    public string? ImportedNavigationRelativePath { get; set; }
     public string? EditPageLink { get; set; }
     public string? AliasRelativePath { get; set; }
     public string? SourceRootPath { get; set; }

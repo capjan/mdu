@@ -506,20 +506,7 @@ public class MarkdigVisitor : BaseVisitor
     private bool IsTopNavigationPage(MarkdownFile page) =>
         page.NavigationVisible &&
         page.NavigationPlacement == NavigationPlacement.Top &&
-        IsTopLevelNavigationPage(page);
-
-    private bool IsTopLevelNavigationPage(MarkdownFile page)
-    {
-        var relativePath = page.SiteRelativePath ?? Path.GetRelativePath(_rootPath, page.FileInfo.FullName);
-        if (Path.IsPathRooted(relativePath) || relativePath == ".." ||
-            relativePath.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)) return false;
-
-        var segments = relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        if (segments.Length == 1) return true;
-        return segments.Length == 2 &&
-               (page.FileInfo.Name.Equals("README.md", StringComparison.OrdinalIgnoreCase) ||
-                page.FileInfo.Name.Equals("index.md", StringComparison.OrdinalIgnoreCase));
-    }
+        NavigationPage.IsTopLevel(page, _rootPath);
 
     private IReadOnlyList<BreadcrumbItem> BuildBreadcrumbs(MarkdownFile page, string currentOutputPath)
     {

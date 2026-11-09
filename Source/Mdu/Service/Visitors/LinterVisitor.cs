@@ -45,6 +45,7 @@ public class LinterVisitor: IVisitor<MarkdownFile>
         var visited = new HashSet<string>(PathComparer);
         Visit(graph, new NavigationTitleGroup());
         _allPages = pages;
+        ReportDuplicateTopNavigationTitles(graph);
         ReportMissingSectionReadmes(pages);
         ReportMkDocsPagesFiles(pages);
         return;
@@ -85,6 +86,40 @@ public class LinterVisitor: IVisitor<MarkdownFile>
     private sealed class NavigationTitleGroup
     {
         public Dictionary<string, MarkdownFile> Titles { get; } = new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Tabs share one top bar. Local tabs are siblings and are covered by the sibling check, but tabs of an import
+    /// with mdu.import.navigation: merge sit deeper in the tree, so their labels are compared here.
+    /// </summary>
+    private void ReportDuplicateTopNavigationTitles(IEnumerable<MarkdownFile> roots)
+    {
+        var tabs = new Dictionary<string, MarkdownFile>(StringComparer.OrdinalIgnoreCase);
+        foreach (var page in NavigationPage.OrderPages(MountedPages(roots).Where(page =>
+                     page.NavigationVisible && page.NavigationPlacement == NavigationPlacement.Top &&
+                     NavigationPage.IsTopLevel(page, _rootPath))))
+        {
+            var title = NavigationPage.GetTitle(page);
+            if (!tabs.TryAdd(title, page) && !ReferenceEquals(GetVisibleParent(tabs[title]), GetVisibleParent(page)))
+                ErrorReceiver.Add(page.FileInfo.FullName, 1,
+                    $"{RuleCodes.DuplicateNavigationTitle}: Top navigation title '{title}' duplicates the tab of page '{GetNavigationEntryPath(tabs[title])}'. Set a unique navigation.title.");
+        }
+
+        static IEnumerable<MarkdownFile> MountedPages(IEnumerable<MarkdownFile> pages)
+        {
+            foreach (var page in pages)
+            {
+                yield return page;
+                foreach (var child in MountedPages(page.Children)) yield return child;
+            }
+        }
+    }
+
+    private static MarkdownFile? GetVisibleParent(MarkdownFile page)
+    {
+        var parent = page.Parent;
+        while (parent is { NavigationVisible: false }) parent = parent.Parent;
+        return parent;
     }
 
     private string GetNavigationEntryPath(MarkdownFile page) =>
@@ -147,9 +182,9 @@ public class LinterVisitor: IVisitor<MarkdownFile>
         }
         else if (entity.NavigationPlacement == NavigationPlacement.Top)
         {
-            if (!IsTopLevelNavigationPage(entity))
+            if (!NavigationPage.IsTopLevel(entity, _rootPath))
                 ErrorReceiver.Add(markdownFilePath, 1,
-                    $"{RuleCodes.NavigationPlacementLevel}: navigation.placement: top is only valid on a top-level page or a top-level section README.md/index.md.");
+                    $"{RuleCodes.NavigationPlacementLevel}: navigation.placement: top is only valid on a top-level page or a top-level section README.md/index.md (relative to the source folder for imports with mdu.import.navigation: merge).");
             if (entity.NavigationExpanded.HasValue)
                 ErrorReceiver.Add(markdownFilePath, 1,
                     $"{RuleCodes.ExpandedTopNavigationRoot}: navigation.expanded has no effect on a top navigation root, which is always expanded.");
@@ -347,20 +382,6 @@ public class LinterVisitor: IVisitor<MarkdownFile>
         if (lines.Count > 0 && lines[0].Trim() == "---") lines.RemoveAt(0);
         if (lines.Count > 0 && lines[^1].Trim() == "---") lines.RemoveAt(lines.Count - 1);
         return string.Join(Environment.NewLine, lines);
-    }
-
-    private bool IsTopLevelNavigationPage(MarkdownFile page)
-    {
-        var file = page.FileInfo;
-        var relativePath = page.SiteRelativePath ?? Path.GetRelativePath(_rootPath, file.FullName);
-        if (Path.IsPathRooted(relativePath) || relativePath == ".." ||
-            relativePath.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)) return false;
-
-        var segments = relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        if (segments.Length == 1) return true;
-        return segments.Length == 2 &&
-               (file.Name.Equals("README.md", StringComparison.OrdinalIgnoreCase) ||
-                file.Name.Equals("index.md", StringComparison.OrdinalIgnoreCase));
     }
 
     private bool HasMatchingMarkdownFileBeside(DirectoryInfo? sectionDirectory)

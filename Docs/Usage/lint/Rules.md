@@ -29,7 +29,7 @@ navigation:
 | `MDU016` | `InvalidNavigationPlacement` | Error | `navigation` must be a mapping and `placement` must be `sidebar` or `top`. | — |
 | `MDU017` | `NavigationPlacementLevel` | Error | `placement: top` is only valid on first-level pages or section indexes. | — |
 | `MDU018` | `ExpandedTopNavigationRoot` | Error | A top navigation root is always expanded; remove its ineffective `navigation.expanded`. | — |
-| `MDU019` | `DuplicateNavigationTitle` | Error | Visible sibling pages have unique navigation titles. | — |
+| `MDU019` | `DuplicateNavigationTitle` | Error | Visible sibling pages and top navigation tabs have unique navigation titles. | — |
 | `MDU020` | `UnusedFootnote` | Warning | Every footnote definition is reachable from a reference in page text. | — |
 | `MDU021` | `DuplicateFootnote` | Warning | A footnote label is defined only once per page. | — |
 | `MDU022` | `LocalFragmentExists` | Error | A link fragment matches an anchor on the target page. | — |
@@ -75,7 +75,9 @@ Rules `MDU007`–`MDU014` identify MkDocs-specific syntax and structure that nee
 
 ## MDU019: DuplicateNavigationTitle
 
-Visible sibling pages must have unique navigation names, ignoring letter case. The name comes from `navigation.title` when set, or otherwise from the page title. Set a distinct `navigation.title` on one of the pages when two entries would otherwise look the same. Hidden pages are excluded, and their visible children are compared under the next visible parent.
+Visible sibling pages must have unique navigation names, ignoring letter case. The name comes from `navigation.title` when set, or otherwise from the page title. Set a distinct `navigation.title` on one of the pages when two entries would otherwise look the same. Hidden pages are excluded, and their visible children are compared under the next visible parent. Tabs share one top bar, so tabs from an import with [`mdu.import.navigation: merge`](../../Features/Repository-Imports.md#merging-top-navigation) must also differ from every other tab; the error is reported on the later tab in tab order.
+
+Each mounted tab is checked separately, including when the same repository folder is imported more than once.
 
 ## MDU020: UnusedFootnote
 
