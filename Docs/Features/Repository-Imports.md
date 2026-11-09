@@ -23,6 +23,33 @@ MDU imports the folder's page tree at the declaration's position. The imported f
 
 Edit links on imported pages point to the matching file in the source repository. GitHub-style URLs use their edit route, GitLab URLs use GitLab's edit route, and source-style hosts open the source file page where their edit action is available.
 
+## Merging top navigation
+
+By default, [`navigation.placement: top`](Navigation.md#top-navigation) is evaluated against the combined site's folder structure. A top-level page such as `Testhandbuch.md` becomes `Architecture/Testhandbuch.md` when mounted below `Architecture.md`, so its placement is no longer valid: it does not become a tab, and `mdu lint` reports `MDU017`.
+
+Set `mdu.import.navigation: merge` on an import declaration to include the imported documentation's tabs in the combined site's top navigation:
+
+```yaml title="docs/Architecture.md"
+---
+title: Architecture
+mdu:
+  import:
+    source: https://github.com/example/architecture/tree/main/docs
+    navigation: merge
+navigation:
+  placement: top
+  order: 10
+---
+```
+
+With this option, top navigation eligibility is evaluated relative to the imported source folder, regardless of how deeply it is mounted. Imported pages still need `navigation.placement: top`; only the source root, files directly in the source folder, and first-level folder `README.md` or `index.md` pages qualify. Deeper placements remain lint errors.
+
+The declaration's front matter still controls the imported root page, including its title and placement. For example, the declaration above provides the *Architecture* tab, while imported `Testhandbuch.md` and `Bestandsverzeichnis.md` pages marked `top` provide their own tabs.
+
+Titles, visibility, and ordering use the usual `navigation.*` settings. All tabs share one global order: smaller `navigation.order` values come first, followed by entries without an order sorted by title. A page belongs to its nearest enclosing tab, so selecting an imported tab shows its own sidebar section rather than the enclosing import's section. On compact screens the full tree remains available.
+
+Merging tabs does not move pages or change their URLs, relative links, breadcrumbs, search entries, or PDF structure. Local child pages and other imports do not inherit the option. Omit it to keep the default behavior; `merge` is the only supported value, and other values are errors.
+
 ## Abbreviations in imported documentation
 
 If the imported folder has an `mdu.yml` with a [`content.glossary`](Abbreviations.md#shared-glossary), MDU treats that file as the glossary of the import, not as a page. Its definitions apply to the imported pages. The glossary of the importing site still applies there, and on a conflict the imported definition wins:

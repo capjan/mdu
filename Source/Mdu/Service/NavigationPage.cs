@@ -21,6 +21,20 @@ internal static class NavigationPage
 
     public static string RemoveIconShortcodes(string title) => IconShortcodes.Replace(title, string.Empty);
 
+    public static bool IsTopLevel(MarkdownFile page, string rootPath)
+    {
+        var relativePath = page.ImportedNavigationRelativePath ?? page.SiteRelativePath ??
+                           Path.GetRelativePath(rootPath, page.FileInfo.FullName);
+        if (Path.IsPathRooted(relativePath) || relativePath == ".." ||
+            relativePath.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)) return false;
+
+        var segments = relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (segments.Length == 1) return true;
+        return segments.Length == 2 &&
+               (page.FileInfo.Name.Equals("README.md", StringComparison.OrdinalIgnoreCase) ||
+                page.FileInfo.Name.Equals("index.md", StringComparison.OrdinalIgnoreCase));
+    }
+
     public static IOrderedEnumerable<MarkdownFile> OrderPages(IEnumerable<MarkdownFile> pages) => pages
         .OrderBy(page => page.NavigationOrder.HasValue ? 0 : 1)
         .ThenBy(page => page.NavigationOrder)

@@ -109,6 +109,8 @@ public class GraphBuilder
         {
             var sourceRelativePath = Path.GetRelativePath(source.SourceFolderPath, page.FileInfo.FullName);
             page.SiteRelativePath = Path.Combine(mountDirectory, sourceRelativePath);
+            if (importPage.MergeImportedNavigation)
+                page.ImportedNavigationRelativePath = sourceRelativePath;
             page.EditPageLink = GetEditPageLink(source, page.FileInfo);
             page.SourceRootPath = source.RepositoryPath;
             page.Glossary = glossary?.Glossary;

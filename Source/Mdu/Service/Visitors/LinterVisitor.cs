@@ -147,9 +147,9 @@ public class LinterVisitor: IVisitor<MarkdownFile>
         }
         else if (entity.NavigationPlacement == NavigationPlacement.Top)
         {
-            if (!IsTopLevelNavigationPage(entity))
+            if (!NavigationPage.IsTopLevel(entity, _rootPath))
                 ErrorReceiver.Add(markdownFilePath, 1,
-                    $"{RuleCodes.NavigationPlacementLevel}: navigation.placement: top is only valid on a top-level page or a top-level section README.md/index.md.");
+                    $"{RuleCodes.NavigationPlacementLevel}: navigation.placement: top is only valid on a top-level page or a top-level section README.md/index.md (relative to the source folder for imports with mdu.import.navigation: merge).");
             if (entity.NavigationExpanded.HasValue)
                 ErrorReceiver.Add(markdownFilePath, 1,
                     $"{RuleCodes.ExpandedTopNavigationRoot}: navigation.expanded has no effect on a top navigation root, which is always expanded.");
@@ -347,20 +347,6 @@ public class LinterVisitor: IVisitor<MarkdownFile>
         if (lines.Count > 0 && lines[0].Trim() == "---") lines.RemoveAt(0);
         if (lines.Count > 0 && lines[^1].Trim() == "---") lines.RemoveAt(lines.Count - 1);
         return string.Join(Environment.NewLine, lines);
-    }
-
-    private bool IsTopLevelNavigationPage(MarkdownFile page)
-    {
-        var file = page.FileInfo;
-        var relativePath = page.SiteRelativePath ?? Path.GetRelativePath(_rootPath, file.FullName);
-        if (Path.IsPathRooted(relativePath) || relativePath == ".." ||
-            relativePath.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)) return false;
-
-        var segments = relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        if (segments.Length == 1) return true;
-        return segments.Length == 2 &&
-               (file.Name.Equals("README.md", StringComparison.OrdinalIgnoreCase) ||
-                file.Name.Equals("index.md", StringComparison.OrdinalIgnoreCase));
     }
 
     private bool HasMatchingMarkdownFileBeside(DirectoryInfo? sectionDirectory)
