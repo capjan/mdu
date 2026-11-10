@@ -36,6 +36,70 @@ public class DashboardTest
     }
 
     [Fact]
+    public void ReadsTheLimitAndTheCollapsedGroups()
+    {
+        var options = Dashboard.ReadFrontMatter("""
+            ---
+            layout: dashboard
+            dashboard:
+              limit: 6
+              collapsed: [AI, " Social "]
+            ---
+            """)!;
+        Assert.Equal(6, options.Limit);
+        Assert.Equal(["AI", "Social"], options.Collapsed);
+        Assert.True(options.StartsCollapsed("ai"));
+        Assert.False(options.StartsCollapsed("Developer"));
+
+        var all = Dashboard.ReadFrontMatter("---\nlayout: dashboard\ndashboard:\n  collapsed: true\n  limit: 0\n---")!;
+        Assert.Null(all.Limit);
+        Assert.True(all.StartsCollapsed("Anything"));
+
+        Assert.Equal(["Social"], Dashboard.ReadFrontMatter("---\nlayout: dashboard\ndashboard:\n  collapsed: Social\n---")!.Collapsed);
+        var none = Dashboard.ReadFrontMatter("---\nlayout: dashboard\ndashboard:\n  collapsed: false\n  limit: many\n---")!;
+        Assert.Null(none.Collapsed);
+        Assert.Null(none.Limit);
+    }
+
+    [Fact]
+    public async Task FoldsGroupsAndLimitsTheirTiles()
+    {
+        var html = await RenderPage("""
+            ## Office
+
+            - [Mail](https://mail.example.org)
+            - [Drive](https://drive.example.org)
+
+            ### Archive
+
+            - [Old Wiki](https://wiki.example.org)
+            - [Photos](https://photos.example.org)
+
+            ## Tools
+
+            - [Editor](https://editor.example.org)
+            - [Shell](https://shell.example.org)
+            - [Notes](https://notes.example.org)
+
+            ## [AI](https://ai.example.org)
+
+            - [Claude](https://claude.ai)
+            """, Options with { Limit = 2, Collapsed = ["ai"] });
+
+        Assert.Contains("<section class=\"dashboard-group\" role=\"rowgroup\">", html);
+        Assert.Contains("<section class=\"dashboard-group is-collapsed\" role=\"rowgroup\">", html);
+        Assert.Contains("<h2 id=\"office\"><button class=\"dashboard-group-toggle\" type=\"button\" aria-expanded=\"true\"><span class=\"dashboard-group-title\">Office</span><span class=\"dashboard-group-count\" data-count=\"4\" aria-hidden=\"true\"></span>", html);
+        // One tile past the limit shows instead of a button for it.
+        Assert.Contains("data-count=\"3\"", html);
+        // A link in the heading keeps only its text inside the button.
+        Assert.Contains("aria-expanded=\"false\"><span class=\"dashboard-group-title\">AI</span><span class=\"dashboard-group-count\" data-count=\"1\"", html);
+        Assert.Equal(2, CountOf(html, "<li class=\"dashboard-tile is-overflow\" role=\"row\">"));
+        Assert.Equal(1, CountOf(html, "class=\"dashboard-more\""));
+        Assert.Contains("aria-expanded=\"false\" data-more=\"2\">Show 2 more</button>", html);
+        Assert.DoesNotContain('\u0001', html);
+    }
+
+    [Fact]
     public async Task RendersGroupsOfLinkTiles()
     {
         var html = await RenderPage("""

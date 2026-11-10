@@ -1,5 +1,8 @@
 ---
 layout: dashboard
+dashboard:
+  limit: 2
+  collapsed: [Icons]
 navigation:
   visible: false
 ---

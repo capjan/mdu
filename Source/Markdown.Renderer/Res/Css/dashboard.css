@@ -258,6 +258,114 @@
     text-transform: uppercase;
 }
 
+/* The group label is a button that folds the group. It keeps the quiet label style; the chevron appears on hover and
+   focus, and stays with the number of tiles while the group is folded. */
+.markdown-content .dashboard-group h2:has(> .dashboard-group-toggle) {
+    padding: 0 0 0.35rem;
+}
+
+.dashboard-group-toggle {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    width: 100%;
+    margin: -0.25rem 0 0;
+    padding: 0.25rem 0.6rem;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    letter-spacing: inherit;
+    text-align: left;
+    text-transform: inherit;
+    cursor: pointer;
+}
+
+.dashboard-group-toggle:hover {
+    color: var(--text-primary);
+}
+
+.dashboard-group-title {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.dashboard-group-count {
+    display: none;
+    padding: 0 0.4rem;
+    border-radius: 999px;
+    background: var(--dashboard-chip);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0;
+}
+
+.dashboard-group-count::before {
+    content: attr(data-count);
+}
+
+.dashboard-group-chevron {
+    flex: none;
+    width: 0.9rem;
+    height: 0.9rem;
+    margin-left: auto;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.75;
+    transition: transform 160ms ease, opacity 160ms ease;
+}
+
+@media (hover: hover) {
+    .dashboard-group-chevron {
+        opacity: 0;
+    }
+
+    .dashboard-group-toggle:is(:hover, :focus-visible) .dashboard-group-chevron,
+    .dashboard-group.is-collapsed .dashboard-group-chevron {
+        opacity: 1;
+    }
+}
+
+.dashboard:not(.is-filtering) .dashboard-group.is-collapsed .dashboard-group-count {
+    display: inline-block;
+}
+
+.dashboard:not(.is-filtering) .dashboard-group.is-collapsed .dashboard-group-chevron {
+    transform: rotate(-90deg);
+}
+
+/* Without a filter, a folded group shows only its label and a limited group only its first tiles. While the filter
+   has text, every group shows its matches. */
+.dashboard:not(.is-filtering) .dashboard-group.is-collapsed > :not(:first-child),
+.dashboard:not(.is-filtering) .dashboard-group:not(.is-expanded) .dashboard-tile.is-overflow,
+.dashboard.is-filtering .dashboard-more-row {
+    display: none;
+}
+
+.dashboard-more {
+    margin: 0.25rem 0 0;
+    padding: 0.35rem 0.6rem;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: var(--dashboard-muted);
+    font: inherit;
+    font-size: 0.8125rem;
+    cursor: pointer;
+}
+
+.dashboard-more:hover {
+    color: var(--text-primary);
+    background: var(--dashboard-hover);
+}
+
+:root:not([data-input="pointer"]) :is(.dashboard-group-toggle, .dashboard-more):focus-visible {
+    outline: 2px solid var(--link);
+    outline-offset: 2px;
+}
+
 /* Headings below the group label, from the third level down, divide a group: smaller than a tile title, in full text
    color and sentence case so they read below the group label, with a dashed rule that stays quieter than the label's solid line. */
 .markdown-content .dashboard-group :is(h3, h4, h5, h6) {

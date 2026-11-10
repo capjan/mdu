@@ -69,6 +69,52 @@
         };
     });
 
+    // Groups fold with their heading, and a group with a limit shows the rest of its tiles on request. The reader's choice
+    // stays in this browser for this page; the page works the same without storage.
+    const foldKey = `mdu-dashboard-folds:${window.location.pathname}`;
+    const readFolds = () => {
+        try {
+            return JSON.parse(localStorage.getItem(foldKey) || "{}") || {};
+        } catch {
+            return {};
+        }
+    };
+    const folds = readFolds();
+    const groupKey = (group) => group.querySelector("h2")?.id || String(groups.indexOf(group));
+    const isFolded = (tile) => {
+        const group = tile.closest(".dashboard-group");
+        return !!group && (group.classList.contains("is-collapsed") ||
+            (tile.classList.contains("is-overflow") && !group.classList.contains("is-expanded")));
+    };
+    const setCollapsed = (group, collapsed) => {
+        group.classList.toggle("is-collapsed", collapsed);
+        group.querySelector(".dashboard-group-toggle")?.setAttribute("aria-expanded", String(!collapsed));
+    };
+    const setExpanded = (group, expanded) => {
+        group.classList.toggle("is-expanded", expanded);
+        const more = group.querySelector(".dashboard-more");
+        if (!more) return;
+        more.setAttribute("aria-expanded", String(expanded));
+        more.textContent = expanded ? "Show fewer" : `Show ${more.dataset.more} more`;
+    };
+    const saveFolds = (group) => {
+        folds[groupKey(group)] = {
+            collapsed: group.classList.contains("is-collapsed"),
+            expanded: group.classList.contains("is-expanded")
+        };
+        try {
+            localStorage.setItem(foldKey, JSON.stringify(folds));
+        } catch {
+            // Without storage, the choice lasts until the page reloads.
+        }
+    };
+    for (const group of groups) {
+        const saved = folds[groupKey(group)];
+        if (!saved) continue;
+        setCollapsed(group, !!saved.collapsed);
+        setExpanded(group, !!saved.expanded);
+    }
+
     // The page an index entry belongs to; section entries carry an anchor.
     const pageOf = (entry) => entry.url.split("#")[0];
     let pageEntries;
@@ -319,16 +365,20 @@
         const terms = tokenize(query);
         let first = null;
 
+        // While the filter is empty, folded groups and tiles past the limit stay out of the results; the filter searches them.
+        dashboard.classList.toggle("is-filtering", terms.length > 0);
         for (const entry of tileEntries) {
             const matches = terms.every(term => entry.text.includes(term));
-            entry.tile.hidden = !matches;
+            entry.tile.hidden = !matches || (terms.length === 0 && isFolded(entry.tile));
             if (matches && terms.length > 0) {
                 const startsWith = terms.length > 0 && entry.name.startsWith(terms[0]);
                 if (!first || (startsWith && !first.startsWith)) first = { ...entry, startsWith };
             }
         }
         for (const section of sections) {
-            const hidden = terms.length > 0 && !section.parts.some(part => part.querySelector(".dashboard-tile:not([hidden]), .dashboard-note"));
+            const folds = section.heads[0].closest(".dashboard-group")?.matches(".is-collapsed, :has(.is-overflow)");
+            const hidden = (terms.length > 0 || folds) &&
+                !section.parts.some(part => part.querySelector(".dashboard-tile:not([hidden]), .dashboard-note"));
             for (const head of section.heads) head.hidden = hidden;
         }
         // A subheading that ends up first below its group label keeps the tight spacing of one that starts the group.
@@ -497,6 +547,22 @@
         input.focus();
     };
 
+    dashboard.addEventListener("click", event => {
+        const button = event.target instanceof Element ? event.target.closest(".dashboard-group-toggle, .dashboard-more") : null;
+        const group = button?.closest(".dashboard-group");
+        if (!group) return;
+        // While the filter shows matches from every group, a heading clears the filter and opens its group.
+        if (button.matches(".dashboard-group-toggle") && input.value.trim()) {
+            input.value = "";
+            setCollapsed(group, false);
+        } else if (button.matches(".dashboard-group-toggle")) setCollapsed(group, !group.classList.contains("is-collapsed"));
+        else setExpanded(group, !group.classList.contains("is-expanded"));
+        saveFolds(group);
+        update();
+        // Showing fewer tiles must not leave the button far below the viewport.
+        if (button.isConnected) button.scrollIntoView({ block: "nearest" });
+    });
+
     clearButton.addEventListener("click", clear);
     input.addEventListener("focus", () => loadIndex(), { once: true });
     input.addEventListener("input", () => {
@@ -536,7 +602,10 @@
         }
     });
 
-    renderHints();
+    // Applies folded groups and limits, so the results and the arrow keys skip the tiles they hide.
+    update();
+    // Nothing has changed for a screen reader yet.
+    status.textContent = "";
 
     // On a dashboard, the slash key focuses the dashboard filter instead of opening the site search.
     window.addEventListener("keydown", event => {
