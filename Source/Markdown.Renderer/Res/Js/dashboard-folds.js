@@ -8,6 +8,20 @@
     const page = window.location.pathname.replace(/(?:index|README)\.html$/i, "");
     dashboard.dataset.foldKey = `mdu-dashboard-folds:${page}`;
     const groups = [...dashboard.querySelectorAll(".dashboard-group:not(.dashboard-frequent)")];
+
+    // The view switch shows only with a script; the reader's choice of view overrides the page's start view.
+    dashboard.dataset.viewKey = `mdu-dashboard-view:${page}`;
+    const view = document.getElementById("dashboard-view");
+    if (view && dashboard.contains(view)) {
+        try {
+            const saved = localStorage.getItem(dashboard.dataset.viewKey);
+            if (saved) dashboard.classList.toggle("is-compact", saved === "compact");
+        } catch {
+            // Without storage, the page's start view applies.
+        }
+        view.setAttribute("aria-pressed", String(dashboard.classList.contains("is-compact")));
+        view.hidden = false;
+    }
     // The page leaves the labels disabled and every group open, which is true without a script; folding starts here.
     for (const group of groups) {
         const toggle = group.querySelector(".dashboard-group-toggle");
@@ -69,7 +83,6 @@
             let suffix = index;
             while (document.getElementById(`dashboard-frequent-tile-${suffix}`)) suffix++;
             cell.id = `dashboard-frequent-tile-${suffix}`;
-            if (link.closest(".dashboard-tiles.has-descriptions")) list.classList.add("has-descriptions");
             list.append(tile);
         });
         frequent.parentElement.hidden = picks.length === 0;

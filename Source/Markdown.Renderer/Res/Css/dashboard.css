@@ -397,7 +397,81 @@
     background: var(--dashboard-hover);
 }
 
-:root:not([data-input="pointer"]) :is(.dashboard-group-toggle, .dashboard-more, .dashboard-frequent-clear):focus-visible {
+/* A group with unreachable sites says so in its label, also while it is folded. */
+.dashboard-group-down {
+    flex: none;
+    padding: 0 0.4rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, #e5342a 14%, transparent);
+    color: #c42b22;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+:root[data-theme="dark"] .dashboard-group-down {
+    color: #ff8a80;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root[data-theme="auto"] .dashboard-group-down {
+        color: #ff8a80;
+    }
+}
+
+/* The compact view keeps only the names, so narrower groups and tiles fit more per row. */
+.dashboard.is-compact .dashboard-row {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+}
+
+.markdown-content .dashboard.is-compact ul.dashboard-tiles {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr));
+}
+
+/* The view switch sits at the end of the toolbar as a quiet icon button. */
+.dashboard-view {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    margin-left: auto;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: var(--dashboard-muted);
+    cursor: pointer;
+}
+
+.dashboard-view[hidden] {
+    display: none;
+}
+
+.dashboard-clock + .dashboard-view {
+    margin-left: -1.25rem;
+}
+
+.dashboard-view:hover {
+    color: var(--text-primary);
+    background: var(--dashboard-hover);
+}
+
+.dashboard-view[aria-pressed="true"] {
+    color: var(--text-primary);
+    background: var(--dashboard-chip);
+}
+
+.dashboard-view svg {
+    width: 1rem;
+    height: 1rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-width: 1.6;
+}
+
+:root:not([data-input="pointer"]) :is(.dashboard-group-toggle, .dashboard-more, .dashboard-frequent-clear, .dashboard-view):focus-visible {
     outline: 2px solid var(--link);
     outline-offset: 3px;
 }
@@ -507,7 +581,8 @@
     text-decoration: none;
 }
 
-.dashboard-tiles.has-descriptions a.dashboard-link {
+/* Every tile has two lines, so tiles line up across groups; the compact view keeps only the names. */
+.markdown-content .dashboard:not(.is-compact) a.dashboard-link {
     --dashboard-chip-size: 2.375rem;
     --dashboard-chip-half-size: 1.1875rem;
     min-height: 3.5rem;
@@ -622,21 +697,6 @@
     padding-right: 1.1rem;
 }
 
-/* A compact row keeps the whole name and gives the host only the space left. A host that does not get at least 5rem
-   wraps to a second line, which the one-line height hides, instead of squeezing the name. */
-.dashboard-tiles:not(.has-descriptions) .dashboard-text {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 0 0.75rem;
-    max-height: 1lh;
-    overflow: hidden;
-}
-
-.dashboard-tiles:not(.has-descriptions) .dashboard-name {
-    max-width: 100%;
-}
-
 .dashboard-name {
     overflow: hidden;
     font-weight: 500;
@@ -644,7 +704,7 @@
     white-space: nowrap;
 }
 
-.dashboard-tiles.has-descriptions .dashboard-name {
+.dashboard:not(.is-compact) .dashboard-name {
     font-size: 0.9375rem;
 }
 
@@ -656,10 +716,8 @@
     white-space: nowrap;
 }
 
-.dashboard-tiles:not(.has-descriptions) .dashboard-description {
-    flex: 1 1 5rem;
-    min-width: 0;
-    text-align: right;
+.dashboard.is-compact .dashboard-description {
+    display: none;
 }
 
 /* The arrow fades in at the row's end: ↗ leaves the site, → stays in it. */
@@ -924,6 +982,13 @@ a.dashboard-page:focus-visible .dashboard-page-footer svg {
     .dashboard-clock {
         order: -1;
         margin-left: 0;
+    }
+
+    /* The view switch stays on the clock's line instead of a line of its own. */
+    .dashboard-view,
+    .dashboard-clock + .dashboard-view {
+        order: -1;
+        margin-left: auto;
     }
 
     .dashboard-search-hint,

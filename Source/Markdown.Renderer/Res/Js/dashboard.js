@@ -583,8 +583,20 @@
         status.textContent = "Frequently used links cleared.";
     });
 
+    // The compact view shows only the names, so more tiles fit; the choice stays in this browser for this page.
+    document.getElementById("dashboard-view")?.addEventListener("click", event => {
+        const compact = !dashboard.classList.contains("is-compact");
+        dashboard.classList.toggle("is-compact", compact);
+        event.currentTarget.setAttribute("aria-pressed", String(compact));
+        try {
+            localStorage.setItem(dashboard.dataset.viewKey, compact ? "compact" : "detailed");
+        } catch {
+            // Without storage, the view lasts until the page reloads.
+        }
+    });
+
     dashboard.addEventListener("click", event => {
-        const button =event.target instanceof Element ? event.target.closest(".dashboard-group-toggle, .dashboard-more") : null;
+        const button = event.target instanceof Element ? event.target.closest(".dashboard-group-toggle, .dashboard-more") : null;
         const group = button?.closest(".dashboard-group");
         if (!group) return;
         // While the filter shows matches from every group, a heading clears the filter and opens its group.
@@ -698,6 +710,21 @@
             const up = await reach(url.href);
             status.classList.add(up ? "is-up" : "is-down");
             status.setAttribute("aria-label", up ? "Reachable" : "Not reachable");
+            if (!up) countDown(status.closest(".dashboard-group"));
+        };
+        // A group label counts its unreachable sites, so a folded group still tells that something is down.
+        const down = new Map();
+        const countDown = (group) => {
+            const toggle = group && !group.matches(".dashboard-frequent") ? group.querySelector(".dashboard-group-toggle") : null;
+            if (!toggle) return;
+            down.set(group, (down.get(group) || 0) + 1);
+            let label = toggle.querySelector(".dashboard-group-down");
+            if (!label) {
+                label = document.createElement("span");
+                label.className = "dashboard-group-down";
+                toggle.querySelector(".dashboard-group-count")?.after(label);
+            }
+            label.textContent = `${down.get(group)} offline`;
         };
         for (const status of dashboard.querySelectorAll(".dashboard-status"))
             check(status.closest("a"), status);

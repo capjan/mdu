@@ -124,6 +124,59 @@ public class DashboardTest
     }
 
     [Fact]
+    public void ReadsTheStatusGroupsAndTheCompactView()
+    {
+        DashboardOptions Read(string options) => Dashboard.ReadFrontMatter($"---\nlayout: dashboard\ndashboard:\n{options}\n---")!;
+        var groups = Read("  status: [Betrieb, \" Server \"]\n  compact: true");
+        Assert.True(groups.Status);
+        Assert.Equal(["Betrieb", "Server"], groups.StatusGroups);
+        Assert.True(groups.ChecksStatus("betrieb"));
+        Assert.False(groups.ChecksStatus("Social"));
+        Assert.False(groups.ChecksStatus(null));
+        Assert.True(groups.Compact);
+
+        var all = Read("  status: true");
+        Assert.Null(all.StatusGroups);
+        Assert.True(all.ChecksStatus(null));
+        Assert.False(all.Compact);
+        Assert.Equal(["Betrieb"], Read("  status: Betrieb").StatusGroups);
+        Assert.False(Read("  status: false").ChecksStatus("Betrieb"));
+    }
+
+    [Fact]
+    public async Task ShowsTheStatusOnlyInTheNamedGroups()
+    {
+        var html = await RenderPage("""
+            ## Betrieb
+
+            - [Proxmox](https://proxmox.example.org)
+
+            ## Social
+
+            - [Mastodon](https://mastodon.example.org)
+            """, new DashboardOptions(null, false, true, false, StatusGroups: ["betrieb"]));
+
+        Assert.Equal(1, CountOf(html, "<span class=\"dashboard-status\""));
+        Assert.Matches("proxmox\\.example\\.org\"[^<]*>.*?class=\"dashboard-status\"", html);
+        Assert.Contains("data-dashboard-status=\"true\"", html);
+    }
+
+    [Fact]
+    public async Task StartsInTheCompactViewAndOffersTheSwitch()
+    {
+        const string markdown = "## Office\n\n- [Mail](https://mail.example.org)\n";
+        var compact = await RenderPage(markdown, new DashboardOptions(null, false, false, false, Compact: true));
+        Assert.Contains("<div class=\"dashboard is-compact\">", compact);
+        // Only the script can change the view, so it shows the switch.
+        Assert.Contains("<button class=\"dashboard-view\" id=\"dashboard-view\" type=\"button\" aria-pressed=\"true\" title=\"Compact view\" hidden>", compact);
+
+        var detailed = await RenderPage(markdown, new DashboardOptions(null, false, false, false));
+        Assert.Contains("<div class=\"dashboard\">", detailed);
+        Assert.Contains("aria-pressed=\"false\" title=\"Compact view\" hidden>", detailed);
+        Assert.DoesNotContain("id=\"dashboard-view\"", await RenderPage("Just text.", new DashboardOptions(null, false, false, false)));
+    }
+
+    [Fact]
     public async Task LeavesAHiddenRowForTheFrequentlyUsedLinks()
     {
         const string markdown = "## Office\n\n- [Mail](https://mail.example.org)\n";
@@ -170,7 +223,6 @@ public class DashboardTest
         Assert.Equal(2, CountOf(html, "<div class=\"dashboard-row\" role=\"presentation\">"));
         Assert.Equal(2, CountOf(html, "<section class=\"dashboard-group\" role=\"rowgroup\">"));
 
-        Assert.Contains("<ul class=\"dashboard-tiles has-descriptions\" role=\"presentation\">", html);
         Assert.Contains("<a class=\"dashboard-link\" href=\"https://mail.google.com\" target=\"_blank\" rel=\"noopener noreferrer\"><span class=\"dashboard-icon\"><span class=\"icon\">", html);
         Assert.Contains("<span class=\"dashboard-name\">Mail</span><span class=\"dashboard-description\">Inbox &amp; calendar</span>", html);
         Assert.Contains("<a class=\"dashboard-link\" href=\"Guide/Handbook.html\">", html);
@@ -252,8 +304,9 @@ public class DashboardTest
 
         Assert.Contains("<span class=\"dashboard-name\">Netflix</span></span>", html);
         Assert.Contains("<span class=\"dashboard-name\">Grafana</span><span class=\"dashboard-description\">grafana.example.org</span>", html);
-        // Described tiles keep two lines, so the host still fills the second one.
-        Assert.Contains("<span class=\"dashboard-name\">GitHub</span><span class=\"dashboard-description\">github.com</span>", html);
+        // Every tile follows the same rule, whether or not its list has descriptions.
+        Assert.Contains("<span class=\"dashboard-name\">GitHub</span></span>", html);
+        Assert.DoesNotContain("has-descriptions", html);
         Assert.Contains("href=\"https://www.netflix.com\"", html);
     }
 

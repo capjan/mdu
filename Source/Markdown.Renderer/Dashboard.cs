@@ -18,6 +18,9 @@ namespace Markdown.Renderer;
 /// <param name="Limit">The number of tiles a group shows before a button reveals the rest, or null for all tiles.</param>
 /// <param name="Collapsed">The groups that start collapsed: the text of their headings, or <c>*</c> for every group.</param>
 /// <param name="Frequent">The number of tiles the row of frequently used links shows, or null for no such row.</param>
+/// <param name="StatusGroups">With <paramref name="Status"/>, the groups whose tiles show a status: the text of their
+/// headings, or null for every tile.</param>
+/// <param name="Compact">Whether the tiles start in the compact view, with their names alone.</param>
 public sealed record DashboardOptions(
     string? SearchUrl,
     bool Clock,
@@ -25,10 +28,18 @@ public sealed record DashboardOptions(
     bool NewTab,
     int? Limit = null,
     IReadOnlyList<string>? Collapsed = null,
-    int? Frequent = null)
+    int? Frequent = null,
+    IReadOnlyList<string>? StatusGroups = null,
+    bool Compact = false)
 {
-    internal bool StartsCollapsed(string heading) =>
-        Collapsed is not null && Collapsed.Any(name => name == "*" || string.Equals(name, heading, StringComparison.OrdinalIgnoreCase));
+    internal bool StartsCollapsed(string heading) => Matches(Collapsed, heading);
+
+    /// <summary>Tells whether the tiles of a group, or with a null heading those outside any group, show a status.</summary>
+    internal bool ChecksStatus(string? heading) =>
+        Status && (StatusGroups is null || heading is not null && Matches(StatusGroups, heading));
+
+    private static bool Matches(IReadOnlyList<string>? names, string heading) =>
+        names is not null && names.Any(name => name == "*" || string.Equals(name, heading, StringComparison.OrdinalIgnoreCase));
 }
 
 /// <summary>
@@ -99,22 +110,26 @@ public static class Dashboard
             return null;
 
         var options = root.Children.TryGetValue(new YamlScalarNode("dashboard"), out var node) ? node as YamlMappingNode : null;
+        var status = ReadHeadings(options, "status");
         return new DashboardOptions(
             ReadSearchUrl(options is null ? null : ReadScalar(options, "search")),
             ReadBoolean(options, "clock", true),
-            ReadBoolean(options, "status", false),
+            status is not null,
             string.Equals(options is null ? null : ReadScalar(options, "open")?.Trim(), "new-tab", StringComparison.OrdinalIgnoreCase),
             int.TryParse(options is null ? null : ReadScalar(options, "limit")?.Trim(), out var limit) && limit > 0 ? limit : null,
-            ReadCollapsed(options),
-            ReadFrequent(options));
+            ReadHeadings(options, "collapsed"),
+            ReadFrequent(options),
+            status is null || status.Contains("*") ? null : status,
+            ReadBoolean(options, "compact", false));
     }
 
     /// <summary>
-    /// Reads <c>collapsed</c>: <c>true</c> for every group, one heading, or a list of headings.
+    /// Reads an option that names groups, such as <c>collapsed</c>: <c>true</c> for every group (<c>*</c>), one heading,
+    /// or a list of headings.
     /// </summary>
-    private static IReadOnlyList<string>? ReadCollapsed(YamlMappingNode? options)
+    private static IReadOnlyList<string>? ReadHeadings(YamlMappingNode? options, string key)
     {
-        if (options is null || !options.Children.TryGetValue(new YamlScalarNode("collapsed"), out var node)) return null;
+        if (options is null || !options.Children.TryGetValue(new YamlScalarNode(key), out var node)) return null;
         var names = node switch
         {
             YamlScalarNode { Value: { } value } when bool.TryParse(value.Trim(), out var all) => all ? ["*"] : [],
@@ -141,7 +156,7 @@ public static class Dashboard
     public static string Render(MarkdownDocument document, MarkdownPipeline pipeline, DashboardOptions options)
     {
         var html = new StringBuilder();
-        html.Append("<div class=\"dashboard\"");
+        html.Append(options.Compact ? "<div class=\"dashboard is-compact\"" : "<div class=\"dashboard\"");
         if (options.SearchUrl is not null) html.Append($" data-dashboard-search=\"{HtmlEncoder.Default.Encode(options.SearchUrl)}\"");
         if (options.Status) html.Append(" data-dashboard-status=\"true\"");
         html.AppendLine(">");
@@ -211,9 +226,9 @@ public static class Dashboard
                     break;
                 case HeadingBlock { Level: 2 } heading:
                     CloseGroup();
-                    var collapsed = options.StartsCollapsed(PlainText(heading.Inline ?? Enumerable.Empty<Inline>()).Trim());
-                    group = new GroupState(CountGroupTiles(blocks, index + 1), options.Limit);
-                    html.AppendLine($"<section class=\"dashboard-group{(collapsed ? " is-collapsed" : string.Empty)}\" role=\"rowgroup\">");
+                    var title = PlainText(heading.Inline ?? Enumerable.Empty<Inline>()).Trim();
+                    group = new GroupState(CountGroupTiles(blocks, index + 1), options.Limit, options.ChecksStatus(title));
+                    html.AppendLine($"<section class=\"dashboard-group{(options.StartsCollapsed(title) ? " is-collapsed" : string.Empty)}\" role=\"rowgroup\">");
                     html.AppendLine("<div role=\"row\"><div role=\"gridcell\">");
                     html.Append(RenderGroupHeading(RenderBlock(heading, pipeline), group.Total));
                     html.AppendLine("</div></div>");
@@ -273,13 +288,15 @@ public static class Dashboard
     }
 
     /// <summary>
-    /// The group being written: how many tiles it has, how many show before Show more, and how many are written so far.
+    /// The group being written: how many tiles it has, how many show before Show more, whether they show a status, and how
+    /// many are written so far.
     /// A button for a single tile would take the tile's place, so a group with one tile past the limit shows them all.
     /// </summary>
-    private sealed class GroupState(int total, int? limit)
+    private sealed class GroupState(int total, int? limit, bool status)
     {
         public int Total { get; } = total;
         public int Shown { get; } = limit is { } value && total - value > 1 ? value : total;
+        public bool Status { get; } = status;
         public int Written { get; set; }
         public bool IsFull => Written >= Shown && Shown < Total;
     }
@@ -319,6 +336,11 @@ public static class Dashboard
         html.AppendLine("<p class=\"dashboard-search-hint\" id=\"dashboard-search-hint\"></p>");
         html.AppendLine("<p class=\"visually-hidden\" id=\"dashboard-search-status\" role=\"status\" aria-live=\"polite\" aria-atomic=\"true\"></p>");
         if (options.Clock) html.AppendLine("<time class=\"dashboard-clock\" id=\"dashboard-clock\"></time>");
+        // dashboard-folds.js shows the switch, because only a script can change the view.
+        if (hasGroups)
+            html.AppendLine($"<button class=\"dashboard-view\" id=\"dashboard-view\" type=\"button\" aria-pressed=\"{options.Compact.ToString().ToLowerInvariant()}\" title=\"Compact view\" hidden>" +
+                            "<span class=\"visually-hidden\">Compact view</span>" +
+                            "<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M2.5 3.5h11M2.5 6.5h11M2.5 9.5h11M2.5 12.5h11\"></path></svg></button>");
         html.Append("</div>");
         return html.ToString();
     }
@@ -329,9 +351,9 @@ public static class Dashboard
         if (tiles.Count == 0 || tiles.All(tile => tile is null))
             return $"<div role=\"row\"><div role=\"gridcell\">{RenderBlock(list, pipeline)}</div></div>";
 
-        var hasDescriptions = tiles.Any(tile => tile is not null && tile.Description.Length > 0);
         var html = new StringBuilder();
-        html.AppendLine($"<ul class=\"dashboard-tiles{(hasDescriptions ? " has-descriptions" : string.Empty)}\" role=\"presentation\">");
+        html.AppendLine("<ul class=\"dashboard-tiles\" role=\"presentation\">");
+        var status = group?.Status ?? options.ChecksStatus(null);
         for (var index = 0; index < tiles.Count; index++)
         {
             var tile = tiles[index];
@@ -343,10 +365,11 @@ public static class Dashboard
 
             var external = Uri.TryCreate(tile.Url, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https";
             var host = external ? uri!.Host : string.Empty;
-            // In a compact list, a host that only repeats the name (GitHub, github.com) would take the name's space.
+            // Every tile has a second line: its description, or else its host. A host that only repeats the name (GitHub,
+            // github.com) leaves the line empty, and the tile keeps the height of the others.
             var subtitle = tile.Description.Length > 0
                 ? tile.Description
-                : !hasDescriptions && HostRepeatsName(tile.PlainName, host)
+                : HostRepeatsName(tile.PlainName, host)
                     ? string.Empty
                     : HtmlEncoder.Default.Encode(NormalizeHost(host));
 
@@ -369,7 +392,7 @@ public static class Dashboard
             html.Append("</span>");
             var newTab = external && options.NewTab;
             if (newTab) html.Append("<span class=\"visually-hidden\"> (opens in a new tab)</span>");
-            if (options.Status && external) html.Append("<span class=\"dashboard-status\" role=\"img\" aria-label=\"Status unknown\"></span>");
+            if (status && external) html.Append("<span class=\"dashboard-status\" role=\"img\" aria-label=\"Status unknown\"></span>");
             html.Append(external ? ExternalArrow : InternalArrow);
             html.Append("</a>");
             // Further paragraphs or nested lists of the item stay below the tile, outside its link.
