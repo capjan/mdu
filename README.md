@@ -69,6 +69,18 @@ mdu render                   # build the site into ./site
 
 Prefer a standalone executable or Docker? See the [installation guide](https://capjan.github.io/mdu/Setup/).
 
+## Why MDU
+
+- **Install it your way.** As a standalone executable, a .NET tool, or a Docker image.
+- **Everything included.** Theme, navigation, search, and icons work out of the box, with no plugins to choose.
+- **Portable Markdown.** Callouts use the GitHub syntax and diagrams are code blocks, so your files stay readable on GitHub, GitLab, or in any editor.
+- **Checked in CI.** `mdu lint` finds broken links, wrong link casing, and unknown tags before you publish.
+- **Diagrams without JavaScript.** Mermaid flowcharts, sequence and state diagrams, and PlantUML component diagrams become static SVG with light and dark themes.
+- **PDF included.** `mdu pdf` exports the whole site as one document.
+- **Coming from Material for MkDocs?** The icon shortcodes work as they are, and `mdu fix` converts admonitions, tabs, and card grids.
+
+See [how MDU compares](https://capjan.github.io/mdu/OtherTools.html#how-mdu-compares) with Material for MkDocs, Docusaurus, Starlight, and DocFX.
+
 ## Explore the documentation
 
 <table>
