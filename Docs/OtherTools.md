@@ -25,7 +25,8 @@ What each tool needs and brings without extra plugins:
 | | MDU | Material for MkDocs | Docusaurus | Starlight | DocFX |
 | --- | --- | --- | --- | --- | --- |
 | Runtime to build the site | None (standalone executable) or .NET | Python | Node.js | Node.js | .NET |
-| Markdown linter | Built in (`mdu lint`) | Plugins | Plugins | Plugins | — |
+| Broken links | Error in `mdu lint`, including anchors | Build warning, error with `--strict` | Build error | Plugins | Build warning |
+| Path casing and structure checks | Built in (`mdu lint`) | — | — | — | — |
 | Diagrams | Static SVG at build time, no JavaScript | Mermaid in the browser | Mermaid in the browser | Plugins | Mermaid in the browser |
 | PDF export | Built in (`mdu pdf`) | Plugins | Plugins | Plugins | Built in |
 | Page format | Markdown with extensions | Markdown with extensions | Markdown and MDX | Markdown and MDX | Markdown with extensions |

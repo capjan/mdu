@@ -7,7 +7,7 @@ Thanks for your interest in MDU! Bug reports, ideas, documentation fixes, and co
 - **Report a bug or ask a question** in the [issue tracker](https://github.com/capjan/mdu/issues). Include the `mdu --version` output, the command you ran, and a small Markdown example if possible.
 - **Pick an issue** labeled [`good first issue`](https://github.com/capjan/mdu/labels/good%20first%20issue) or [`help wanted`](https://github.com/capjan/mdu/labels/help%20wanted). Comment on it so others know you are working on it.
 - **Improve the documentation** in the [`Docs`](Docs) folder. It is plain Markdown and rendered by MDU itself.
-- **Tell others** about MDU, or add your project to a discussion if it uses MDU.
+- **Tell others** about MDU, or open an issue to tell us about a project that uses MDU.
 
 ## Development setup
 
