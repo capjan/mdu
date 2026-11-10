@@ -171,6 +171,24 @@ public class TagsTest
     }
 
     [Fact]
+    public void TagFolderKeepsItsCasingNextToTheVocabularyPageTags()
+    {
+        WithSite(StandardSite(), root =>
+        {
+            var site = Path.Combine(root, "site");
+            // A folder left from an earlier render, as the redirect of Tags.md creates it on a case-insensitive disk.
+            Directory.CreateDirectory(Path.Combine(site, "Tags"));
+            var (result, errors) = Render(root);
+            Assert.True(result == 0, errors);
+
+            Assert.Contains("tags", Directory.EnumerateDirectories(site).Select(Path.GetFileName), StringComparer.Ordinal);
+            Assert.True(File.Exists(Path.Combine(site, "tags", "security.html")));
+            var (check, checkErrors) = Capture(() => CheckSiteCommand.Execute(new DirectoryInfo(site), []));
+            Assert.True(check == 0, checkErrors);
+        });
+    }
+
+    [Fact]
     public void DocumentationFolderNamedTagsCollidesOnlyWhenTheSiteUsesTags()
     {
         var files = new Dictionary<string, string>
