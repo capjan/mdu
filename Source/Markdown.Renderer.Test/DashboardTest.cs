@@ -74,6 +74,8 @@ public class DashboardTest
 
             - [Old Wiki](https://wiki.example.org)
             - [Photos](https://photos.example.org)
+            - [ ](https://task.example.org)
+            - ![Logo](logo.png)
             - Moved to the archive drive
 
             ## Tools[^1]
@@ -91,14 +93,16 @@ public class DashboardTest
 
         Assert.Contains("<section class=\"dashboard-group\" role=\"rowgroup\">", html);
         Assert.Contains("<section class=\"dashboard-group is-collapsed\" role=\"rowgroup\">", html);
-        Assert.Contains("<h2 id=\"office\"><button class=\"dashboard-group-toggle\" type=\"button\" aria-expanded=\"true\"><span class=\"dashboard-group-title\">Office</span><span class=\"dashboard-group-count\" data-count=\"4\" aria-hidden=\"true\"></span>", html);
+        Assert.Contains("<h2 id=\"office\"><button class=\"dashboard-group-toggle\" type=\"button\" aria-expanded=\"true\" disabled><span class=\"dashboard-group-title\">Office</span><span class=\"dashboard-group-count\" data-count=\"5\" aria-hidden=\"true\"></span>", html);
         // One tile past the limit shows instead of a button for it.
         Assert.Contains("data-count=\"3\"", html);
-        // A link in the heading keeps only its text inside the button.
-        Assert.Contains("aria-expanded=\"false\"><span class=\"dashboard-group-title\">AI</span><span class=\"dashboard-group-count\" data-count=\"1\"", html);
-        Assert.Equal(2, CountOf(html, "<li class=\"dashboard-tile is-overflow\" role=\"row\">"));
+        // A link in the heading keeps only its text inside the button. Until the fold script runs, every group is open.
+        Assert.Contains("aria-expanded=\"true\" disabled><span class=\"dashboard-group-title\">AI</span><span class=\"dashboard-group-count\" data-count=\"1\"", html);
+        // A task-list link counts as a tile; an item with only an image is a note.
+        Assert.Equal(3, CountOf(html, "<li class=\"dashboard-tile is-overflow\" role=\"row\">"));
+        Assert.Equal(2, CountOf(html, "<li class=\"dashboard-note is-overflow\""));
         Assert.Equal(1, CountOf(html, "class=\"dashboard-more\""));
-        Assert.Contains("aria-expanded=\"false\" data-more=\"2\">Show 2 more</button>", html);
+        Assert.Contains("aria-expanded=\"false\" data-more=\"3\">Show 3 more</button>", html);
         // A note past the limit folds with the tiles around it.
         Assert.Contains("<li class=\"dashboard-note is-overflow\" role=\"row\"><div role=\"gridcell\">Moved to the archive drive</div></li>", html);
         // A footnote reference follows the button, so it still links to its footnote.

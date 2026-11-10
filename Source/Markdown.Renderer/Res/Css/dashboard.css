@@ -286,10 +286,10 @@
     color: var(--text-primary);
 }
 
-/* Without a script, the label cannot fold its group, so it looks and behaves like a plain label. */
-.dashboard:not(.is-folding) .dashboard-group-toggle {
+/* Without a script, the label is a disabled button that cannot fold its group, so it looks like a plain label. */
+.dashboard-group-toggle:disabled {
+    color: inherit;
     cursor: default;
-    pointer-events: none;
 }
 
 .dashboard:not(.is-folding) .dashboard-group-chevron {

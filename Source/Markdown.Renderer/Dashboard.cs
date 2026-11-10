@@ -188,10 +188,10 @@ public static class Dashboard
                 case HeadingBlock { Level: 2 } heading:
                     CloseGroup();
                     var collapsed = options.StartsCollapsed(PlainText(heading.Inline ?? Enumerable.Empty<Inline>()).Trim());
-                    group = new GroupState(CountGroupTiles(blocks, index + 1, pipeline), options.Limit);
+                    group = new GroupState(CountGroupTiles(blocks, index + 1), options.Limit);
                     html.AppendLine($"<section class=\"dashboard-group{(collapsed ? " is-collapsed" : string.Empty)}\" role=\"rowgroup\">");
                     html.AppendLine("<div role=\"row\"><div role=\"gridcell\">");
-                    html.Append(RenderGroupHeading(RenderBlock(heading, pipeline), collapsed, group.Total));
+                    html.Append(RenderGroupHeading(RenderBlock(heading, pipeline), group.Total));
                     html.AppendLine("</div></div>");
                     break;
                 case ListBlock list:
@@ -219,18 +219,18 @@ public static class Dashboard
     }
 
     /// <summary>Counts the tiles of the group whose blocks start at <paramref name="start"/>.</summary>
-    private static int CountGroupTiles(IReadOnlyList<Block> blocks, int start, MarkdownPipeline pipeline) =>
+    private static int CountGroupTiles(IReadOnlyList<Block> blocks, int start) =>
         blocks.Skip(start)
             .TakeWhile(block => block is not (ThematicBreakBlock or HeadingBlock { Level: 2 }))
             .OfType<ListBlock>()
-            .Sum(list => list.OfType<ListItemBlock>().Count(item => ReadTile(item, pipeline) is not null));
+            .Sum(list => list.OfType<ListItemBlock>().Count(IsTile));
 
     /// <summary>
     /// Turns the text of a group heading into a button that folds the group. The heading keeps its id, so links to it
     /// still work. A button cannot contain a link, so links in the heading keep only their text, and footnote references
     /// follow the button.
     /// </summary>
-    private static string RenderGroupHeading(string headingHtml, bool collapsed, int tiles)
+    private static string RenderGroupHeading(string headingHtml, int tiles)
     {
         var start = headingHtml.IndexOf('>') + 1;
         var end = headingHtml.LastIndexOf("</h2>", StringComparison.Ordinal);
@@ -239,7 +239,7 @@ public static class Dashboard
         var footnotes = string.Concat(FootnoteReferenceRegex.Matches(content).Select(match => match.Value));
         content = AnchorTagRegex.Replace(FootnoteReferenceRegex.Replace(content, string.Empty), string.Empty).Trim();
         return headingHtml[..start]
-               + $"<button class=\"dashboard-group-toggle\" type=\"button\" aria-expanded=\"{(collapsed ? "false" : "true")}\">"
+               + $"<button class=\"dashboard-group-toggle\" type=\"button\" aria-expanded=\"true\" disabled>"
                + $"<span class=\"dashboard-group-title\">{content}</span>"
                + $"<span class=\"dashboard-group-count\" data-count=\"{tiles}\" aria-hidden=\"true\"></span>"
                + "<svg class=\"dashboard-group-chevron\" viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><path d=\"m4 6 4 4 4-4\"></path></svg>"
@@ -357,6 +357,18 @@ public static class Dashboard
         return html.ToString();
     }
 
+    /// <summary>Tells whether a list item becomes a tile, without rendering it.</summary>
+    private static bool IsTile(ListItemBlock item) =>
+        item.FirstOrDefault() is ParagraphBlock { Inline: { } inlines } &&
+        inlines.ToList() is var parts && (IsTaskListLink(parts) || FindTileLink(parts) >= 0);
+
+    /// <summary>The index of the link that makes an item a tile: its first link that is not an image, if it has a URL.</summary>
+    private static int FindTileLink(List<Inline> parts)
+    {
+        var index = parts.FindIndex(inline => inline is LinkInline { IsImage: false });
+        return index >= 0 && !string.IsNullOrWhiteSpace(((LinkInline)parts[index]).Url) ? index : -1;
+    }
+
     private static DashboardTile? ReadTile(ListItemBlock item, MarkdownPipeline pipeline)
     {
         if (item.FirstOrDefault() is not ParagraphBlock { Inline: { } inlines }) return null;
@@ -364,10 +376,9 @@ public static class Dashboard
         var parts = inlines.ToList();
         var more = string.Concat(item.Skip(1).Select(block => RenderBlock(block, pipeline)));
         if (ReadTaskListLink(parts, pipeline) is { } taskListTile) return taskListTile with { MoreHtml = more };
-        var linkIndex = parts.FindIndex(inline => inline is LinkInline { IsImage: false });
+        var linkIndex = FindTileLink(parts);
         if (linkIndex < 0) return null;
         var link = (LinkInline)parts[linkIndex];
-        if (string.IsNullOrWhiteSpace(link.Url)) return null;
 
         var before = parts.Take(linkIndex).Where(inline => inline is not LiteralInline literal || !literal.Content.IsEmptyOrWhitespace()).ToList();
         var linkChildren = link.ToList();
@@ -402,11 +413,16 @@ public static class Dashboard
     /// <summary>
     /// Reads <c>- [X](https://x.com)</c>, which Markdown parses as a checked task followed by an automatic link.
     /// </summary>
+    private static bool IsTaskListLink(IReadOnlyList<Inline> parts) =>
+        parts is [TaskList, LiteralInline open, LinkInline { IsAutoLink: true } link, LiteralInline close, ..] &&
+        open.Content.ToString() == "(" && close.Content.ToString().StartsWith(')') && !string.IsNullOrWhiteSpace(link.Url);
+
     private static DashboardTile? ReadTaskListLink(IReadOnlyList<Inline> parts, MarkdownPipeline pipeline)
     {
-        if (parts is not [TaskList task, LiteralInline open, LinkInline { IsAutoLink: true } link, LiteralInline close, ..] ||
-            open.Content.ToString() != "(" || !close.Content.ToString().StartsWith(')') || string.IsNullOrWhiteSpace(link.Url))
-            return null;
+        if (!IsTaskListLink(parts)) return null;
+        var task = (TaskList)parts[0];
+        var link = (LinkInline)parts[2];
+        var close = (LiteralInline)parts[3];
 
         var name = task.Checked ? "X" : " ";
         var description = RenderDescription(close.Content.ToString()[1..], parts.Skip(4), pipeline);

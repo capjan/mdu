@@ -72,10 +72,10 @@
     // Groups fold with their heading, and a group with a limit shows the rest of its tiles on request. The reader's choice
     // stays in this browser for this page; dashboard-folds.js applies it while the page loads. The page works the same
     // without storage.
-    const foldKey = `mdu-dashboard-folds:${window.location.pathname}`;
+    const foldKey = dashboard.dataset.foldKey;
     const readFolds = () => {
         try {
-            return JSON.parse(localStorage.getItem(foldKey) || "{}") || {};
+            return foldKey ? JSON.parse(localStorage.getItem(foldKey) || "{}") || {} : {};
         } catch {
             return {};
         }
@@ -104,7 +104,7 @@
             expanded: group.classList.contains("is-expanded")
         };
         try {
-            localStorage.setItem(foldKey, JSON.stringify(folds));
+            if (foldKey) localStorage.setItem(foldKey, JSON.stringify(folds));
         } catch {
             // Without storage, the choice lasts until the page reloads.
         }
@@ -558,6 +558,12 @@
         update();
         // Showing fewer tiles must not leave the button far below the viewport.
         if (button.isConnected) button.scrollIntoView({ block: "nearest" });
+    });
+
+    // dashboard-folds.js opens the group of a new fragment target; the tiles show again, and the page scrolls to it.
+    dashboard.addEventListener("dashboard-reveal", event => {
+        update();
+        event.detail.scrollIntoView({ block: "start", behavior: prefersReducedMotion.matches ? "auto" : "smooth" });
     });
 
     clearButton.addEventListener("click", clear);
