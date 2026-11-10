@@ -371,7 +371,33 @@
     background: var(--dashboard-hover);
 }
 
-:root:not([data-input="pointer"]) :is(.dashboard-group-toggle, .dashboard-more):focus-visible {
+/* The frequently used links come first and span the width; their label carries a quiet button that forgets them. */
+.markdown-content .dashboard-frequent h2 {
+    display: flex;
+    gap: 0.5rem;
+    align-items: baseline;
+}
+
+.dashboard-frequent-clear {
+    margin: -0.25rem 0 0 auto;
+    padding: 0.25rem 0.5rem;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: var(--dashboard-muted);
+    font: inherit;
+    font-weight: 500;
+    letter-spacing: normal;
+    text-transform: none;
+    cursor: pointer;
+}
+
+.dashboard-frequent-clear:hover {
+    color: var(--text-primary);
+    background: var(--dashboard-hover);
+}
+
+:root:not([data-input="pointer"]) :is(.dashboard-group-toggle, .dashboard-more, .dashboard-frequent-clear):focus-visible {
     outline: 2px solid var(--link);
     outline-offset: 3px;
 }

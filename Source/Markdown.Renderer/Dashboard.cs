@@ -17,13 +17,15 @@ namespace Markdown.Renderer;
 /// </summary>
 /// <param name="Limit">The number of tiles a group shows before a button reveals the rest, or null for all tiles.</param>
 /// <param name="Collapsed">The groups that start collapsed: the text of their headings, or <c>*</c> for every group.</param>
+/// <param name="Frequent">The number of tiles the row of frequently used links shows, or null for no such row.</param>
 public sealed record DashboardOptions(
     string? SearchUrl,
     bool Clock,
     bool Status,
     bool NewTab,
     int? Limit = null,
-    IReadOnlyList<string>? Collapsed = null)
+    IReadOnlyList<string>? Collapsed = null,
+    int? Frequent = null)
 {
     internal bool StartsCollapsed(string heading) =>
         Collapsed is not null && Collapsed.Any(name => name == "*" || string.Equals(name, heading, StringComparison.OrdinalIgnoreCase));
@@ -103,7 +105,8 @@ public static class Dashboard
             ReadBoolean(options, "status", false),
             string.Equals(options is null ? null : ReadScalar(options, "open")?.Trim(), "new-tab", StringComparison.OrdinalIgnoreCase),
             int.TryParse(options is null ? null : ReadScalar(options, "limit")?.Trim(), out var limit) && limit > 0 ? limit : null,
-            ReadCollapsed(options));
+            ReadCollapsed(options),
+            ReadFrequent(options));
     }
 
     /// <summary>
@@ -122,6 +125,18 @@ public static class Dashboard
         var trimmed = names.Select(name => name.Trim()).Where(name => name.Length > 0).ToList();
         return trimmed.Count == 0 ? null : trimmed;
     }
+
+    /// <summary>
+    /// Reads <c>frequent</c>: the number of frequently used links to show, or <c>true</c> for <see cref="FrequentDefault"/>.
+    /// </summary>
+    private static int? ReadFrequent(YamlMappingNode? options)
+    {
+        var value = options is null ? null : ReadScalar(options, "frequent")?.Trim();
+        if (int.TryParse(value, out var count)) return count > 0 ? count : null;
+        return bool.TryParse(value, out var enabled) && enabled ? FrequentDefault : null;
+    }
+
+    private const int FrequentDefault = 6;
 
     public static string Render(MarkdownDocument document, MarkdownPipeline pipeline, DashboardOptions options)
     {
@@ -142,6 +157,15 @@ public static class Dashboard
         html.AppendLine($"<div id=\"dashboard-results\" role=\"grid\" aria-label=\"Links and pages\" aria-readonly=\"true\"{(firstGroup < 0 ? " hidden" : string.Empty)}>");
         if (firstGroup >= 0)
         {
+            // dashboard-folds.js fills the row with copies of the tiles the reader opens most, and shows it once it has any.
+            if (options.Frequent is { } frequent)
+                html.AppendLine("<div class=\"dashboard-row dashboard-frequent-row\" role=\"presentation\" hidden>")
+                    .AppendLine($"<section class=\"dashboard-group dashboard-frequent\" role=\"rowgroup\" data-frequent=\"{frequent}\">")
+                    .AppendLine("<div role=\"row\"><div role=\"gridcell\"><h2><span class=\"dashboard-group-title\">Frequently used</span>" +
+                                "<button class=\"dashboard-frequent-clear\" type=\"button\" aria-label=\"Clear frequently used links\">Clear</button></h2></div></div>")
+                    .AppendLine("<ul class=\"dashboard-tiles\" role=\"presentation\"></ul>")
+                    .AppendLine("</section>")
+                    .AppendLine("</div>");
             html.Append(RenderGroups(blocks.Skip(firstGroup).ToList(), pipeline, options, usedIds));
             // Inline, so folded groups and saved choices apply before the first paint, and only where a script can undo them.
             html.AppendLine($"<script>{Resources.DashboardFoldsScriptContent().Trim()}</script>");

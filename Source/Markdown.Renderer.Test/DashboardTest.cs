@@ -112,6 +112,34 @@ public class DashboardTest
     }
 
     [Fact]
+    public void ReadsTheFrequentlyUsedLinks()
+    {
+        DashboardOptions Read(string value) => Dashboard.ReadFrontMatter($"---\nlayout: dashboard\ndashboard:\n  frequent: {value}\n---")!;
+        Assert.Equal(4, Read("4").Frequent);
+        Assert.Equal(6, Read("true").Frequent);
+        Assert.Null(Read("false").Frequent);
+        Assert.Null(Read("0").Frequent);
+        Assert.Null(Read("often").Frequent);
+        Assert.Null(Dashboard.ReadFrontMatter("---\nlayout: dashboard\n---")!.Frequent);
+    }
+
+    [Fact]
+    public async Task LeavesAHiddenRowForTheFrequentlyUsedLinks()
+    {
+        const string markdown = "## Office\n\n- [Mail](https://mail.example.org)\n";
+        var html = await RenderPage(markdown, new DashboardOptions(null, false, false, false, Frequent: 4));
+        // The row comes before the groups and stays hidden until the script fills it.
+        Assert.Matches(
+            "<div id=\"dashboard-results\"[^>]*>\\s*<div class=\"dashboard-row dashboard-frequent-row\" role=\"presentation\" hidden>\\s*" +
+            "<section class=\"dashboard-group dashboard-frequent\" role=\"rowgroup\" data-frequent=\"4\">",
+            html);
+        Assert.Contains("<ul class=\"dashboard-tiles\" role=\"presentation\"></ul>", html);
+        Assert.Contains("aria-label=\"Clear frequently used links\"", html);
+
+        Assert.DoesNotContain("<section class=\"dashboard-group dashboard-frequent\"", await RenderPage(markdown, new DashboardOptions(null, false, false, false)));
+    }
+
+    [Fact]
     public async Task RendersGroupsOfLinkTiles()
     {
         var html = await RenderPage("""

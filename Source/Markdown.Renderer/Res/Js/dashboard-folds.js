@@ -5,8 +5,9 @@
     if (!dashboard) return;
     dashboard.classList.add("is-folding");
     // A folder's start page has two addresses, such as /wiki/ and /wiki/index.html; both share one entry.
-    dashboard.dataset.foldKey = `mdu-dashboard-folds:${window.location.pathname.replace(/(?:index|README)\.html$/i, "")}`;
-    const groups = [...dashboard.querySelectorAll(".dashboard-group")];
+    const page = window.location.pathname.replace(/(?:index|README)\.html$/i, "");
+    dashboard.dataset.foldKey = `mdu-dashboard-folds:${page}`;
+    const groups = [...dashboard.querySelectorAll(".dashboard-group:not(.dashboard-frequent)")];
     // The page leaves the labels disabled and every group open, which is true without a script; folding starts here.
     for (const group of groups) {
         const toggle = group.querySelector(".dashboard-group-toggle");
@@ -35,6 +36,44 @@
         const saved = folds[group.querySelector("h2")?.id || String(index)];
         if (saved) apply(group, !!saved.collapsed, !!saved.expanded);
     });
+
+    // The row of frequently used links shows copies of the tiles this reader opened at least twice, those opened often and
+    // lately first; a use counts half after 30 days. dashboard.js counts the uses in the same entry.
+    const frequent = dashboard.querySelector(".dashboard-frequent");
+    if (frequent) {
+        dashboard.dataset.frequentKey = `mdu-dashboard-frequent:${page}`;
+        let uses = {};
+        try {
+            uses = JSON.parse(localStorage.getItem(dashboard.dataset.frequentKey) || "{}") || {};
+        } catch {
+            // Without storage, the row stays hidden.
+        }
+        const links = new Map();
+        for (const group of groups)
+            for (const link of group.querySelectorAll(".dashboard-tile a.dashboard-link"))
+                if (!links.has(link.href)) links.set(link.href, link);
+        const now = Date.now();
+        const score = use => use.n * 0.5 ** ((now - use.t) / (30 * 864e5));
+        const picks = Object.entries(uses)
+            .filter(([href, use]) => use?.n >= 2 && links.has(href))
+            .sort(([, a], [, b]) => score(b) - score(a))
+            .slice(0, Number(frequent.dataset.frequent) || 6);
+        const list = frequent.querySelector(".dashboard-tiles");
+        picks.forEach(([href], index) => {
+            const link = links.get(href);
+            const tile = link.closest(".dashboard-tile").cloneNode(true);
+            tile.classList.remove("is-overflow");
+            tile.hidden = false;
+            tile.querySelector(".dashboard-tile-more")?.remove();
+            const cell = tile.querySelector('[role="gridcell"]');
+            let suffix = index;
+            while (document.getElementById(`dashboard-frequent-tile-${suffix}`)) suffix++;
+            cell.id = `dashboard-frequent-tile-${suffix}`;
+            if (link.closest(".dashboard-tiles.has-descriptions")) list.classList.add("has-descriptions");
+            list.append(tile);
+        });
+        frequent.parentElement.hidden = picks.length === 0;
+    }
 
     // A link to a group or to anything inside it opens the group in full, without changing the saved choice, so the
     // browser can scroll to the target. dashboard.js shows the tiles again when the fragment changes later.

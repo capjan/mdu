@@ -13,9 +13,12 @@
     const clock = document.getElementById("dashboard-clock");
     const searchUrl = dashboard.dataset.dashboardSearch;
     const indexPath = document.body.dataset.searchIndex;
-    const tiles = [...dashboard.querySelectorAll(".dashboard-tile")];
-    const groups = [...dashboard.querySelectorAll(".dashboard-group")];
-    const rows = [...dashboard.querySelectorAll(".dashboard-row")];
+    // The row of frequently used links holds copies of tiles; the filter and the folds work on the originals.
+    const frequentRow = dashboard.querySelector(".dashboard-frequent-row");
+    const frequentList = frequentRow?.querySelector(".dashboard-tiles");
+    const tiles = [...dashboard.querySelectorAll(".dashboard-tile")].filter(tile => !frequentRow?.contains(tile));
+    const groups = [...dashboard.querySelectorAll(".dashboard-group:not(.dashboard-frequent)")];
+    const rows = [...dashboard.querySelectorAll(".dashboard-row:not(.dashboard-frequent-row)")];
     // A subheading (third level or lower) starts a section of its group that runs to the next one; its heading and
     // description rows hide with the section's tiles.
     const sections = groups.flatMap(group => {
@@ -392,6 +395,8 @@
         }
         for (const group of groups) group.hidden = !group.querySelector(".dashboard-tile:not([hidden]), .dashboard-note") && terms.length > 0;
         for (const row of rows) row.hidden = !row.querySelector(".dashboard-group:not([hidden])") && terms.length > 0;
+        // The filter finds the original tiles, so the copies step aside while it has text.
+        if (frequentRow) frequentRow.hidden = terms.length > 0 || !frequentList.children.length;
 
         renderPages(rankPages(terms), terms);
         const pages = [...pagesList.querySelectorAll("a.dashboard-page")];
@@ -402,7 +407,7 @@
         resultsGrid.hidden = ![...resultsGrid.querySelectorAll('[role="rowgroup"]')].some(isVisibleInResults);
         input.setAttribute("aria-expanded", String(!resultsGrid.hidden));
 
-        const count = items.length;
+        const count = items.filter(item => !frequentRow?.contains(item)).length;
         const waitingForIndex = terms.length > 0 && !!indexPath && !pageEntries;
         const message = terms.length === 0
             ? `${count} ${count === 1 ? "link" : "links"}.`
@@ -544,8 +549,42 @@
         input.focus();
     };
 
+    // Every opened tile counts for the row of frequently used links: a click, a middle click, or Enter in the filter. The
+    // row changes on the next visit, so tiles do not move under the pointer.
+    const frequentKey = dashboard.dataset.frequentKey;
+    const countUse = (link) => {
+        if (!frequentKey || !link?.matches("a.dashboard-link")) return;
+        try {
+            const uses = JSON.parse(localStorage.getItem(frequentKey) || "{}") || {};
+            const now = Date.now();
+            uses[link.href] = { n: (uses[link.href]?.n || 0) + 1, t: now };
+            // Only the most used links are worth keeping.
+            const score = use => use.n * 0.5 ** ((now - use.t) / (30 * 864e5));
+            const kept = Object.entries(uses).sort(([, a], [, b]) => score(b) - score(a)).slice(0, 50);
+            localStorage.setItem(frequentKey, JSON.stringify(Object.fromEntries(kept)));
+        } catch {
+            // Without storage, nothing is counted.
+        }
+    };
+    dashboard.addEventListener("click", event => countUse(event.target instanceof Element ? event.target.closest("a") : null));
+    dashboard.addEventListener("auxclick", event => {
+        if (event.button === 1) countUse(event.target instanceof Element ? event.target.closest("a") : null);
+    });
+
+    frequentRow?.querySelector(".dashboard-frequent-clear")?.addEventListener("click", () => {
+        try {
+            localStorage.removeItem(frequentKey);
+        } catch {
+            // Nothing was stored.
+        }
+        frequentList.replaceChildren();
+        update();
+        input.focus({ preventScroll: true });
+        status.textContent = "Frequently used links cleared.";
+    });
+
     dashboard.addEventListener("click", event => {
-        const button = event.target instanceof Element ? event.target.closest(".dashboard-group-toggle, .dashboard-more") : null;
+        const button =event.target instanceof Element ? event.target.closest(".dashboard-group-toggle, .dashboard-more") : null;
         const group = button?.closest(".dashboard-group");
         if (!group) return;
         // While the filter shows matches from every group, a heading clears the filter and opens its group.
@@ -596,6 +635,7 @@
         event.preventDefault();
         const newTab = event.metaKey || event.ctrlKey;
         if (best && !(event.altKey && searchUrl)) {
+            countUse(best);
             if (newTab || opensNewTab(best)) window.open(best.href, "_blank", "noopener");
             else window.location.href = best.href;
         } else if (searchUrl) {
@@ -640,21 +680,24 @@
     }
 
     if (dashboard.dataset.dashboardStatus === "true") {
+        // One request per address, so a tile and its copy among the frequently used links share the answer.
+        const requests = new Map();
+        const reach = (href) => {
+            if (!requests.has(href)) {
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 6000);
+                requests.set(href, fetch(href, { mode: "no-cors", cache: "no-store", signal: controller.signal })
+                    .then(() => true, () => false)
+                    .finally(() => clearTimeout(timeout)));
+            }
+            return requests.get(href);
+        };
         const check = async (link, status) => {
             const url = new URL(link.href);
             if (window.location.protocol === "https:" && url.protocol === "http:") return;
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 6000);
-            try {
-                await fetch(url, { mode: "no-cors", cache: "no-store", signal: controller.signal });
-                status.classList.add("is-up");
-                status.setAttribute("aria-label", "Reachable");
-            } catch {
-                status.classList.add("is-down");
-                status.setAttribute("aria-label", "Not reachable");
-            } finally {
-                clearTimeout(timeout);
-            }
+            const up = await reach(url.href);
+            status.classList.add(up ? "is-up" : "is-down");
+            status.setAttribute("aria-label", up ? "Reachable" : "Not reachable");
         };
         for (const status of dashboard.querySelectorAll(".dashboard-status"))
             check(status.closest("a"), status);
