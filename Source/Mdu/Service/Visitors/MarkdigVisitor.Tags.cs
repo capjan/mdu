@@ -27,7 +27,7 @@ public partial class MarkdigVisitor
     {
         if (_siteTags.Tags.Count == 0) return [];
         var folder = Path.Combine(_outPath, SiteTags.Folder);
-        Directory.CreateDirectory(folder);
+        CreateTagFolder(folder);
         var written = new List<string>();
         var anchorPage = _siteTags.VocabularyPage ?? _navigationRoots.FirstOrDefault();
         var indexPath = Path.Combine(folder, "index.html");
@@ -78,6 +78,27 @@ public partial class MarkdigVisitor
         var segments = GetSiteRelativeSegments(fromDirectory);
         return tags.Select(tag => new PageTagLink(tag.Name,
             GetRelativeUrl(segments, [SiteTags.Folder, tag.Slug + ".html"]), tag.Pages.Count)).ToArray();
+    }
+
+    /// <summary>
+    /// Creates <c>tags/</c> with exactly this casing. On a case-insensitive file system the redirect <c>Tags/index.html</c>
+    /// of a vocabulary page <c>Tags.md</c>, or an earlier render, may already have created the folder as <c>Tags/</c>;
+    /// links to <c>tags/…</c> would then break on a case-sensitive web server, so the folder is renamed.
+    /// </summary>
+    private static void CreateTagFolder(string folder)
+    {
+        var parent = Path.GetDirectoryName(folder)!;
+        var name = Path.GetFileName(folder);
+        if (Directory.Exists(folder) && Directory.EnumerateDirectories(parent).Select(Path.GetFileName).ToArray() is var names &&
+            !names.Contains(name, StringComparer.Ordinal) &&
+            names.FirstOrDefault(entry => string.Equals(entry, name, StringComparison.OrdinalIgnoreCase)) is { } existing)
+        {
+            // A case-only rename goes through a temporary name, which every file system accepts.
+            var temporary = Path.Combine(parent, name + "-" + Guid.NewGuid().ToString("N"));
+            Directory.Move(Path.Combine(parent, existing), temporary);
+            Directory.Move(temporary, folder);
+        }
+        Directory.CreateDirectory(folder);
     }
 
     private bool IsInTagFolder(string outputPath) =>
