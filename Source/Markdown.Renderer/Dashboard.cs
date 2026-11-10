@@ -77,6 +77,7 @@ public static class Dashboard
     private static readonly Regex NonSlugCharactersRegex = new("[^a-z0-9]+", RegexOptions.Compiled);
     private static readonly Regex LeadingSeparatorRegex = new(@"\A\s*(?:[—–:|·-]\s*)?", RegexOptions.Compiled);
     private static readonly Regex AnchorTagRegex = new("</?a\\b[^>]*>", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex FootnoteReferenceRegex = new("<a\\b[^>]*\\bclass=\"footnote-ref\"[^>]*>.*?</a>", RegexOptions.Compiled | RegexOptions.Singleline);
     private static readonly Regex HeadingIdRegex = new("<h[1-6][^>]*\\bid=\"(?<id>[^\"]+)\"", RegexOptions.Compiled);
     private static readonly char[] WordSeparators = [' ', '@', '-', '_', '.', '/', '&', '+'];
     // The arrow that fades in on hover and focus shows whether a tile leaves the site.
@@ -139,7 +140,12 @@ public static class Dashboard
         foreach (var block in introduction) html.Append(RenderBlock(block, pipeline));
         html.AppendLine(RenderToolbar(options, firstGroup >= 0));
         html.AppendLine($"<div id=\"dashboard-results\" role=\"grid\" aria-label=\"Links and pages\" aria-readonly=\"true\"{(firstGroup < 0 ? " hidden" : string.Empty)}>");
-        if (firstGroup >= 0) html.Append(RenderGroups(blocks.Skip(firstGroup), pipeline, options, usedIds));
+        if (firstGroup >= 0)
+        {
+            html.Append(RenderGroups(blocks.Skip(firstGroup).ToList(), pipeline, options, usedIds));
+            // Inline, so folded groups and saved choices apply before the first paint, and only where a script can undo them.
+            html.AppendLine($"<script>{Resources.DashboardFoldsScriptContent().Trim()}</script>");
+        }
 
         // The filter script fills these containers, so they exist even on a dashboard without groups.
         html.AppendLine("<div class=\"dashboard-pages\" id=\"dashboard-pages\" role=\"rowgroup\" aria-label=\"Pages\" hidden>");
@@ -153,51 +159,43 @@ public static class Dashboard
         return html.ToString();
     }
 
-    private static string RenderGroups(IEnumerable<Block> blocks, MarkdownPipeline pipeline, DashboardOptions options, HashSet<string> usedIds)
+    private static string RenderGroups(IReadOnlyList<Block> blocks, MarkdownPipeline pipeline, DashboardOptions options, HashSet<string> usedIds)
     {
         var html = new StringBuilder();
         html.AppendLine("<div class=\"dashboard-row\" role=\"presentation\">");
         GroupState? group = null;
-        var groupOpen = false;
         var tileIndex = 0;
 
         void CloseGroup()
         {
             if (group is null) return;
-            // The heading names the number of tiles, which the group only knows at its end.
-            html.Replace(GroupState.CountToken, group.Tiles.ToString(System.Globalization.CultureInfo.InvariantCulture), group.Start, html.Length - group.Start);
-            var more = group.Tiles - (options.Limit ?? group.Tiles);
-            // A button for a single tile would take the tile's place, so the tile shows instead.
-            if (more == 1)
-                html.Replace("<li class=\"dashboard-tile is-overflow\"", "<li class=\"dashboard-tile\"", group.Start, html.Length - group.Start);
-            else if (more > 1)
+            var more = group.Total - group.Shown;
+            if (more > 0)
                 html.AppendLine($"<div class=\"dashboard-more-row\" role=\"row\"><div role=\"gridcell\"><button class=\"dashboard-more\" type=\"button\" aria-expanded=\"false\" data-more=\"{more}\">Show {more} more</button></div></div>");
             html.AppendLine("</section>");
             group = null;
         }
 
-        foreach (var block in blocks)
+        for (var index = 0; index < blocks.Count; index++)
         {
-            switch (block)
+            switch (blocks[index])
             {
                 case ThematicBreakBlock:
                     CloseGroup();
-                    groupOpen = false;
                     html.AppendLine("</div>");
                     html.AppendLine("<div class=\"dashboard-row\" role=\"presentation\">");
                     break;
                 case HeadingBlock { Level: 2 } heading:
                     CloseGroup();
-                    groupOpen = true;
                     var collapsed = options.StartsCollapsed(PlainText(heading.Inline ?? Enumerable.Empty<Inline>()).Trim());
-                    group = new GroupState(html.Length);
+                    group = new GroupState(CountGroupTiles(blocks, index + 1, pipeline), options.Limit);
                     html.AppendLine($"<section class=\"dashboard-group{(collapsed ? " is-collapsed" : string.Empty)}\" role=\"rowgroup\">");
                     html.AppendLine("<div role=\"row\"><div role=\"gridcell\">");
-                    html.Append(RenderGroupHeading(RenderBlock(heading, pipeline), collapsed));
+                    html.Append(RenderGroupHeading(RenderBlock(heading, pipeline), collapsed, group.Total));
                     html.AppendLine("</div></div>");
                     break;
                 case ListBlock list:
-                    if (groupOpen) html.Append(RenderTiles(list, pipeline, options, usedIds, ref tileIndex, group));
+                    if (group is not null) html.Append(RenderTiles(list, pipeline, options, usedIds, ref tileIndex, group));
                     else
                     {
                         html.AppendLine("<div role=\"rowgroup\">");
@@ -205,12 +203,12 @@ public static class Dashboard
                         html.AppendLine("</div>");
                     }
                     break;
-                default:
-                    if (!groupOpen) html.AppendLine("<div role=\"rowgroup\">");
+                case var block:
+                    if (group is null) html.AppendLine("<div role=\"rowgroup\">");
                     html.AppendLine("<div role=\"row\"><div role=\"gridcell\">");
                     html.Append(RenderBlock(block, pipeline));
                     html.AppendLine("</div></div>");
-                    if (!groupOpen) html.AppendLine("</div>");
+                    if (group is null) html.AppendLine("</div>");
                     break;
             }
         }
@@ -220,31 +218,46 @@ public static class Dashboard
         return html.ToString();
     }
 
+    /// <summary>Counts the tiles of the group whose blocks start at <paramref name="start"/>.</summary>
+    private static int CountGroupTiles(IReadOnlyList<Block> blocks, int start, MarkdownPipeline pipeline) =>
+        blocks.Skip(start)
+            .TakeWhile(block => block is not (ThematicBreakBlock or HeadingBlock { Level: 2 }))
+            .OfType<ListBlock>()
+            .Sum(list => list.OfType<ListItemBlock>().Count(item => ReadTile(item, pipeline) is not null));
+
     /// <summary>
     /// Turns the text of a group heading into a button that folds the group. The heading keeps its id, so links to it
-    /// still work; links inside the heading keep only their text, because a button cannot contain a link.
+    /// still work. A button cannot contain a link, so links in the heading keep only their text, and footnote references
+    /// follow the button.
     /// </summary>
-    private static string RenderGroupHeading(string headingHtml, bool collapsed)
+    private static string RenderGroupHeading(string headingHtml, bool collapsed, int tiles)
     {
         var start = headingHtml.IndexOf('>') + 1;
         var end = headingHtml.LastIndexOf("</h2>", StringComparison.Ordinal);
         if (start <= 0 || end < start) return headingHtml;
-        var content = AnchorTagRegex.Replace(headingHtml[start..end], string.Empty).Trim();
+        var content = headingHtml[start..end];
+        var footnotes = string.Concat(FootnoteReferenceRegex.Matches(content).Select(match => match.Value));
+        content = AnchorTagRegex.Replace(FootnoteReferenceRegex.Replace(content, string.Empty), string.Empty).Trim();
         return headingHtml[..start]
                + $"<button class=\"dashboard-group-toggle\" type=\"button\" aria-expanded=\"{(collapsed ? "false" : "true")}\">"
                + $"<span class=\"dashboard-group-title\">{content}</span>"
-               + $"<span class=\"dashboard-group-count\" data-count=\"{GroupState.CountToken}\" aria-hidden=\"true\"></span>"
+               + $"<span class=\"dashboard-group-count\" data-count=\"{tiles}\" aria-hidden=\"true\"></span>"
                + "<svg class=\"dashboard-group-chevron\" viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><path d=\"m4 6 4 4 4-4\"></path></svg>"
                + "</button>"
+               + footnotes
                + headingHtml[end..];
     }
 
-    /// <summary>The group being written: where it starts in the output and how many tiles it has so far.</summary>
-    private sealed class GroupState(int start)
+    /// <summary>
+    /// The group being written: how many tiles it has, how many show before Show more, and how many are written so far.
+    /// A button for a single tile would take the tile's place, so a group with one tile past the limit shows them all.
+    /// </summary>
+    private sealed class GroupState(int total, int? limit)
     {
-        public const string CountToken = "\u0001tiles\u0001";
-        public int Start { get; } = start;
-        public int Tiles { get; set; }
+        public int Total { get; } = total;
+        public int Shown { get; } = limit is { } value && total - value > 1 ? value : total;
+        public int Written { get; set; }
+        public bool IsFull => Written >= Shown && Shown < Total;
     }
 
     private static HashSet<string> ReadHeadingIds(IEnumerable<HeadingBlock> headings, MarkdownPipeline pipeline)
@@ -300,7 +313,7 @@ public static class Dashboard
             var tile = tiles[index];
             if (tile is null)
             {
-                html.AppendLine($"<li class=\"dashboard-note\" role=\"row\"><div role=\"gridcell\">{RenderChildren((ListItemBlock)list[index], pipeline)}</div></li>");
+                html.AppendLine($"<li class=\"dashboard-note{(group is { IsFull: true } ? " is-overflow" : string.Empty)}\" role=\"row\"><div role=\"gridcell\">{RenderChildren((ListItemBlock)list[index], pipeline)}</div></li>");
                 continue;
             }
 
@@ -318,7 +331,7 @@ public static class Dashboard
             while (!usedIds.Add(id));
 
             // Tiles past the limit stay in the page for the filter and appear when the reader asks for them.
-            var overflow = group is not null && ++group.Tiles > (options.Limit ?? int.MaxValue);
+            var overflow = group is not null && ++group.Written > group.Shown;
             html.Append($"<li class=\"dashboard-tile{(overflow ? " is-overflow" : string.Empty)}\" role=\"row\">");
             html.Append($"<div class=\"dashboard-cell\" id=\"{id}\" role=\"gridcell\" aria-selected=\"false\">");
             html.Append($"<a class=\"dashboard-link\" href=\"{HtmlEncoder.Default.Encode(tile.Url)}\"");

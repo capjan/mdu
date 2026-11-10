@@ -118,7 +118,7 @@ dashboard:
 
 A dashboard can hold everything you need without showing it all at once. Select a group label to fold the group to its label; a folded label shows the number of its tiles. With `limit`, a group shows only its first tiles, and **Show more** reveals the rest; when only one tile would be left over, the group shows it instead. The filter always searches every tile, including those in folded groups and past the limit, and while it has text, every group shows its matches. Selecting a group label while filtering clears the filter and opens that group.
 
-What you fold or open stays in your browser for this page, so `collapsed` and `limit` set only the start. A good start page keeps the links you use daily in open groups at the top, and the rest in folded groups below.
+What you fold or open stays in your browser for this page, so `collapsed` and `limit` set only the start. A good start page keeps the links you use daily in open groups at the top, and the rest in folded groups below. Without JavaScript, every group shows all of its tiles.
 
 ## Behavior
 

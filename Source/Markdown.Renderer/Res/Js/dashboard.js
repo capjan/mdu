@@ -70,7 +70,8 @@
     });
 
     // Groups fold with their heading, and a group with a limit shows the rest of its tiles on request. The reader's choice
-    // stays in this browser for this page; the page works the same without storage.
+    // stays in this browser for this page; dashboard-folds.js applies it while the page loads. The page works the same
+    // without storage.
     const foldKey = `mdu-dashboard-folds:${window.location.pathname}`;
     const readFolds = () => {
         try {
@@ -108,12 +109,6 @@
             // Without storage, the choice lasts until the page reloads.
         }
     };
-    for (const group of groups) {
-        const saved = folds[groupKey(group)];
-        if (!saved) continue;
-        setCollapsed(group, !!saved.collapsed);
-        setExpanded(group, !!saved.expanded);
-    }
 
     // The page an index entry belongs to; section entries carry an anchor.
     const pageOf = (entry) => entry.url.split("#")[0];
@@ -367,6 +362,10 @@
 
         // While the filter is empty, folded groups and tiles past the limit stay out of the results; the filter searches them.
         dashboard.classList.toggle("is-filtering", terms.length > 0);
+        // A filter shows the matches of folded groups too, so their labels announce them as expanded meanwhile.
+        for (const group of groups)
+            group.querySelector(".dashboard-group-toggle")?.setAttribute("aria-expanded",
+                String(terms.length > 0 || !group.classList.contains("is-collapsed")));
         for (const entry of tileEntries) {
             const matches = terms.every(term => entry.text.includes(term));
             entry.tile.hidden = !matches || (terms.length === 0 && isFolded(entry.tile));
@@ -376,8 +375,8 @@
             }
         }
         for (const section of sections) {
-            const folds = section.heads[0].closest(".dashboard-group")?.matches(".is-collapsed, :has(.is-overflow)");
-            const hidden = (terms.length > 0 || folds) &&
+            const groupFolds = section.heads[0].closest(".dashboard-group")?.matches(".is-collapsed, :has(.is-overflow)");
+            const hidden = (terms.length > 0 || groupFolds) &&
                 !section.parts.some(part => part.querySelector(".dashboard-tile:not([hidden]), .dashboard-note"));
             for (const head of section.heads) head.hidden = hidden;
         }
@@ -421,10 +420,6 @@
             ? `No links or pages match “${query}”. Press Enter to search the web.`
             : `No links or pages match “${query}”.`;
     };
-
-    const linkOf = (event) => event.target instanceof Element
-        ? event.target.closest("a.dashboard-link, a.dashboard-page")
-        : null;
 
     // Whichever input was used last leads: moving the mouse hides the keyboard outline, and a key press hides the hover
     // again. A resting pointer is ignored, so tiles that scroll or filter in under it do not light up.
@@ -527,10 +522,12 @@
         from.blur();
     });
 
-    // On a tile, Home and End jump to the first and last result, and typing continues in the filter.
+    // On a tile or a group button, Home and End jump to the first and last result, and typing continues in the filter.
     dashboard.addEventListener("keydown", event => {
-        const link = linkOf(event);
-        if (!link || event.altKey || event.metaKey || event.ctrlKey) return;
+        const control = event.target instanceof Element
+            ? event.target.closest("a.dashboard-link, a.dashboard-page, .dashboard-group-toggle, .dashboard-more")
+            : null;
+        if (!control || event.altKey || event.metaKey || event.ctrlKey) return;
         const items = results();
         if (event.key === "Home" || event.key === "End") {
             event.preventDefault();

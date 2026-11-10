@@ -74,8 +74,9 @@ public class DashboardTest
 
             - [Old Wiki](https://wiki.example.org)
             - [Photos](https://photos.example.org)
+            - Moved to the archive drive
 
-            ## Tools
+            ## Tools[^1]
 
             - [Editor](https://editor.example.org)
             - [Shell](https://shell.example.org)
@@ -84,6 +85,8 @@ public class DashboardTest
             ## [AI](https://ai.example.org)
 
             - [Claude](https://claude.ai)
+
+            [^1]: Installed locally.
             """, Options with { Limit = 2, Collapsed = ["ai"] });
 
         Assert.Contains("<section class=\"dashboard-group\" role=\"rowgroup\">", html);
@@ -96,7 +99,12 @@ public class DashboardTest
         Assert.Equal(2, CountOf(html, "<li class=\"dashboard-tile is-overflow\" role=\"row\">"));
         Assert.Equal(1, CountOf(html, "class=\"dashboard-more\""));
         Assert.Contains("aria-expanded=\"false\" data-more=\"2\">Show 2 more</button>", html);
-        Assert.DoesNotContain('\u0001', html);
+        // A note past the limit folds with the tiles around it.
+        Assert.Contains("<li class=\"dashboard-note is-overflow\" role=\"row\"><div role=\"gridcell\">Moved to the archive drive</div></li>", html);
+        // A footnote reference follows the button, so it still links to its footnote.
+        Assert.Matches("<span class=\"dashboard-group-title\">Tools</span>.*?</button><a [^>]*class=\"footnote-ref\"", html);
+        // Folding starts in the script that can undo it.
+        Assert.Equal(1, CountOf(html, "dashboard.classList.add(\"is-folding\")"));
     }
 
     [Fact]

@@ -286,6 +286,16 @@
     color: var(--text-primary);
 }
 
+/* Without a script, the label cannot fold its group, so it looks and behaves like a plain label. */
+.dashboard:not(.is-folding) .dashboard-group-toggle {
+    cursor: default;
+    pointer-events: none;
+}
+
+.dashboard:not(.is-folding) .dashboard-group-chevron {
+    display: none;
+}
+
 .dashboard-group-title {
     min-width: 0;
     overflow-wrap: anywhere;
@@ -328,19 +338,19 @@
     }
 }
 
-.dashboard:not(.is-filtering) .dashboard-group.is-collapsed .dashboard-group-count {
+.dashboard.is-folding:not(.is-filtering) .dashboard-group.is-collapsed .dashboard-group-count {
     display: inline-block;
 }
 
-.dashboard:not(.is-filtering) .dashboard-group.is-collapsed .dashboard-group-chevron {
+.dashboard.is-folding:not(.is-filtering) .dashboard-group.is-collapsed .dashboard-group-chevron {
     transform: rotate(-90deg);
 }
 
 /* Without a filter, a folded group shows only its label and a limited group only its first tiles. While the filter
-   has text, every group shows its matches. */
-.dashboard:not(.is-filtering) .dashboard-group.is-collapsed > :not(:first-child),
-.dashboard:not(.is-filtering) .dashboard-group:not(.is-expanded) .dashboard-tile.is-overflow,
-.dashboard.is-filtering .dashboard-more-row {
+   has text, every group shows its matches. Without a script, nothing folds, because nothing could open it again. */
+.dashboard.is-folding:not(.is-filtering) .dashboard-group.is-collapsed > :not(:first-child),
+.dashboard.is-folding:not(.is-filtering) .dashboard-group:not(.is-expanded) .is-overflow,
+.dashboard:is(.is-filtering, :not(.is-folding)) .dashboard-more-row {
     display: none;
 }
 
@@ -363,7 +373,7 @@
 
 :root:not([data-input="pointer"]) :is(.dashboard-group-toggle, .dashboard-more):focus-visible {
     outline: 2px solid var(--link);
-    outline-offset: 2px;
+    outline-offset: 3px;
 }
 
 /* Headings below the group label, from the third level down, divide a group: smaller than a tile title, in full text
