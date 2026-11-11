@@ -112,6 +112,32 @@ public class DashboardTest
     }
 
     [Fact]
+    public async Task FoldsTheContentPastTheLimit()
+    {
+        var html = await RenderPage("""
+            ## Office
+
+            - [Mail](https://mail.example.org)
+            - [Calendar](https://calendar.example.org)
+
+            ### Archive
+
+            Older services.
+
+            * Moved to the archive drive
+
+            - [Photos](https://photos.example.org)
+            - [Files](https://files.example.org)
+            """, Options with { Limit = 2 });
+
+        // The subheading, the paragraph, and the list without links follow the last tile shown, so they fold with the rest.
+        Assert.Contains("<div class=\"is-overflow\" role=\"row\"><div role=\"gridcell\">\n<h3", html.ReplaceLineEndings("\n"));
+        Assert.Contains("<div class=\"is-overflow\" role=\"row\"><div role=\"gridcell\">\n<p>Older services.</p>", html.ReplaceLineEndings("\n"));
+        Assert.Contains("<div class=\"is-overflow\" role=\"row\"><div role=\"gridcell\"><ul>", html);
+        Assert.DoesNotContain("<div class=\"is-overflow\" role=\"row\"><div role=\"gridcell\">\n<h2", html.ReplaceLineEndings("\n"));
+    }
+
+    [Fact]
     public void ReadsTheFrequentlyUsedLinks()
     {
         DashboardOptions Read(string value) => Dashboard.ReadFrontMatter($"---\nlayout: dashboard\ndashboard:\n  frequent: {value}\n---")!;

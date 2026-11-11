@@ -76,30 +76,15 @@
     // stays in this browser for this page; dashboard-folds.js applies it while the page loads. The page works the same
     // without storage.
     const foldKey = dashboard.dataset.foldKey;
-    const readFolds = () => {
-        try {
-            return foldKey ? JSON.parse(localStorage.getItem(foldKey) || "{}") || {} : {};
-        } catch {
-            return {};
-        }
-    };
-    const folds = readFolds();
+    // dashboard-folds.js shares its helpers; a dashboard without groups has no folds and no row to fill.
+    const { apply, score, readStore } = dashboard.dashboardFolds ||
+        { apply: () => {}, score: () => 0, readStore: () => ({}) };
+    const folds = foldKey ? readStore(foldKey) : {};
     const groupKey = (group) => group.querySelector("h2")?.id || String(groups.indexOf(group));
     const isFolded = (tile) => {
         const group = tile.closest(".dashboard-group");
         return !!group && (group.classList.contains("is-collapsed") ||
             (tile.classList.contains("is-overflow") && !group.classList.contains("is-expanded")));
-    };
-    const setCollapsed = (group, collapsed) => {
-        group.classList.toggle("is-collapsed", collapsed);
-        group.querySelector(".dashboard-group-toggle")?.setAttribute("aria-expanded", String(!collapsed));
-    };
-    const setExpanded = (group, expanded) => {
-        group.classList.toggle("is-expanded", expanded);
-        const more = group.querySelector(".dashboard-more");
-        if (!more) return;
-        more.setAttribute("aria-expanded", String(expanded));
-        more.textContent = expanded ? "Show fewer" : `Show ${more.dataset.more} more`;
     };
     const saveFolds = (group) => {
         folds[groupKey(group)] = {
@@ -379,8 +364,9 @@
         }
         for (const section of sections) {
             const groupFolds = section.heads[0].closest(".dashboard-group")?.matches(".is-collapsed, :has(.is-overflow)");
-            const hidden = (terms.length > 0 || groupFolds) &&
-                !section.parts.some(part => part.querySelector(".dashboard-tile:not([hidden]), .dashboard-note"));
+            // A note past the limit hides with the tiles there, so it does not keep its subheading in view.
+            const hidden = (terms.length > 0 || groupFolds) && !section.parts.some(part =>
+                [...part.querySelectorAll(".dashboard-tile, .dashboard-note")].some(item => !item.hidden && (terms.length > 0 || !isFolded(item))));
             for (const head of section.heads) head.hidden = hidden;
         }
         // A subheading that ends up first below its group label keeps the tight spacing of one that starts the group.
@@ -555,12 +541,13 @@
     const countUse = (link) => {
         if (!frequentKey || !link?.matches("a.dashboard-link")) return;
         try {
-            const uses = JSON.parse(localStorage.getItem(frequentKey) || "{}") || {};
+            const uses = readStore(frequentKey);
             const now = Date.now();
-            uses[link.href] = { n: (uses[link.href]?.n || 0) + 1, t: now };
+            const before = uses[link.href]?.n;
+            uses[link.href] = { n: (Number.isFinite(before) ? before : 0) + 1, t: now };
             // Only the most used links are worth keeping.
-            const score = use => use.n * 0.5 ** ((now - use.t) / (30 * 864e5));
-            const kept = Object.entries(uses).sort(([, a], [, b]) => score(b) - score(a)).slice(0, 50);
+            const kept = Object.entries(uses).filter(([, use]) => score(use, now) > 0)
+                .sort(([, a], [, b]) => score(b, now) - score(a, now)).slice(0, 50);
             localStorage.setItem(frequentKey, JSON.stringify(Object.fromEntries(kept)));
         } catch {
             // Without storage, nothing is counted.
@@ -602,9 +589,10 @@
         // While the filter shows matches from every group, a heading clears the filter and opens its group.
         if (button.matches(".dashboard-group-toggle") && input.value.trim()) {
             input.value = "";
-            setCollapsed(group, false);
-        } else if (button.matches(".dashboard-group-toggle")) setCollapsed(group, !group.classList.contains("is-collapsed"));
-        else setExpanded(group, !group.classList.contains("is-expanded"));
+            apply(group, false, group.classList.contains("is-expanded"));
+        } else if (button.matches(".dashboard-group-toggle"))
+            apply(group, !group.classList.contains("is-collapsed"), group.classList.contains("is-expanded"));
+        else apply(group, group.classList.contains("is-collapsed"), !group.classList.contains("is-expanded"));
         saveFolds(group);
         update();
         // Showing fewer tiles must not leave the button far below the viewport.
@@ -710,21 +698,24 @@
             const up = await reach(url.href);
             status.classList.add(up ? "is-up" : "is-down");
             status.setAttribute("aria-label", up ? "Reachable" : "Not reachable");
-            if (!up) countDown(status.closest(".dashboard-group"));
+            if (!up) countDown(status.closest(".dashboard-group"), url.href);
         };
-        // A group label counts its unreachable sites, so a folded group still tells that something is down.
+        // A group label counts its unreachable sites, so a folded group still tells that something is down. A site listed
+        // twice in a group counts once.
         const down = new Map();
-        const countDown = (group) => {
+        const countDown = (group, href) => {
             const toggle = group && !group.matches(".dashboard-frequent") ? group.querySelector(".dashboard-group-toggle") : null;
             if (!toggle) return;
-            down.set(group, (down.get(group) || 0) + 1);
+            const sites = down.get(group) || new Set();
+            if (sites.has(href)) return;
+            down.set(group, sites.add(href));
             let label = toggle.querySelector(".dashboard-group-down");
             if (!label) {
                 label = document.createElement("span");
                 label.className = "dashboard-group-down";
                 toggle.querySelector(".dashboard-group-count")?.after(label);
             }
-            label.textContent = `${down.get(group)} offline`;
+            label.textContent = `${sites.size} offline`;
         };
         for (const status of dashboard.querySelectorAll(".dashboard-status"))
             check(status.closest("a"), status);

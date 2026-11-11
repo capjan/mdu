@@ -244,7 +244,7 @@ public static class Dashboard
                     break;
                 case var block:
                     if (group is null) html.AppendLine("<div role=\"rowgroup\">");
-                    html.AppendLine("<div role=\"row\"><div role=\"gridcell\">");
+                    html.AppendLine($"<div{OverflowClass(group)} role=\"row\"><div role=\"gridcell\">");
                     html.Append(RenderBlock(block, pipeline));
                     html.AppendLine("</div></div>");
                     if (group is null) html.AppendLine("</div>");
@@ -286,6 +286,12 @@ public static class Dashboard
                + footnotes
                + headingHtml[end..];
     }
+
+    /// <summary>
+    /// Content after the last tile a group shows before Show more, such as a subheading, a paragraph, or a list without
+    /// links, hides with the tiles past the limit.
+    /// </summary>
+    private static string OverflowClass(GroupState? group) => group is { IsFull: true } ? " class=\"is-overflow\"" : string.Empty;
 
     /// <summary>
     /// The group being written: how many tiles it has, how many show before Show more, whether they show a status, and how
@@ -349,7 +355,7 @@ public static class Dashboard
     {
         var tiles = list.OfType<ListItemBlock>().Select(item => ReadTile(item, pipeline)).ToList();
         if (tiles.Count == 0 || tiles.All(tile => tile is null))
-            return $"<div role=\"row\"><div role=\"gridcell\">{RenderBlock(list, pipeline)}</div></div>";
+            return $"<div{OverflowClass(group)} role=\"row\"><div role=\"gridcell\">{RenderBlock(list, pipeline)}</div></div>";
 
         var html = new StringBuilder();
         html.AppendLine("<ul class=\"dashboard-tiles\" role=\"presentation\">");
@@ -435,7 +441,7 @@ public static class Dashboard
 
         var plainName = PlainText(nameParts).Trim();
         return new DashboardTile(
-            link.Url,
+            link.Url!,
             link.Title,
             RenderInlines(nameParts, pipeline).Trim(),
             plainName,
@@ -457,13 +463,14 @@ public static class Dashboard
         return LeadingSeparatorRegex.Replace(AnchorTagRegex.Replace(html, string.Empty), string.Empty, 1).Trim();
     }
 
-    /// <summary>
-    /// Reads <c>- [X](https://x.com)</c>, which Markdown parses as a checked task followed by an automatic link.
-    /// </summary>
+    /// <summary>Tells whether the inlines are <c>- [X](https://x.com)</c>, a checked task followed by an automatic link.</summary>
     private static bool IsTaskListLink(IReadOnlyList<Inline> parts) =>
         parts is [TaskList, LiteralInline open, LinkInline { IsAutoLink: true } link, LiteralInline close, ..] &&
         open.Content.ToString() == "(" && close.Content.ToString().StartsWith(')') && !string.IsNullOrWhiteSpace(link.Url);
 
+    /// <summary>
+    /// Reads <c>- [X](https://x.com)</c>, which Markdown parses as a checked task followed by an automatic link.
+    /// </summary>
     private static DashboardTile? ReadTaskListLink(IReadOnlyList<Inline> parts, MarkdownPipeline pipeline)
     {
         if (!IsTaskListLink(parts)) return null;
@@ -473,7 +480,7 @@ public static class Dashboard
 
         var name = task.Checked ? "X" : " ";
         var description = RenderDescription(close.Content.ToString()[1..], parts.Skip(4), pipeline);
-        return new DashboardTile(link.Url, null, name, name, description, null, string.Empty);
+        return new DashboardTile(link.Url!, null, name, name, description, null, string.Empty);
     }
 
     private static bool IsIcon(Inline inline) =>

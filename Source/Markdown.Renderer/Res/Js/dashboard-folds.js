@@ -30,6 +30,7 @@
         toggle.setAttribute("aria-expanded", String(!group.classList.contains("is-collapsed")));
     }
 
+    // dashboard.js folds and counts with the same helpers, so both scripts keep one rule.
     const apply = (group, collapsed, expanded) => {
         group.classList.toggle("is-collapsed", collapsed);
         group.classList.toggle("is-expanded", expanded);
@@ -39,38 +40,40 @@
         more.setAttribute("aria-expanded", String(expanded));
         more.textContent = expanded ? "Show fewer" : `Show ${more.dataset.more} more`;
     };
+    // A use counts half after 30 days; an entry without a count or a time counts nothing.
+    const score = (use, now) => Number.isFinite(use?.n) && Number.isFinite(use?.t) ? use.n * 0.5 ** ((now - use.t) / (30 * 864e5)) : 0;
+    const readStore = (key) => {
+        try {
+            const value = JSON.parse(localStorage.getItem(key) || "{}");
+            return value && typeof value === "object" ? value : {};
+        } catch {
+            return {};
+        }
+    };
+    dashboard.dashboardFolds = { apply, score, readStore };
 
-    let folds = {};
-    try {
-        folds = JSON.parse(localStorage.getItem(dashboard.dataset.foldKey) || "{}") || {};
-    } catch {
-        // Without storage, the groups start as the page defines them.
-    }
+    // Without storage, the groups start as the page defines them.
+    const folds = readStore(dashboard.dataset.foldKey);
     groups.forEach((group, index) => {
         const saved = folds[group.querySelector("h2")?.id || String(index)];
         if (saved) apply(group, !!saved.collapsed, !!saved.expanded);
     });
 
     // The row of frequently used links shows copies of the tiles this reader opened at least twice, those opened often and
-    // lately first; a use counts half after 30 days. dashboard.js counts the uses in the same entry.
+    // lately first. dashboard.js counts the uses in the same entry.
     const frequent = dashboard.querySelector(".dashboard-frequent");
     if (frequent) {
         dashboard.dataset.frequentKey = `mdu-dashboard-frequent:${page}`;
-        let uses = {};
-        try {
-            uses = JSON.parse(localStorage.getItem(dashboard.dataset.frequentKey) || "{}") || {};
-        } catch {
-            // Without storage, the row stays hidden.
-        }
+        // Without storage, the row stays hidden.
+        const uses = readStore(dashboard.dataset.frequentKey);
         const links = new Map();
-        for (const group of groups)
-            for (const link of group.querySelectorAll(".dashboard-tile a.dashboard-link"))
-                if (!links.has(link.href)) links.set(link.href, link);
+        // Tiles outside any group count too.
+        for (const link of dashboard.querySelectorAll(".dashboard-tile a.dashboard-link"))
+            if (!frequent.contains(link) && !links.has(link.href)) links.set(link.href, link);
         const now = Date.now();
-        const score = use => use.n * 0.5 ** ((now - use.t) / (30 * 864e5));
         const picks = Object.entries(uses)
-            .filter(([href, use]) => use?.n >= 2 && links.has(href))
-            .sort(([, a], [, b]) => score(b) - score(a))
+            .filter(([href, use]) => use?.n >= 2 && score(use, now) > 0 && links.has(href))
+            .sort(([, a], [, b]) => score(b, now) - score(a, now))
             .slice(0, Number(frequent.dataset.frequent) || 6);
         const list = frequent.querySelector(".dashboard-tiles");
         picks.forEach(([href], index) => {
