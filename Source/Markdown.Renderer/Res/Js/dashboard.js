@@ -13,9 +13,12 @@
     const clock = document.getElementById("dashboard-clock");
     const searchUrl = dashboard.dataset.dashboardSearch;
     const indexPath = document.body.dataset.searchIndex;
-    const tiles = [...dashboard.querySelectorAll(".dashboard-tile")];
-    const groups = [...dashboard.querySelectorAll(".dashboard-group")];
-    const rows = [...dashboard.querySelectorAll(".dashboard-row")];
+    // The row of frequently used links holds copies of tiles; the filter and the folds work on the originals.
+    const frequentRow = dashboard.querySelector(".dashboard-frequent-row");
+    const frequentList = frequentRow?.querySelector(".dashboard-tiles");
+    const tiles = [...dashboard.querySelectorAll(".dashboard-tile")].filter(tile => !frequentRow?.contains(tile));
+    const groups = [...dashboard.querySelectorAll(".dashboard-group:not(.dashboard-frequent)")];
+    const rows = [...dashboard.querySelectorAll(".dashboard-row:not(.dashboard-frequent-row)")];
     // A subheading (third level or lower) starts a section of its group that runs to the next one; its heading and
     // description rows hide with the section's tiles.
     const sections = groups.flatMap(group => {
@@ -68,6 +71,32 @@
             text: fold(`${visibleText(tile)} ${link.href} ${group} ${subheadings.get(tile) || ""}`)
         };
     });
+
+    // Groups fold with their heading, and a group with a limit shows the rest of its tiles on request. The reader's choice
+    // stays in this browser for this page; dashboard-folds.js applies it while the page loads. The page works the same
+    // without storage.
+    const foldKey = dashboard.dataset.foldKey;
+    // dashboard-folds.js shares its helpers; a dashboard without groups has no folds and no row to fill.
+    const { apply, score, readStore } = dashboard.dashboardFolds ||
+        { apply: () => {}, score: () => 0, readStore: () => ({}) };
+    const folds = foldKey ? readStore(foldKey) : {};
+    const groupKey = (group) => group.querySelector("h2")?.id || String(groups.indexOf(group));
+    const isFolded = (tile) => {
+        const group = tile.closest(".dashboard-group");
+        return !!group && (group.classList.contains("is-collapsed") ||
+            (tile.classList.contains("is-overflow") && !group.classList.contains("is-expanded")));
+    };
+    const saveFolds = (group) => {
+        folds[groupKey(group)] = {
+            collapsed: group.classList.contains("is-collapsed"),
+            expanded: group.classList.contains("is-expanded")
+        };
+        try {
+            if (foldKey) localStorage.setItem(foldKey, JSON.stringify(folds));
+        } catch {
+            // Without storage, the choice lasts until the page reloads.
+        }
+    };
 
     // The page an index entry belongs to; section entries carry an anchor.
     const pageOf = (entry) => entry.url.split("#")[0];
@@ -319,16 +348,25 @@
         const terms = tokenize(query);
         let first = null;
 
+        // While the filter is empty, folded groups and tiles past the limit stay out of the results; the filter searches them.
+        dashboard.classList.toggle("is-filtering", terms.length > 0);
+        // A filter shows the matches of folded groups too, so their labels announce them as expanded meanwhile.
+        for (const group of groups)
+            group.querySelector(".dashboard-group-toggle")?.setAttribute("aria-expanded",
+                String(terms.length > 0 || !group.classList.contains("is-collapsed")));
         for (const entry of tileEntries) {
             const matches = terms.every(term => entry.text.includes(term));
-            entry.tile.hidden = !matches;
+            entry.tile.hidden = !matches || (terms.length === 0 && isFolded(entry.tile));
             if (matches && terms.length > 0) {
                 const startsWith = terms.length > 0 && entry.name.startsWith(terms[0]);
                 if (!first || (startsWith && !first.startsWith)) first = { ...entry, startsWith };
             }
         }
         for (const section of sections) {
-            const hidden = terms.length > 0 && !section.parts.some(part => part.querySelector(".dashboard-tile:not([hidden]), .dashboard-note"));
+            const groupFolds = section.heads[0].closest(".dashboard-group")?.matches(".is-collapsed, :has(.is-overflow)");
+            // A note past the limit hides with the tiles there, so it does not keep its subheading in view.
+            const hidden = (terms.length > 0 || groupFolds) && !section.parts.some(part =>
+                [...part.querySelectorAll(".dashboard-tile, .dashboard-note")].some(item => !item.hidden && (terms.length > 0 || !isFolded(item))));
             for (const head of section.heads) head.hidden = hidden;
         }
         // A subheading that ends up first below its group label keeps the tight spacing of one that starts the group.
@@ -343,6 +381,8 @@
         }
         for (const group of groups) group.hidden = !group.querySelector(".dashboard-tile:not([hidden]), .dashboard-note") && terms.length > 0;
         for (const row of rows) row.hidden = !row.querySelector(".dashboard-group:not([hidden])") && terms.length > 0;
+        // The filter finds the original tiles, so the copies step aside while it has text.
+        if (frequentRow) frequentRow.hidden = terms.length > 0 || !frequentList.children.length;
 
         renderPages(rankPages(terms), terms);
         const pages = [...pagesList.querySelectorAll("a.dashboard-page")];
@@ -353,7 +393,7 @@
         resultsGrid.hidden = ![...resultsGrid.querySelectorAll('[role="rowgroup"]')].some(isVisibleInResults);
         input.setAttribute("aria-expanded", String(!resultsGrid.hidden));
 
-        const count = items.length;
+        const count = items.filter(item => !frequentRow?.contains(item)).length;
         const waitingForIndex = terms.length > 0 && !!indexPath && !pageEntries;
         const message = terms.length === 0
             ? `${count} ${count === 1 ? "link" : "links"}.`
@@ -371,10 +411,6 @@
             ? `No links or pages match “${query}”. Press Enter to search the web.`
             : `No links or pages match “${query}”.`;
     };
-
-    const linkOf = (event) => event.target instanceof Element
-        ? event.target.closest("a.dashboard-link, a.dashboard-page")
-        : null;
 
     // Whichever input was used last leads: moving the mouse hides the keyboard outline, and a key press hides the hover
     // again. A resting pointer is ignored, so tiles that scroll or filter in under it do not light up.
@@ -477,10 +513,12 @@
         from.blur();
     });
 
-    // On a tile, Home and End jump to the first and last result, and typing continues in the filter.
+    // On a tile or a group button, Home and End jump to the first and last result, and typing continues in the filter.
     dashboard.addEventListener("keydown", event => {
-        const link = linkOf(event);
-        if (!link || event.altKey || event.metaKey || event.ctrlKey) return;
+        const control = event.target instanceof Element
+            ? event.target.closest("a.dashboard-link, a.dashboard-page, .dashboard-group-toggle, .dashboard-more")
+            : null;
+        if (!control || event.altKey || event.metaKey || event.ctrlKey) return;
         const items = results();
         if (event.key === "Home" || event.key === "End") {
             event.preventDefault();
@@ -496,6 +534,76 @@
         update();
         input.focus();
     };
+
+    // Every opened tile counts for the row of frequently used links: a click, a middle click, or Enter in the filter. The
+    // row changes on the next visit, so tiles do not move under the pointer.
+    const frequentKey = dashboard.dataset.frequentKey;
+    const countUse = (link) => {
+        if (!frequentKey || !link?.matches("a.dashboard-link")) return;
+        try {
+            const uses = readStore(frequentKey);
+            const now = Date.now();
+            const before = uses[link.href]?.n;
+            uses[link.href] = { n: (Number.isFinite(before) ? before : 0) + 1, t: now };
+            // Only the most used links are worth keeping.
+            const kept = Object.entries(uses).filter(([, use]) => score(use, now) > 0)
+                .sort(([, a], [, b]) => score(b, now) - score(a, now)).slice(0, 50);
+            localStorage.setItem(frequentKey, JSON.stringify(Object.fromEntries(kept)));
+        } catch {
+            // Without storage, nothing is counted.
+        }
+    };
+    dashboard.addEventListener("click", event => countUse(event.target instanceof Element ? event.target.closest("a") : null));
+    dashboard.addEventListener("auxclick", event => {
+        if (event.button === 1) countUse(event.target instanceof Element ? event.target.closest("a") : null);
+    });
+
+    frequentRow?.querySelector(".dashboard-frequent-clear")?.addEventListener("click", () => {
+        try {
+            localStorage.removeItem(frequentKey);
+        } catch {
+            // Nothing was stored.
+        }
+        frequentList.replaceChildren();
+        update();
+        input.focus({ preventScroll: true });
+        status.textContent = "Frequently used links cleared.";
+    });
+
+    // The compact view shows only the names, so more tiles fit; the choice stays in this browser for this page.
+    document.getElementById("dashboard-view")?.addEventListener("click", event => {
+        const compact = !dashboard.classList.contains("is-compact");
+        dashboard.classList.toggle("is-compact", compact);
+        event.currentTarget.setAttribute("aria-pressed", String(compact));
+        try {
+            localStorage.setItem(dashboard.dataset.viewKey, compact ? "compact" : "detailed");
+        } catch {
+            // Without storage, the view lasts until the page reloads.
+        }
+    });
+
+    dashboard.addEventListener("click", event => {
+        const button = event.target instanceof Element ? event.target.closest(".dashboard-group-toggle, .dashboard-more") : null;
+        const group = button?.closest(".dashboard-group");
+        if (!group) return;
+        // While the filter shows matches from every group, a heading clears the filter and opens its group.
+        if (button.matches(".dashboard-group-toggle") && input.value.trim()) {
+            input.value = "";
+            apply(group, false, group.classList.contains("is-expanded"));
+        } else if (button.matches(".dashboard-group-toggle"))
+            apply(group, !group.classList.contains("is-collapsed"), group.classList.contains("is-expanded"));
+        else apply(group, group.classList.contains("is-collapsed"), !group.classList.contains("is-expanded"));
+        saveFolds(group);
+        update();
+        // Showing fewer tiles must not leave the button far below the viewport.
+        if (button.isConnected) button.scrollIntoView({ block: "nearest" });
+    });
+
+    // dashboard-folds.js opens the group of a new fragment target; the tiles show again, and the page scrolls to it.
+    dashboard.addEventListener("dashboard-reveal", event => {
+        update();
+        event.detail.scrollIntoView({ block: "start", behavior: prefersReducedMotion.matches ? "auto" : "smooth" });
+    });
 
     clearButton.addEventListener("click", clear);
     input.addEventListener("focus", () => loadIndex(), { once: true });
@@ -527,6 +635,7 @@
         event.preventDefault();
         const newTab = event.metaKey || event.ctrlKey;
         if (best && !(event.altKey && searchUrl)) {
+            countUse(best);
             if (newTab || opensNewTab(best)) window.open(best.href, "_blank", "noopener");
             else window.location.href = best.href;
         } else if (searchUrl) {
@@ -536,7 +645,10 @@
         }
     });
 
-    renderHints();
+    // Applies folded groups and limits, so the results and the arrow keys skip the tiles they hide.
+    update();
+    // Nothing has changed for a screen reader yet.
+    status.textContent = "";
 
     // On a dashboard, the slash key focuses the dashboard filter instead of opening the site search.
     window.addEventListener("keydown", event => {
@@ -568,21 +680,42 @@
     }
 
     if (dashboard.dataset.dashboardStatus === "true") {
+        // One request per address, so a tile and its copy among the frequently used links share the answer.
+        const requests = new Map();
+        const reach = (href) => {
+            if (!requests.has(href)) {
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 6000);
+                requests.set(href, fetch(href, { mode: "no-cors", cache: "no-store", signal: controller.signal })
+                    .then(() => true, () => false)
+                    .finally(() => clearTimeout(timeout)));
+            }
+            return requests.get(href);
+        };
         const check = async (link, status) => {
             const url = new URL(link.href);
             if (window.location.protocol === "https:" && url.protocol === "http:") return;
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 6000);
-            try {
-                await fetch(url, { mode: "no-cors", cache: "no-store", signal: controller.signal });
-                status.classList.add("is-up");
-                status.setAttribute("aria-label", "Reachable");
-            } catch {
-                status.classList.add("is-down");
-                status.setAttribute("aria-label", "Not reachable");
-            } finally {
-                clearTimeout(timeout);
+            const up = await reach(url.href);
+            status.classList.add(up ? "is-up" : "is-down");
+            status.setAttribute("aria-label", up ? "Reachable" : "Not reachable");
+            if (!up) countDown(status.closest(".dashboard-group"), url.href);
+        };
+        // A group label counts its unreachable sites, so a folded group still tells that something is down. A site listed
+        // twice in a group counts once.
+        const down = new Map();
+        const countDown = (group, href) => {
+            const toggle = group && !group.matches(".dashboard-frequent") ? group.querySelector(".dashboard-group-toggle") : null;
+            if (!toggle) return;
+            const sites = down.get(group) || new Set();
+            if (sites.has(href)) return;
+            down.set(group, sites.add(href));
+            let label = toggle.querySelector(".dashboard-group-down");
+            if (!label) {
+                label = document.createElement("span");
+                label.className = "dashboard-group-down";
+                toggle.querySelector(".dashboard-group-count")?.after(label);
             }
+            label.textContent = `${sites.size} offline`;
         };
         for (const status of dashboard.querySelectorAll(".dashboard-status"))
             check(status.closest("a"), status);

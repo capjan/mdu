@@ -258,6 +258,224 @@
     text-transform: uppercase;
 }
 
+/* The group label is a button that folds the group. It keeps the quiet label style; the chevron appears on hover and
+   focus, and stays with the number of tiles while the group is folded. */
+.markdown-content .dashboard-group h2:has(> .dashboard-group-toggle) {
+    padding: 0 0 0.35rem;
+}
+
+.dashboard-group-toggle {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    width: 100%;
+    margin: -0.25rem 0 0;
+    padding: 0.25rem 0.6rem;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    letter-spacing: inherit;
+    text-align: left;
+    text-transform: inherit;
+    cursor: pointer;
+}
+
+.dashboard-group-toggle:hover {
+    color: var(--text-primary);
+}
+
+/* Without a script, the label is a disabled button that cannot fold its group, so it looks like a plain label. */
+.dashboard-group-toggle:disabled {
+    color: inherit;
+    cursor: default;
+}
+
+.dashboard:not(.is-folding) .dashboard-group-chevron {
+    display: none;
+}
+
+.dashboard-group-title {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.dashboard-group-count {
+    display: none;
+    padding: 0 0.4rem;
+    border-radius: 999px;
+    background: var(--dashboard-chip);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0;
+}
+
+.dashboard-group-count::before {
+    content: attr(data-count);
+}
+
+.dashboard-group-chevron {
+    flex: none;
+    width: 0.9rem;
+    height: 0.9rem;
+    margin-left: auto;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.75;
+    transition: transform 160ms ease, opacity 160ms ease;
+}
+
+@media (hover: hover) {
+    .dashboard-group-chevron {
+        opacity: 0;
+    }
+
+    .dashboard-group-toggle:is(:hover, :focus-visible) .dashboard-group-chevron,
+    .dashboard-group.is-collapsed .dashboard-group-chevron {
+        opacity: 1;
+    }
+}
+
+.dashboard.is-folding:not(.is-filtering) .dashboard-group.is-collapsed .dashboard-group-count {
+    display: inline-block;
+}
+
+.dashboard.is-folding:not(.is-filtering) .dashboard-group.is-collapsed .dashboard-group-chevron {
+    transform: rotate(-90deg);
+}
+
+/* Without a filter, a folded group shows only its label and a limited group only its first tiles. While the filter
+   has text, every group shows its matches. Without a script, nothing folds, because nothing could open it again. */
+.dashboard.is-folding:not(.is-filtering) .dashboard-group.is-collapsed > :not(:first-child),
+.dashboard.is-folding:not(.is-filtering) .dashboard-group:not(.is-expanded) .is-overflow,
+.dashboard:is(.is-filtering, :not(.is-folding)) .dashboard-more-row {
+    display: none;
+}
+
+.dashboard-more {
+    margin: 0.25rem 0 0;
+    padding: 0.35rem 0.6rem;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: var(--dashboard-muted);
+    font: inherit;
+    font-size: 0.8125rem;
+    cursor: pointer;
+}
+
+.dashboard-more:hover {
+    color: var(--text-primary);
+    background: var(--dashboard-hover);
+}
+
+/* The frequently used links come first and span the width; their label carries a quiet button that forgets them. */
+.markdown-content .dashboard-frequent h2 {
+    display: flex;
+    gap: 0.5rem;
+    align-items: baseline;
+}
+
+.dashboard-frequent-clear {
+    margin: -0.25rem 0 0 auto;
+    padding: 0.25rem 0.5rem;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: var(--dashboard-muted);
+    font: inherit;
+    font-weight: 500;
+    letter-spacing: normal;
+    text-transform: none;
+    cursor: pointer;
+}
+
+.dashboard-frequent-clear:hover {
+    color: var(--text-primary);
+    background: var(--dashboard-hover);
+}
+
+/* A group with unreachable sites says so in its label, also while it is folded. */
+.dashboard-group-down {
+    flex: none;
+    padding: 0 0.4rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, #e5342a 14%, transparent);
+    color: #c42b22;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+:root[data-theme="dark"] .dashboard-group-down {
+    color: #ff8a80;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root[data-theme="auto"] .dashboard-group-down {
+        color: #ff8a80;
+    }
+}
+
+/* The compact view keeps only the names, so narrower groups and tiles fit more per row. */
+.dashboard.is-compact .dashboard-row {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+}
+
+.markdown-content .dashboard.is-compact ul.dashboard-tiles {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr));
+}
+
+/* The view switch sits at the end of the toolbar as a quiet icon button. */
+.dashboard-view {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    margin-left: auto;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: var(--dashboard-muted);
+    cursor: pointer;
+}
+
+.dashboard-view[hidden] {
+    display: none;
+}
+
+.dashboard-clock + .dashboard-view {
+    margin-left: -1.25rem;
+}
+
+.dashboard-view:hover {
+    color: var(--text-primary);
+    background: var(--dashboard-hover);
+}
+
+.dashboard-view[aria-pressed="true"] {
+    color: var(--text-primary);
+    background: var(--dashboard-chip);
+}
+
+.dashboard-view svg {
+    width: 1rem;
+    height: 1rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-width: 1.6;
+}
+
+:root:not([data-input="pointer"]) :is(.dashboard-group-toggle, .dashboard-more, .dashboard-frequent-clear, .dashboard-view):focus-visible {
+    outline: 2px solid var(--link);
+    outline-offset: 3px;
+}
+
 /* Headings below the group label, from the third level down, divide a group: smaller than a tile title, in full text
    color and sentence case so they read below the group label, with a dashed rule that stays quieter than the label's solid line. */
 .markdown-content .dashboard-group :is(h3, h4, h5, h6) {
@@ -363,7 +581,8 @@
     text-decoration: none;
 }
 
-.dashboard-tiles.has-descriptions a.dashboard-link {
+/* Every tile has two lines, so tiles line up across groups; the compact view keeps only the names. */
+.markdown-content .dashboard:not(.is-compact) a.dashboard-link {
     --dashboard-chip-size: 2.375rem;
     --dashboard-chip-half-size: 1.1875rem;
     min-height: 3.5rem;
@@ -478,21 +697,6 @@
     padding-right: 1.1rem;
 }
 
-/* A compact row keeps the whole name and gives the host only the space left. A host that does not get at least 5rem
-   wraps to a second line, which the one-line height hides, instead of squeezing the name. */
-.dashboard-tiles:not(.has-descriptions) .dashboard-text {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 0 0.75rem;
-    max-height: 1lh;
-    overflow: hidden;
-}
-
-.dashboard-tiles:not(.has-descriptions) .dashboard-name {
-    max-width: 100%;
-}
-
 .dashboard-name {
     overflow: hidden;
     font-weight: 500;
@@ -500,7 +704,7 @@
     white-space: nowrap;
 }
 
-.dashboard-tiles.has-descriptions .dashboard-name {
+.dashboard:not(.is-compact) .dashboard-name {
     font-size: 0.9375rem;
 }
 
@@ -512,10 +716,8 @@
     white-space: nowrap;
 }
 
-.dashboard-tiles:not(.has-descriptions) .dashboard-description {
-    flex: 1 1 5rem;
-    min-width: 0;
-    text-align: right;
+.dashboard.is-compact .dashboard-description {
+    display: none;
 }
 
 /* The arrow fades in at the row's end: ↗ leaves the site, → stays in it. */
@@ -780,6 +982,13 @@ a.dashboard-page:focus-visible .dashboard-page-footer svg {
     .dashboard-clock {
         order: -1;
         margin-left: 0;
+    }
+
+    /* The view switch stays on the clock's line instead of a line of its own. */
+    .dashboard-view,
+    .dashboard-clock + .dashboard-view {
+        order: -1;
+        margin-left: auto;
     }
 
     .dashboard-search-hint,

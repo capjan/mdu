@@ -30,6 +30,8 @@
       <EmbeddedResource Include="Res\Js\hero-playground.js" />
       <None Remove="Res\Js\dashboard.js" />
       <EmbeddedResource Include="Res\Js\dashboard.js" />
+      <None Remove="Res\Js\dashboard-folds.js" />
+      <EmbeddedResource Include="Res\Js\dashboard-folds.js" />
       <None Remove="Res\Js\isometric-diagram.js" />
       <None Remove="Res\Js\image-lightbox.js" />
       <EmbeddedResource Include="Res\Js\isometric-diagram.js" />

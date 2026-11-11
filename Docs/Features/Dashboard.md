@@ -46,11 +46,11 @@ layout: dashboard
 | `## Heading` | A group of tiles |
 | `### Heading` or a lower level inside a group | A subheading that divides the group; a paragraph below it is a short description |
 | `- [Name](URL)` | A tile that opens the link |
-| Text after the link | Subtitle of the tile. A leading `—`, `–`, `-`, or `:` is removed. Without it, the tile shows the host name. In a group of compact rows, a host that is only the name and a top-level domain, such as `github.com` for GitHub, is left out; a host with a subdomain other than `www.` always stays. |
+| Text after the link | Subtitle of the tile. A leading `—`, `–`, `-`, or `:` is removed. Without it, the tile shows the host name. A host that is only the name and a top-level domain, such as `github.com` for GitHub, is left out; a host with a subdomain other than `www.` always stays. |
 | `---` | Starts a new row of groups |
 | A list item without a link | A note between the tiles |
 
-Groups with subtitles use large tiles; groups without them use compact rows. A compact row always shows the whole name first and the host only in the space that is left. Groups in a row share the width and wrap on narrow screens. Links to `.md` files point to the rendered pages, and all links open in the same tab unless you set `open: new-tab`. A [`tags` code block](Tags.md#list-tagged-pages-on-any-page) in a group fills it with the pages that carry a tag.
+Every tile has two lines, the name and the subtitle, so tiles line up across all groups; a tile without a subtitle keeps the same height. The switch at the end of the toolbar changes to the compact view, which shows only the names and fits more tiles per row. The reader's choice stays in the browser for this page. Groups in a row share the width and wrap on narrow screens. Links to `.md` files point to the rendered pages, and all links open in the same tab unless you set `open: new-tab`. A [`tags` code block](Tags.md#list-tagged-pages-on-any-page) in a group fills it with the pages that carry a tag.
 
 ## Icons
 
@@ -98,8 +98,12 @@ layout: dashboard
 dashboard:
   search: duckduckgo
   clock: true
-  status: false
+  status: [Operations]
+  compact: false
   open: same-tab
+  limit: 6
+  collapsed: [AI, Social]
+  frequent: 6
 ---
 ```
 
@@ -107,8 +111,22 @@ dashboard:
 | --- | --- | --- | --- |
 | `search` | `duckduckgo`, `google`, `bing`, `startpage`, `ecosia`, `none`, or a URL with `{query}` | `duckduckgo` | Web search for queries without a matching link. `none` turns it off. |
 | `clock` | `true`, `false` | `true` | Shows the time and date next to the filter field in the reader's language. |
-| `status` | `true`, `false` | `false` | Adds a dot to each tile that turns green when the browser reaches the site and red when it does not. |
+| `status` | `true`, `false`, a heading, or a list of headings | `false` | Adds a dot to each tile that turns green when the browser reaches the site and red when it does not. With headings, only the tiles of those groups get a dot. A group label counts its unreachable sites, such as **1 offline**, so a folded group still shows a problem. |
+| `compact` | `true`, `false` | `false` | Starts in the compact view with the names alone. The reader can switch the view; their choice wins. |
 | `open` | `same-tab`, `new-tab` | `same-tab` | Where links to other sites open. Links within the site always open in the same tab. |
+| `limit` | A number | none | Each group shows its first tiles up to this number and a **Show more** button for the rest. |
+| `collapsed` | `true`, a heading, or a list of headings | none | Groups that start folded. Their names match the group headings, ignoring case; `true` folds every group. |
+| `frequent` | A number, `true`, `false` | `false` | Adds a row of the links this reader opens most above the groups. A number sets how many it shows; `true` shows 6. |
+
+## Fold groups
+
+A dashboard can hold everything you need without showing it all at once. Select a group label to fold the group to its label; a folded label shows the number of its tiles. With `limit`, a group shows only its first tiles, and **Show more** reveals the rest; when only one tile would be left over, the group shows it instead. The filter always searches every tile, including those in folded groups and past the limit, and while it has text, every group shows its matches. Selecting a group label while filtering clears the filter and opens that group.
+
+What you fold or open stays in your browser for this page, so `collapsed` and `limit` set only the start. A good start page keeps the links you use daily in open groups at the top, and the rest in folded groups below. Without JavaScript, every group shows all of its tiles.
+
+## Frequently used
+
+With `frequent`, the dashboard learns which links you use. Every link you open from a tile or with Enter in the filter counts in your browser, and nothing is sent anywhere. A link you opened at least twice appears in a row above the groups, the most used first; recent uses count more than old ones, so the row follows your habits. The row changes on your next visit, never while you are on the page. The filter searches only the original tiles, so the row steps aside while it has text. **Clear** forgets every counted use for this page. Without JavaScript or browser storage, the row does not appear.
 
 ## Behavior
 

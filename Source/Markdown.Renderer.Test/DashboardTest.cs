@@ -36,6 +36,189 @@ public class DashboardTest
     }
 
     [Fact]
+    public void ReadsTheLimitAndTheCollapsedGroups()
+    {
+        var options = Dashboard.ReadFrontMatter("""
+            ---
+            layout: dashboard
+            dashboard:
+              limit: 6
+              collapsed: [AI, " Social "]
+            ---
+            """)!;
+        Assert.Equal(6, options.Limit);
+        Assert.Equal(["AI", "Social"], options.Collapsed);
+        Assert.True(options.StartsCollapsed("ai"));
+        Assert.False(options.StartsCollapsed("Developer"));
+
+        var all = Dashboard.ReadFrontMatter("---\nlayout: dashboard\ndashboard:\n  collapsed: true\n  limit: 0\n---")!;
+        Assert.Null(all.Limit);
+        Assert.True(all.StartsCollapsed("Anything"));
+
+        Assert.Equal(["Social"], Dashboard.ReadFrontMatter("---\nlayout: dashboard\ndashboard:\n  collapsed: Social\n---")!.Collapsed);
+        var none = Dashboard.ReadFrontMatter("---\nlayout: dashboard\ndashboard:\n  collapsed: false\n  limit: many\n---")!;
+        Assert.Null(none.Collapsed);
+        Assert.Null(none.Limit);
+    }
+
+    [Fact]
+    public async Task FoldsGroupsAndLimitsTheirTiles()
+    {
+        var html = await RenderPage("""
+            ## Office
+
+            - [Mail](https://mail.example.org)
+            - [Drive](https://drive.example.org)
+
+            ### Archive
+
+            - [Old Wiki](https://wiki.example.org)
+            - [Photos](https://photos.example.org)
+            - [ ](https://task.example.org)
+            - ![Logo](logo.png)
+            - Moved to the archive drive
+
+            ## Tools[^1]
+
+            - [Editor](https://editor.example.org)
+            - [Shell](https://shell.example.org)
+            - [Notes](https://notes.example.org)
+
+            ## [AI](https://ai.example.org)
+
+            - [Claude](https://claude.ai)
+
+            [^1]: Installed locally.
+            """, Options with { Limit = 2, Collapsed = ["ai"] });
+
+        Assert.Contains("<section class=\"dashboard-group\" role=\"rowgroup\">", html);
+        Assert.Contains("<section class=\"dashboard-group is-collapsed\" role=\"rowgroup\">", html);
+        Assert.Contains("<h2 id=\"office\"><button class=\"dashboard-group-toggle\" type=\"button\" aria-expanded=\"true\" disabled><span class=\"dashboard-group-title\">Office</span><span class=\"dashboard-group-count\" data-count=\"5\" aria-hidden=\"true\"></span>", html);
+        // One tile past the limit shows instead of a button for it.
+        Assert.Contains("data-count=\"3\"", html);
+        // A link in the heading keeps only its text inside the button. Until the fold script runs, every group is open.
+        Assert.Contains("aria-expanded=\"true\" disabled><span class=\"dashboard-group-title\">AI</span><span class=\"dashboard-group-count\" data-count=\"1\"", html);
+        // A task-list link counts as a tile; an item with only an image is a note.
+        Assert.Equal(3, CountOf(html, "<li class=\"dashboard-tile is-overflow\" role=\"row\">"));
+        Assert.Equal(2, CountOf(html, "<li class=\"dashboard-note is-overflow\""));
+        Assert.Equal(1, CountOf(html, "class=\"dashboard-more\""));
+        Assert.Contains("aria-expanded=\"false\" data-more=\"3\">Show 3 more</button>", html);
+        // A note past the limit folds with the tiles around it.
+        Assert.Contains("<li class=\"dashboard-note is-overflow\" role=\"row\"><div role=\"gridcell\">Moved to the archive drive</div></li>", html);
+        // A footnote reference follows the button, so it still links to its footnote.
+        Assert.Matches("<span class=\"dashboard-group-title\">Tools</span>.*?</button><a [^>]*class=\"footnote-ref\"", html);
+        // Folding starts in the script that can undo it.
+        Assert.Equal(1, CountOf(html, "dashboard.classList.add(\"is-folding\")"));
+    }
+
+    [Fact]
+    public async Task FoldsTheContentPastTheLimit()
+    {
+        var html = await RenderPage("""
+            ## Office
+
+            - [Mail](https://mail.example.org)
+            - [Calendar](https://calendar.example.org)
+
+            ### Archive
+
+            Older services.
+
+            * Moved to the archive drive
+
+            - [Photos](https://photos.example.org)
+            - [Files](https://files.example.org)
+            """, Options with { Limit = 2 });
+
+        // The subheading, the paragraph, and the list without links follow the last tile shown, so they fold with the rest.
+        Assert.Contains("<div class=\"is-overflow\" role=\"row\"><div role=\"gridcell\">\n<h3", html.ReplaceLineEndings("\n"));
+        Assert.Contains("<div class=\"is-overflow\" role=\"row\"><div role=\"gridcell\">\n<p>Older services.</p>", html.ReplaceLineEndings("\n"));
+        Assert.Contains("<div class=\"is-overflow\" role=\"row\"><div role=\"gridcell\"><ul>", html);
+        Assert.DoesNotContain("<div class=\"is-overflow\" role=\"row\"><div role=\"gridcell\">\n<h2", html.ReplaceLineEndings("\n"));
+    }
+
+    [Fact]
+    public void ReadsTheFrequentlyUsedLinks()
+    {
+        DashboardOptions Read(string value) => Dashboard.ReadFrontMatter($"---\nlayout: dashboard\ndashboard:\n  frequent: {value}\n---")!;
+        Assert.Equal(4, Read("4").Frequent);
+        Assert.Equal(6, Read("true").Frequent);
+        Assert.Null(Read("false").Frequent);
+        Assert.Null(Read("0").Frequent);
+        Assert.Null(Read("often").Frequent);
+        Assert.Null(Dashboard.ReadFrontMatter("---\nlayout: dashboard\n---")!.Frequent);
+    }
+
+    [Fact]
+    public void ReadsTheStatusGroupsAndTheCompactView()
+    {
+        DashboardOptions Read(string options) => Dashboard.ReadFrontMatter($"---\nlayout: dashboard\ndashboard:\n{options}\n---")!;
+        var groups = Read("  status: [Betrieb, \" Server \"]\n  compact: true");
+        Assert.True(groups.Status);
+        Assert.Equal(["Betrieb", "Server"], groups.StatusGroups);
+        Assert.True(groups.ChecksStatus("betrieb"));
+        Assert.False(groups.ChecksStatus("Social"));
+        Assert.False(groups.ChecksStatus(null));
+        Assert.True(groups.Compact);
+
+        var all = Read("  status: true");
+        Assert.Null(all.StatusGroups);
+        Assert.True(all.ChecksStatus(null));
+        Assert.False(all.Compact);
+        Assert.Equal(["Betrieb"], Read("  status: Betrieb").StatusGroups);
+        Assert.False(Read("  status: false").ChecksStatus("Betrieb"));
+    }
+
+    [Fact]
+    public async Task ShowsTheStatusOnlyInTheNamedGroups()
+    {
+        var html = await RenderPage("""
+            ## Betrieb
+
+            - [Proxmox](https://proxmox.example.org)
+
+            ## Social
+
+            - [Mastodon](https://mastodon.example.org)
+            """, new DashboardOptions(null, false, true, false, StatusGroups: ["betrieb"]));
+
+        Assert.Equal(1, CountOf(html, "<span class=\"dashboard-status\""));
+        Assert.Matches("proxmox\\.example\\.org\"[^<]*>.*?class=\"dashboard-status\"", html);
+        Assert.Contains("data-dashboard-status=\"true\"", html);
+    }
+
+    [Fact]
+    public async Task StartsInTheCompactViewAndOffersTheSwitch()
+    {
+        const string markdown = "## Office\n\n- [Mail](https://mail.example.org)\n";
+        var compact = await RenderPage(markdown, new DashboardOptions(null, false, false, false, Compact: true));
+        Assert.Contains("<div class=\"dashboard is-compact\">", compact);
+        // Only the script can change the view, so it shows the switch.
+        Assert.Contains("<button class=\"dashboard-view\" id=\"dashboard-view\" type=\"button\" aria-pressed=\"true\" title=\"Compact view\" hidden>", compact);
+
+        var detailed = await RenderPage(markdown, new DashboardOptions(null, false, false, false));
+        Assert.Contains("<div class=\"dashboard\">", detailed);
+        Assert.Contains("aria-pressed=\"false\" title=\"Compact view\" hidden>", detailed);
+        Assert.DoesNotContain("id=\"dashboard-view\"", await RenderPage("Just text.", new DashboardOptions(null, false, false, false)));
+    }
+
+    [Fact]
+    public async Task LeavesAHiddenRowForTheFrequentlyUsedLinks()
+    {
+        const string markdown = "## Office\n\n- [Mail](https://mail.example.org)\n";
+        var html = await RenderPage(markdown, new DashboardOptions(null, false, false, false, Frequent: 4));
+        // The row comes before the groups and stays hidden until the script fills it.
+        Assert.Matches(
+            "<div id=\"dashboard-results\"[^>]*>\\s*<div class=\"dashboard-row dashboard-frequent-row\" role=\"presentation\" hidden>\\s*" +
+            "<section class=\"dashboard-group dashboard-frequent\" role=\"rowgroup\" data-frequent=\"4\">",
+            html);
+        Assert.Contains("<ul class=\"dashboard-tiles\" role=\"presentation\"></ul>", html);
+        Assert.Contains("aria-label=\"Clear frequently used links\"", html);
+
+        Assert.DoesNotContain("<section class=\"dashboard-group dashboard-frequent\"", await RenderPage(markdown, new DashboardOptions(null, false, false, false)));
+    }
+
+    [Fact]
     public async Task RendersGroupsOfLinkTiles()
     {
         var html = await RenderPage("""
@@ -66,7 +249,6 @@ public class DashboardTest
         Assert.Equal(2, CountOf(html, "<div class=\"dashboard-row\" role=\"presentation\">"));
         Assert.Equal(2, CountOf(html, "<section class=\"dashboard-group\" role=\"rowgroup\">"));
 
-        Assert.Contains("<ul class=\"dashboard-tiles has-descriptions\" role=\"presentation\">", html);
         Assert.Contains("<a class=\"dashboard-link\" href=\"https://mail.google.com\" target=\"_blank\" rel=\"noopener noreferrer\"><span class=\"dashboard-icon\"><span class=\"icon\">", html);
         Assert.Contains("<span class=\"dashboard-name\">Mail</span><span class=\"dashboard-description\">Inbox &amp; calendar</span>", html);
         Assert.Contains("<a class=\"dashboard-link\" href=\"Guide/Handbook.html\">", html);
@@ -148,8 +330,9 @@ public class DashboardTest
 
         Assert.Contains("<span class=\"dashboard-name\">Netflix</span></span>", html);
         Assert.Contains("<span class=\"dashboard-name\">Grafana</span><span class=\"dashboard-description\">grafana.example.org</span>", html);
-        // Described tiles keep two lines, so the host still fills the second one.
-        Assert.Contains("<span class=\"dashboard-name\">GitHub</span><span class=\"dashboard-description\">github.com</span>", html);
+        // Every tile follows the same rule, whether or not its list has descriptions.
+        Assert.Contains("<span class=\"dashboard-name\">GitHub</span></span>", html);
+        Assert.DoesNotContain("has-descriptions", html);
         Assert.Contains("href=\"https://www.netflix.com\"", html);
     }
 

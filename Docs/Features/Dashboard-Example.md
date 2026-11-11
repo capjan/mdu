@@ -1,5 +1,9 @@
 ---
 layout: dashboard
+dashboard:
+  limit: 2
+  collapsed: [Icons]
+  frequent: 4
 navigation:
   visible: false
 ---

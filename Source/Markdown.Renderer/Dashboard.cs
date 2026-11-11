@@ -15,7 +15,32 @@ namespace Markdown.Renderer;
 /// <summary>
 /// The options of a page with <c>layout: dashboard</c> in its front matter.
 /// </summary>
-public sealed record DashboardOptions(string? SearchUrl, bool Clock, bool Status, bool NewTab);
+/// <param name="Limit">The number of tiles a group shows before a button reveals the rest, or null for all tiles.</param>
+/// <param name="Collapsed">The groups that start collapsed: the text of their headings, or <c>*</c> for every group.</param>
+/// <param name="Frequent">The number of tiles the row of frequently used links shows, or null for no such row.</param>
+/// <param name="StatusGroups">With <paramref name="Status"/>, the groups whose tiles show a status: the text of their
+/// headings, or null for every tile.</param>
+/// <param name="Compact">Whether the tiles start in the compact view, with their names alone.</param>
+public sealed record DashboardOptions(
+    string? SearchUrl,
+    bool Clock,
+    bool Status,
+    bool NewTab,
+    int? Limit = null,
+    IReadOnlyList<string>? Collapsed = null,
+    int? Frequent = null,
+    IReadOnlyList<string>? StatusGroups = null,
+    bool Compact = false)
+{
+    internal bool StartsCollapsed(string heading) => Matches(Collapsed, heading);
+
+    /// <summary>Tells whether the tiles of a group, or with a null heading those outside any group, show a status.</summary>
+    internal bool ChecksStatus(string? heading) =>
+        Status && (StatusGroups is null || heading is not null && Matches(StatusGroups, heading));
+
+    private static bool Matches(IReadOnlyList<string>? names, string heading) =>
+        names is not null && names.Any(name => name == "*" || string.Equals(name, heading, StringComparison.OrdinalIgnoreCase));
+}
 
 /// <summary>
 /// Renders a page with <c>layout: dashboard</c> as a start page: every second-level heading becomes a group and every
@@ -65,6 +90,7 @@ public static class Dashboard
     private static readonly Regex NonSlugCharactersRegex = new("[^a-z0-9]+", RegexOptions.Compiled);
     private static readonly Regex LeadingSeparatorRegex = new(@"\A\s*(?:[—–:|·-]\s*)?", RegexOptions.Compiled);
     private static readonly Regex AnchorTagRegex = new("</?a\\b[^>]*>", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex FootnoteReferenceRegex = new("<a\\b[^>]*\\bclass=\"footnote-ref\"[^>]*>.*?</a>", RegexOptions.Compiled | RegexOptions.Singleline);
     private static readonly Regex HeadingIdRegex = new("<h[1-6][^>]*\\bid=\"(?<id>[^\"]+)\"", RegexOptions.Compiled);
     private static readonly char[] WordSeparators = [' ', '@', '-', '_', '.', '/', '&', '+'];
     // The arrow that fades in on hover and focus shows whether a tile leaves the site.
@@ -84,17 +110,53 @@ public static class Dashboard
             return null;
 
         var options = root.Children.TryGetValue(new YamlScalarNode("dashboard"), out var node) ? node as YamlMappingNode : null;
+        var status = ReadHeadings(options, "status");
         return new DashboardOptions(
             ReadSearchUrl(options is null ? null : ReadScalar(options, "search")),
             ReadBoolean(options, "clock", true),
-            ReadBoolean(options, "status", false),
-            string.Equals(options is null ? null : ReadScalar(options, "open")?.Trim(), "new-tab", StringComparison.OrdinalIgnoreCase));
+            status is not null,
+            string.Equals(options is null ? null : ReadScalar(options, "open")?.Trim(), "new-tab", StringComparison.OrdinalIgnoreCase),
+            int.TryParse(options is null ? null : ReadScalar(options, "limit")?.Trim(), out var limit) && limit > 0 ? limit : null,
+            ReadHeadings(options, "collapsed"),
+            ReadFrequent(options),
+            status is null || status.Contains("*") ? null : status,
+            ReadBoolean(options, "compact", false));
     }
+
+    /// <summary>
+    /// Reads an option that names groups, such as <c>collapsed</c>: <c>true</c> for every group (<c>*</c>), one heading,
+    /// or a list of headings.
+    /// </summary>
+    private static IReadOnlyList<string>? ReadHeadings(YamlMappingNode? options, string key)
+    {
+        if (options is null || !options.Children.TryGetValue(new YamlScalarNode(key), out var node)) return null;
+        var names = node switch
+        {
+            YamlScalarNode { Value: { } value } when bool.TryParse(value.Trim(), out var all) => all ? ["*"] : [],
+            YamlScalarNode { Value: { } value } => [value],
+            YamlSequenceNode sequence => sequence.Children.OfType<YamlScalarNode>().Select(item => item.Value ?? string.Empty).ToList(),
+            _ => new List<string>()
+        };
+        var trimmed = names.Select(name => name.Trim()).Where(name => name.Length > 0).ToList();
+        return trimmed.Count == 0 ? null : trimmed;
+    }
+
+    /// <summary>
+    /// Reads <c>frequent</c>: the number of frequently used links to show, or <c>true</c> for <see cref="FrequentDefault"/>.
+    /// </summary>
+    private static int? ReadFrequent(YamlMappingNode? options)
+    {
+        var value = options is null ? null : ReadScalar(options, "frequent")?.Trim();
+        if (int.TryParse(value, out var count)) return count > 0 ? count : null;
+        return bool.TryParse(value, out var enabled) && enabled ? FrequentDefault : null;
+    }
+
+    private const int FrequentDefault = 6;
 
     public static string Render(MarkdownDocument document, MarkdownPipeline pipeline, DashboardOptions options)
     {
         var html = new StringBuilder();
-        html.Append("<div class=\"dashboard\"");
+        html.Append(options.Compact ? "<div class=\"dashboard is-compact\"" : "<div class=\"dashboard\"");
         if (options.SearchUrl is not null) html.Append($" data-dashboard-search=\"{HtmlEncoder.Default.Encode(options.SearchUrl)}\"");
         if (options.Status) html.Append(" data-dashboard-status=\"true\"");
         html.AppendLine(">");
@@ -108,7 +170,21 @@ public static class Dashboard
         foreach (var block in introduction) html.Append(RenderBlock(block, pipeline));
         html.AppendLine(RenderToolbar(options, firstGroup >= 0));
         html.AppendLine($"<div id=\"dashboard-results\" role=\"grid\" aria-label=\"Links and pages\" aria-readonly=\"true\"{(firstGroup < 0 ? " hidden" : string.Empty)}>");
-        if (firstGroup >= 0) html.Append(RenderGroups(blocks.Skip(firstGroup), pipeline, options, usedIds));
+        if (firstGroup >= 0)
+        {
+            // dashboard-folds.js fills the row with copies of the tiles the reader opens most, and shows it once it has any.
+            if (options.Frequent is { } frequent)
+                html.AppendLine("<div class=\"dashboard-row dashboard-frequent-row\" role=\"presentation\" hidden>")
+                    .AppendLine($"<section class=\"dashboard-group dashboard-frequent\" role=\"rowgroup\" data-frequent=\"{frequent}\">")
+                    .AppendLine("<div role=\"row\"><div role=\"gridcell\"><h2><span class=\"dashboard-group-title\">Frequently used</span>" +
+                                "<button class=\"dashboard-frequent-clear\" type=\"button\" aria-label=\"Clear frequently used links\">Clear</button></h2></div></div>")
+                    .AppendLine("<ul class=\"dashboard-tiles\" role=\"presentation\"></ul>")
+                    .AppendLine("</section>")
+                    .AppendLine("</div>");
+            html.Append(RenderGroups(blocks.Skip(firstGroup).ToList(), pipeline, options, usedIds));
+            // Inline, so folded groups and saved choices apply before the first paint, and only where a script can undo them.
+            html.AppendLine($"<script>{Resources.DashboardFoldsScriptContent().Trim()}</script>");
+        }
 
         // The filter script fills these containers, so they exist even on a dashboard without groups.
         html.AppendLine("<div class=\"dashboard-pages\" id=\"dashboard-pages\" role=\"rowgroup\" aria-label=\"Pages\" hidden>");
@@ -122,52 +198,113 @@ public static class Dashboard
         return html.ToString();
     }
 
-    private static string RenderGroups(IEnumerable<Block> blocks, MarkdownPipeline pipeline, DashboardOptions options, HashSet<string> usedIds)
+    private static string RenderGroups(IReadOnlyList<Block> blocks, MarkdownPipeline pipeline, DashboardOptions options, HashSet<string> usedIds)
     {
         var html = new StringBuilder();
         html.AppendLine("<div class=\"dashboard-row\" role=\"presentation\">");
-        var groupOpen = false;
+        GroupState? group = null;
         var tileIndex = 0;
-        foreach (var block in blocks)
+
+        void CloseGroup()
         {
-            switch (block)
+            if (group is null) return;
+            var more = group.Total - group.Shown;
+            if (more > 0)
+                html.AppendLine($"<div class=\"dashboard-more-row\" role=\"row\"><div role=\"gridcell\"><button class=\"dashboard-more\" type=\"button\" aria-expanded=\"false\" data-more=\"{more}\">Show {more} more</button></div></div>");
+            html.AppendLine("</section>");
+            group = null;
+        }
+
+        for (var index = 0; index < blocks.Count; index++)
+        {
+            switch (blocks[index])
             {
                 case ThematicBreakBlock:
-                    if (groupOpen) html.AppendLine("</section>");
-                    groupOpen = false;
+                    CloseGroup();
                     html.AppendLine("</div>");
                     html.AppendLine("<div class=\"dashboard-row\" role=\"presentation\">");
                     break;
                 case HeadingBlock { Level: 2 } heading:
-                    if (groupOpen) html.AppendLine("</section>");
-                    groupOpen = true;
-                    html.AppendLine("<section class=\"dashboard-group\" role=\"rowgroup\">");
+                    CloseGroup();
+                    var title = PlainText(heading.Inline ?? Enumerable.Empty<Inline>()).Trim();
+                    group = new GroupState(CountGroupTiles(blocks, index + 1), options.Limit, options.ChecksStatus(title));
+                    html.AppendLine($"<section class=\"dashboard-group{(options.StartsCollapsed(title) ? " is-collapsed" : string.Empty)}\" role=\"rowgroup\">");
                     html.AppendLine("<div role=\"row\"><div role=\"gridcell\">");
-                    html.Append(RenderBlock(heading, pipeline));
+                    html.Append(RenderGroupHeading(RenderBlock(heading, pipeline), group.Total));
                     html.AppendLine("</div></div>");
                     break;
                 case ListBlock list:
-                    if (groupOpen) html.Append(RenderTiles(list, pipeline, options, usedIds, ref tileIndex));
+                    if (group is not null) html.Append(RenderTiles(list, pipeline, options, usedIds, ref tileIndex, group));
                     else
                     {
                         html.AppendLine("<div role=\"rowgroup\">");
-                        html.Append(RenderTiles(list, pipeline, options, usedIds, ref tileIndex));
+                        html.Append(RenderTiles(list, pipeline, options, usedIds, ref tileIndex, null));
                         html.AppendLine("</div>");
                     }
                     break;
-                default:
-                    if (!groupOpen) html.AppendLine("<div role=\"rowgroup\">");
-                    html.AppendLine("<div role=\"row\"><div role=\"gridcell\">");
+                case var block:
+                    if (group is null) html.AppendLine("<div role=\"rowgroup\">");
+                    html.AppendLine($"<div{OverflowClass(group)} role=\"row\"><div role=\"gridcell\">");
                     html.Append(RenderBlock(block, pipeline));
                     html.AppendLine("</div></div>");
-                    if (!groupOpen) html.AppendLine("</div>");
+                    if (group is null) html.AppendLine("</div>");
                     break;
             }
         }
 
-        if (groupOpen) html.AppendLine("</section>");
+        CloseGroup();
         html.AppendLine("</div>");
         return html.ToString();
+    }
+
+    /// <summary>Counts the tiles of the group whose blocks start at <paramref name="start"/>.</summary>
+    private static int CountGroupTiles(IReadOnlyList<Block> blocks, int start) =>
+        blocks.Skip(start)
+            .TakeWhile(block => block is not (ThematicBreakBlock or HeadingBlock { Level: 2 }))
+            .OfType<ListBlock>()
+            .Sum(list => list.OfType<ListItemBlock>().Count(IsTile));
+
+    /// <summary>
+    /// Turns the text of a group heading into a button that folds the group. The heading keeps its id, so links to it
+    /// still work. A button cannot contain a link, so links in the heading keep only their text, and footnote references
+    /// follow the button.
+    /// </summary>
+    private static string RenderGroupHeading(string headingHtml, int tiles)
+    {
+        var start = headingHtml.IndexOf('>') + 1;
+        var end = headingHtml.LastIndexOf("</h2>", StringComparison.Ordinal);
+        if (start <= 0 || end < start) return headingHtml;
+        var content = headingHtml[start..end];
+        var footnotes = string.Concat(FootnoteReferenceRegex.Matches(content).Select(match => match.Value));
+        content = AnchorTagRegex.Replace(FootnoteReferenceRegex.Replace(content, string.Empty), string.Empty).Trim();
+        return headingHtml[..start]
+               + $"<button class=\"dashboard-group-toggle\" type=\"button\" aria-expanded=\"true\" disabled>"
+               + $"<span class=\"dashboard-group-title\">{content}</span>"
+               + $"<span class=\"dashboard-group-count\" data-count=\"{tiles}\" aria-hidden=\"true\"></span>"
+               + "<svg class=\"dashboard-group-chevron\" viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><path d=\"m4 6 4 4 4-4\"></path></svg>"
+               + "</button>"
+               + footnotes
+               + headingHtml[end..];
+    }
+
+    /// <summary>
+    /// Content after the last tile a group shows before Show more, such as a subheading, a paragraph, or a list without
+    /// links, hides with the tiles past the limit.
+    /// </summary>
+    private static string OverflowClass(GroupState? group) => group is { IsFull: true } ? " class=\"is-overflow\"" : string.Empty;
+
+    /// <summary>
+    /// The group being written: how many tiles it has, how many show before Show more, whether they show a status, and how
+    /// many are written so far.
+    /// A button for a single tile would take the tile's place, so a group with one tile past the limit shows them all.
+    /// </summary>
+    private sealed class GroupState(int total, int? limit, bool status)
+    {
+        public int Total { get; } = total;
+        public int Shown { get; } = limit is { } value && total - value > 1 ? value : total;
+        public bool Status { get; } = status;
+        public int Written { get; set; }
+        public bool IsFull => Written >= Shown && Shown < Total;
     }
 
     private static HashSet<string> ReadHeadingIds(IEnumerable<HeadingBlock> headings, MarkdownPipeline pipeline)
@@ -205,34 +342,40 @@ public static class Dashboard
         html.AppendLine("<p class=\"dashboard-search-hint\" id=\"dashboard-search-hint\"></p>");
         html.AppendLine("<p class=\"visually-hidden\" id=\"dashboard-search-status\" role=\"status\" aria-live=\"polite\" aria-atomic=\"true\"></p>");
         if (options.Clock) html.AppendLine("<time class=\"dashboard-clock\" id=\"dashboard-clock\"></time>");
+        // dashboard-folds.js shows the switch, because only a script can change the view.
+        if (hasGroups)
+            html.AppendLine($"<button class=\"dashboard-view\" id=\"dashboard-view\" type=\"button\" aria-pressed=\"{options.Compact.ToString().ToLowerInvariant()}\" title=\"Compact view\" hidden>" +
+                            "<span class=\"visually-hidden\">Compact view</span>" +
+                            "<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M2.5 3.5h11M2.5 6.5h11M2.5 9.5h11M2.5 12.5h11\"></path></svg></button>");
         html.Append("</div>");
         return html.ToString();
     }
 
-    private static string RenderTiles(ListBlock list, MarkdownPipeline pipeline, DashboardOptions options, HashSet<string> usedIds, ref int tileIndex)
+    private static string RenderTiles(ListBlock list, MarkdownPipeline pipeline, DashboardOptions options, HashSet<string> usedIds, ref int tileIndex, GroupState? group)
     {
         var tiles = list.OfType<ListItemBlock>().Select(item => ReadTile(item, pipeline)).ToList();
         if (tiles.Count == 0 || tiles.All(tile => tile is null))
-            return $"<div role=\"row\"><div role=\"gridcell\">{RenderBlock(list, pipeline)}</div></div>";
+            return $"<div{OverflowClass(group)} role=\"row\"><div role=\"gridcell\">{RenderBlock(list, pipeline)}</div></div>";
 
-        var hasDescriptions = tiles.Any(tile => tile is not null && tile.Description.Length > 0);
         var html = new StringBuilder();
-        html.AppendLine($"<ul class=\"dashboard-tiles{(hasDescriptions ? " has-descriptions" : string.Empty)}\" role=\"presentation\">");
+        html.AppendLine("<ul class=\"dashboard-tiles\" role=\"presentation\">");
+        var status = group?.Status ?? options.ChecksStatus(null);
         for (var index = 0; index < tiles.Count; index++)
         {
             var tile = tiles[index];
             if (tile is null)
             {
-                html.AppendLine($"<li class=\"dashboard-note\" role=\"row\"><div role=\"gridcell\">{RenderChildren((ListItemBlock)list[index], pipeline)}</div></li>");
+                html.AppendLine($"<li class=\"dashboard-note{(group is { IsFull: true } ? " is-overflow" : string.Empty)}\" role=\"row\"><div role=\"gridcell\">{RenderChildren((ListItemBlock)list[index], pipeline)}</div></li>");
                 continue;
             }
 
             var external = Uri.TryCreate(tile.Url, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https";
             var host = external ? uri!.Host : string.Empty;
-            // In a compact list, a host that only repeats the name (GitHub, github.com) would take the name's space.
+            // Every tile has a second line: its description, or else its host. A host that only repeats the name (GitHub,
+            // github.com) leaves the line empty, and the tile keeps the height of the others.
             var subtitle = tile.Description.Length > 0
                 ? tile.Description
-                : !hasDescriptions && HostRepeatsName(tile.PlainName, host)
+                : HostRepeatsName(tile.PlainName, host)
                     ? string.Empty
                     : HtmlEncoder.Default.Encode(NormalizeHost(host));
 
@@ -240,7 +383,9 @@ public static class Dashboard
             do id = $"dashboard-tile-{tileIndex++}";
             while (!usedIds.Add(id));
 
-            html.Append("<li class=\"dashboard-tile\" role=\"row\">");
+            // Tiles past the limit stay in the page for the filter and appear when the reader asks for them.
+            var overflow = group is not null && ++group.Written > group.Shown;
+            html.Append($"<li class=\"dashboard-tile{(overflow ? " is-overflow" : string.Empty)}\" role=\"row\">");
             html.Append($"<div class=\"dashboard-cell\" id=\"{id}\" role=\"gridcell\" aria-selected=\"false\">");
             html.Append($"<a class=\"dashboard-link\" href=\"{HtmlEncoder.Default.Encode(tile.Url)}\"");
             if (!string.IsNullOrEmpty(tile.Title)) html.Append($" title=\"{HtmlEncoder.Default.Encode(tile.Title)}\"");
@@ -253,7 +398,7 @@ public static class Dashboard
             html.Append("</span>");
             var newTab = external && options.NewTab;
             if (newTab) html.Append("<span class=\"visually-hidden\"> (opens in a new tab)</span>");
-            if (options.Status && external) html.Append("<span class=\"dashboard-status\" role=\"img\" aria-label=\"Status unknown\"></span>");
+            if (status && external) html.Append("<span class=\"dashboard-status\" role=\"img\" aria-label=\"Status unknown\"></span>");
             html.Append(external ? ExternalArrow : InternalArrow);
             html.Append("</a>");
             // Further paragraphs or nested lists of the item stay below the tile, outside its link.
@@ -265,6 +410,18 @@ public static class Dashboard
         return html.ToString();
     }
 
+    /// <summary>Tells whether a list item becomes a tile, without rendering it.</summary>
+    private static bool IsTile(ListItemBlock item) =>
+        item.FirstOrDefault() is ParagraphBlock { Inline: { } inlines } &&
+        inlines.ToList() is var parts && (IsTaskListLink(parts) || FindTileLink(parts) >= 0);
+
+    /// <summary>The index of the link that makes an item a tile: its first link that is not an image, if it has a URL.</summary>
+    private static int FindTileLink(List<Inline> parts)
+    {
+        var index = parts.FindIndex(inline => inline is LinkInline { IsImage: false });
+        return index >= 0 && !string.IsNullOrWhiteSpace(((LinkInline)parts[index]).Url) ? index : -1;
+    }
+
     private static DashboardTile? ReadTile(ListItemBlock item, MarkdownPipeline pipeline)
     {
         if (item.FirstOrDefault() is not ParagraphBlock { Inline: { } inlines }) return null;
@@ -272,10 +429,9 @@ public static class Dashboard
         var parts = inlines.ToList();
         var more = string.Concat(item.Skip(1).Select(block => RenderBlock(block, pipeline)));
         if (ReadTaskListLink(parts, pipeline) is { } taskListTile) return taskListTile with { MoreHtml = more };
-        var linkIndex = parts.FindIndex(inline => inline is LinkInline { IsImage: false });
+        var linkIndex = FindTileLink(parts);
         if (linkIndex < 0) return null;
         var link = (LinkInline)parts[linkIndex];
-        if (string.IsNullOrWhiteSpace(link.Url)) return null;
 
         var before = parts.Take(linkIndex).Where(inline => inline is not LiteralInline literal || !literal.Content.IsEmptyOrWhitespace()).ToList();
         var linkChildren = link.ToList();
@@ -285,7 +441,7 @@ public static class Dashboard
 
         var plainName = PlainText(nameParts).Trim();
         return new DashboardTile(
-            link.Url,
+            link.Url!,
             link.Title,
             RenderInlines(nameParts, pipeline).Trim(),
             plainName,
@@ -307,18 +463,24 @@ public static class Dashboard
         return LeadingSeparatorRegex.Replace(AnchorTagRegex.Replace(html, string.Empty), string.Empty, 1).Trim();
     }
 
+    /// <summary>Tells whether the inlines are <c>- [X](https://x.com)</c>, a checked task followed by an automatic link.</summary>
+    private static bool IsTaskListLink(IReadOnlyList<Inline> parts) =>
+        parts is [TaskList, LiteralInline open, LinkInline { IsAutoLink: true } link, LiteralInline close, ..] &&
+        open.Content.ToString() == "(" && close.Content.ToString().StartsWith(')') && !string.IsNullOrWhiteSpace(link.Url);
+
     /// <summary>
     /// Reads <c>- [X](https://x.com)</c>, which Markdown parses as a checked task followed by an automatic link.
     /// </summary>
     private static DashboardTile? ReadTaskListLink(IReadOnlyList<Inline> parts, MarkdownPipeline pipeline)
     {
-        if (parts is not [TaskList task, LiteralInline open, LinkInline { IsAutoLink: true } link, LiteralInline close, ..] ||
-            open.Content.ToString() != "(" || !close.Content.ToString().StartsWith(')') || string.IsNullOrWhiteSpace(link.Url))
-            return null;
+        if (!IsTaskListLink(parts)) return null;
+        var task = (TaskList)parts[0];
+        var link = (LinkInline)parts[2];
+        var close = (LiteralInline)parts[3];
 
         var name = task.Checked ? "X" : " ";
         var description = RenderDescription(close.Content.ToString()[1..], parts.Skip(4), pipeline);
-        return new DashboardTile(link.Url, null, name, name, description, null, string.Empty);
+        return new DashboardTile(link.Url!, null, name, name, description, null, string.Empty);
     }
 
     private static bool IsIcon(Inline inline) =>
