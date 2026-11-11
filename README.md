@@ -62,10 +62,14 @@
 
 ```bash
 dotnet tool install -g mdu   # install
-mdu new .                    # create a starter docs project
+mdu new                      # create a starter docs project
 mdu serve                    # live preview of ./docs
 mdu render                   # build the site into ./site
 ```
+
+<p align="center">
+  <img alt="Creating, previewing, and building a documentation site with mdu new, mdu serve, and mdu render" src="Docs/assets/demo.gif" width="820">
+</p>
 
 Prefer a standalone executable or Docker? See the [installation guide](https://capjan.github.io/mdu/Setup/).
 
