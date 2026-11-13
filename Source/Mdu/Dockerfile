@@ -1,6 +1,8 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine-aot AS build
 
 ARG TARGETARCH
+# Release version from git-cliff, without the leading "v". Empty for local and CI test builds.
+ARG VERSION=
 
 RUN apk add --no-cache openssl-dev zlib-dev
 
@@ -19,6 +21,7 @@ RUN case "$TARGETARCH" in \
         -p:PublishAot=true \
         -p:InvariantGlobalization=true \
         -p:OptimizationPreference=Size \
+        ${VERSION:+"-p:Version=$VERSION"} \
         --output /app/publish
 
 FROM mcr.microsoft.com/dotnet/runtime-deps:10.0-alpine AS runtime-base
