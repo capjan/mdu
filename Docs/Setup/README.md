@@ -24,6 +24,7 @@ mdu serve
 mdu render
 ```
 
-![Creating, previewing, and building a documentation site with mdu new, mdu serve, and mdu render](../assets/demo.gif)
+![Creating, previewing, and building a documentation site with mdu new, mdu serve, and mdu render](../assets/demo-light.gif#only-light)
+![Creating, previewing, and building a documentation site with mdu new, mdu serve, and mdu render](../assets/demo-dark.gif#only-dark)
 
 See [`mdu new`](../Usage/new.md), [`mdu serve`](../Usage/serve.md), and [`mdu render`](../Usage/render.md) for the options.
