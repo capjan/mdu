@@ -372,6 +372,7 @@ jobs:
           file: Source/Mdu/Dockerfile
           target: cli
           platforms: ${{ matrix.platform }}
+          build-args: VERSION=${{ needs.prepare-release.outputs.package_version }}
           outputs: type=image,name=capjan/mdu,push-by-digest=true,name-canonical=true,push=true
           labels: |
             org.opencontainers.image.source=https://github.com/capjan/mdu
@@ -386,6 +387,7 @@ jobs:
           file: Source/Mdu/Dockerfile
           target: ci
           platforms: ${{ matrix.platform }}
+          build-args: VERSION=${{ needs.prepare-release.outputs.package_version }}
           outputs: type=image,name=capjan/mdu-ci,push-by-digest=true,name-canonical=true,push=true
           labels: |
             org.opencontainers.image.source=https://github.com/capjan/mdu
