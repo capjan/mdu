@@ -659,7 +659,9 @@ public sealed class SearchIndexBuilder
         if (!string.IsNullOrWhiteSpace(value)) code.Add(value.Trim());
     }
 
+    // Annotated code is indexed without its markers, which readers see as buttons rather than as code.
     private static string GetCode(CodeBlock block) =>
+        block is FencedCodeBlock fenced ? Markdown.Renderer.CodeAnnotations.SearchText(fenced).ReplaceLineEndings(Environment.NewLine) :
         block is LeafBlock leaf && leaf.Lines.Lines is not null
             ? string.Join(Environment.NewLine, leaf.Lines.Lines.Select(line => line.Slice.ToString()))
             : string.Empty;

@@ -236,6 +236,10 @@ public partial class HtmlRenderer
         return document;
     }
 
+    /// <summary>Pairs code blocks with their annotation lists; only pages that are rendered need it.</summary>
+    private void ApplyCodeAnnotations(MarkdownDocument document, bool? pageSetting) =>
+        CodeAnnotations.Apply(document, pageSetting ?? _siteConfiguration.CodeAnnotations);
+
     public IReadOnlyList<string> FindPdfLinks(string markdown) =>
         Markdig.Markdown.Parse(markdown, _pipeline)
             .Descendants<LinkInline>()
@@ -286,13 +290,21 @@ public partial class HtmlRenderer
         return providers;
     }
 
-    public string RenderMarkdownFragment(string markdown) => RenderFragment(ParseMarkdown(markdown));
+    public string RenderMarkdownFragment(string markdown)
+    {
+        var document = ParseMarkdown(markdown);
+        ApplyCodeAnnotations(document, null);
+        return RenderFragment(document);
+    }
 
     /// <summary>Renders PDF content without regions excluded from PDF output.</summary>
-    internal string RenderPdfMarkdownFragment(string markdown)
+    /// <param name="markdown">The page without front matter.</param>
+    /// <param name="codeAnnotations">The page's <c>content.code.annotate</c> setting, or null for the site's.</param>
+    internal string RenderPdfMarkdownFragment(string markdown, bool? codeAnnotations = null)
     {
         var document = ParseMarkdown(markdown);
         PdfHiddenContent.Remove(document);
+        ApplyCodeAnnotations(document, codeAnnotations);
         return RenderFragment(document);
     }
 
@@ -348,7 +360,8 @@ public partial class HtmlRenderer
         bool imageZoom = true,
         PageNavigation? pageNavigation = null,
         IReadOnlyList<PageTagLink>? pageTags = null,
-        IReadOnlyList<PageTagLink>? tagSectionLinks = null)
+        IReadOnlyList<PageTagLink>? tagSectionLinks = null,
+        bool? codeAnnotations = null)
     {
         var prefix = string.Concat(Enumerable.Repeat("../", nestingDeep));
         var cssFileLink = MainCssLink(prefix);
@@ -357,6 +370,7 @@ public partial class HtmlRenderer
         var pipeline = glossaryScope?.Pipeline ?? _pipeline;
         
         var document = ParseMarkdown(markdown, pdfDownloadUrl, pdfDownloadUrls, pdfDownloadNames, pipeline);
+        ApplyCodeAnnotations(document, codeAnnotations);
         var hasIconSearch = document.Descendants<FencedCodeBlock>()
             .Any(block => block.Info == IconSearch.CodeBlockLanguage);
         if (hasIconSearch) EnsureIconSearchAssets();

@@ -43,7 +43,8 @@ The linter reports Material-specific syntax as [migration issues](lint/Rules.md#
 | Admonitions and collapsible details | [GitHub alerts](../Features/Callouts.md); content stays visible, unknown types become `NOTE` |
 | Content tabs | Headings |
 | Card grids | Markdown link lists with their descriptions |
-| `{ .annotate }` markers | Removed; code comments and numbered explanations stay |
+| `{ .annotate }` markers | Removed; [code annotations](../Features/CodeBlocks.md#annotations) work without them |
+| Code fences such as ` ``` { .yaml .annotate } ` | ` ```yaml `, keeping a `title` |
 | `index.md` | `README.md` |
 | Section without a `README.md` | A new `README.md` named after the folder |
 | `.pages` titles and order | `navigation.title` and `navigation.order` front matter; the `.pages` file is removed |

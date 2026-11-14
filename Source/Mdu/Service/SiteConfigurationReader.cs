@@ -16,7 +16,7 @@ public static class SiteConfigurationReader
         "site.attribution.visible",
         "site.colors.light.background", "site.colors.light.text", "site.colors.light.primary",
         "site.colors.dark.background", "site.colors.dark.text", "site.colors.dark.primary",
-        "content.glossary", "content.icons", "content.tags",
+        "content.glossary", "content.icons", "content.tags", "content.code.annotate",
         "diagrams.limits.elements", "diagrams.limits.links"
     ];
 
@@ -51,6 +51,7 @@ public static class SiteConfigurationReader
             Glossary = ReadGlossary(settings),
             Icons = ReadIcons(settings),
             Tags = ReadTagsSetting(settings),
+            CodeAnnotations = ReadCodeAnnotations(settings),
             MaxDiagramElements = ReadDiagramLimit(settings, "elements"),
             MaxDiagramLinks = ReadDiagramLimit(settings, "links"),
             LogoLight = ReadAsset(settings, "site.logo", "light"),
@@ -246,7 +247,8 @@ public static class SiteConfigurationReader
         if (left is not YamlScalarNode { Value: var first } || right is not YamlScalarNode { Value: var second }) return false;
         return path switch
         {
-            "site.attribution.visible" => bool.TryParse(first, out var a) && bool.TryParse(second, out var b) && a == b,
+            "site.attribution.visible" or "content.code.annotate" =>
+                bool.TryParse(first, out var a) && bool.TryParse(second, out var b) && a == b,
             "diagrams.limits.elements" or "diagrams.limits.links" => TryParseLimit(first, out var a) && TryParseLimit(second, out var b) && a == b,
             _ => false
         };
@@ -301,6 +303,13 @@ public static class SiteConfigurationReader
         if (!settings.TryGetValue("site.attribution.visible", out var value)) return true;
         if (value is YamlScalarNode scalar && bool.TryParse(scalar.Value, out var visible)) return visible;
         throw new InvalidOperationException("The 'site.attribution.visible' setting in mdu.yml must be true or false.");
+    }
+
+    private static bool ReadCodeAnnotations(Dictionary<string, YamlNode> settings)
+    {
+        if (!settings.TryGetValue("content.code.annotate", out var value)) return true;
+        if (value is YamlScalarNode scalar && bool.TryParse(scalar.Value, out var annotate)) return annotate;
+        throw new InvalidOperationException("The 'content.code.annotate' setting in mdu.yml must be true or false.");
     }
 
     private static bool IsYamlNull(YamlNode node) =>

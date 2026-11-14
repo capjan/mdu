@@ -216,6 +216,7 @@ public sealed class ServeCommand
         }
         _siteTags.Report(_rootPath);
         _pdfCommand.Tags = _siteTags;
+        _pdfCommand.SiteCodeAnnotations = siteConfiguration.CodeAnnotations;
 
         _renderer.PrepareBasePath(_outputPath, siteConfiguration);
         SiteConfigurationReader.CopyAssets(_rootPath, _outputPath, siteConfiguration);

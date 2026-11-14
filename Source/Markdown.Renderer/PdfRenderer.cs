@@ -7,7 +7,9 @@ using Markdown.Renderer.MarkdigExtension;
 namespace Markdown.Renderer;
 
 /// <param name="Tags">The tag names of the page, one per line, for the line below its title and the keywords; null without tags.</param>
-public sealed record PdfSourceSection(string Title, string RelativeHtmlPath, string Markdown, int Depth = 0, string? Tags = null);
+/// <param name="CodeAnnotations">Whether the page's code blocks show annotations, or null for the renderer's site setting.</param>
+public sealed record PdfSourceSection(string Title, string RelativeHtmlPath, string Markdown, int Depth = 0, string? Tags = null,
+    bool? CodeAnnotations = null);
 
 /// <summary>Writes a paginated PDF from the HTML fragment produced by MDU's Markdown pipeline.</summary>
 public sealed class PdfRenderer(HtmlRenderer htmlRenderer)
@@ -143,7 +145,7 @@ internal sealed class PdfLayout
         string html;
         try
         {
-            html = _htmlRenderer.RenderPdfMarkdownFragment(section.Markdown);
+            html = _htmlRenderer.RenderPdfMarkdownFragment(section.Markdown, section.CodeAnnotations);
         }
         catch (PdfHiddenContentException exception)
         {
@@ -509,6 +511,12 @@ internal sealed class PdfLayout
         }
         if (node is not XmlElement element) return;
         var className = element.GetAttribute("class");
+        // An annotation marker reads as "(1)" and points to the numbered entry below the code.
+        if (className == "code-annotation")
+        {
+            runs.Add(($"({element.InnerText})", PdfColor.Link));
+            return;
+        }
         var childColor = className switch
         {
             "comment" => new PdfColor(56, 118, 29),

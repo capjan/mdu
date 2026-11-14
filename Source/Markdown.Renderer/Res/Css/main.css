@@ -2403,6 +2403,109 @@ pre code {
     padding-right: 3.25rem;
 }
 
+/* Code annotations: a numbered marker in the code opens its explanation as a popover next to it. Browsers without
+   popovers show the explanations as a numbered list below the code, and so does print. */
+.code-annotation {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.4em;
+    height: 1.4em;
+    margin: 0 0.2em;
+    padding: 0 0.35em;
+    border: 0;
+    border-radius: 999px;
+    background: var(--link);
+    color: var(--page-background);
+    font-family: inherit;
+    font-size: 0.75em;
+    font-weight: 600;
+    line-height: 1;
+    vertical-align: 0.1em;
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+}
+
+.code-annotation:hover {
+    opacity: 0.85;
+}
+
+/* The scrolling code clips overflow, so the ring is inset. The focused marker turns light so the ring shows on it. */
+.code-annotation:focus-visible {
+    outline: 2px solid var(--link);
+    outline-offset: -2px;
+    background: var(--page-background);
+    color: var(--link);
+    opacity: 1;
+}
+
+.code-annotations {
+    margin: 0;
+    padding: 0.75rem 1.25rem 0.75rem 2.75rem;
+    border-top: 1px solid var(--code-block-border);
+    color: var(--text-body);
+    font-size: 0.875rem;
+}
+
+@supports selector(:popover-open) {
+    .code-annotations {
+        display: contents;
+    }
+
+    .code-annotations > [popover] {
+        box-sizing: border-box;
+        max-width: min(28rem, calc(100vw - 32px));
+        padding: 0.75rem 1rem;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--page-background);
+        color: var(--text-body);
+        box-shadow: 0 8px 24px rgb(0 0 0 / 16%);
+        font-size: 0.875rem;
+        line-height: 1.55;
+        list-style: none;
+    }
+
+    .code-annotations > [popover] > :first-child {
+        margin-top: 0;
+    }
+
+    .code-annotations > [popover] > :last-child {
+        margin-bottom: 0;
+    }
+}
+
+/* With anchor positioning the explanation opens below its marker and flips where there is no room; without it,
+   it opens in the middle of the window. */
+@supports (position-area: bottom) {
+    .code-annotations > [popover] {
+        inset: auto;
+        /* Keeps the page gutter to the window edge; the fallbacks mirror the margins with the position. */
+        margin: 6px 16px 6px 0;
+        position-area: bottom span-right;
+        position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+    }
+}
+
+@media print {
+    .code-annotations {
+        display: block;
+    }
+
+    .code-annotations > [popover] {
+        display: list-item;
+        position: static;
+        inset: auto;
+        max-width: none;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: none;
+        box-shadow: none;
+        list-style: decimal;
+    }
+}
+
 .diagram,
 .result-block {
     margin: 1.5rem 0;

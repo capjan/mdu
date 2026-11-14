@@ -213,7 +213,8 @@ public partial class MarkdigVisitor : BaseVisitor
                     pageTags: GetTagLinks(_siteTags.For(entity), outputDirectory),
                     tagSectionLinks: ReferenceEquals(entity, _siteTags.VocabularyPage)
                         ? GetTagLinks(_siteTags.Tags, outputDirectory)
-                        : null).GetAwaiter().GetResult();
+                        : null,
+                    codeAnnotations: CodeAnnotations.ReadFrontMatter(entity.FrontMatter)).GetAwaiter().GetResult();
 
             File.Move(temporaryPath, outputFileName, true);
             WriteAliasPage(entity, outputFileName);
@@ -325,7 +326,8 @@ public partial class MarkdigVisitor : BaseVisitor
                         pdfDownloadUrls: pdfDownloadUrls,
                         pdfDownloadNames: pdfDownloadNames,
                         glossaryScope: GetGlossaryScope(entity),
-                        imageZoom: ImageZoom.ReadFrontMatter(entity.FrontMatter)).GetAwaiter().GetResult();
+                        imageZoom: ImageZoom.ReadFrontMatter(entity.FrontMatter),
+                        codeAnnotations: CodeAnnotations.ReadFrontMatter(entity.FrontMatter)).GetAwaiter().GetResult();
 
                 File.Move(temporaryPath, specOutputPath, true);
                 generatedPagePaths.Add(specOutputPath);

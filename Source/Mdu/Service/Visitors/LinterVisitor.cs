@@ -226,6 +226,7 @@ public class LinterVisitor: IVisitor<MarkdownFile>
         ReportLegacySidebarMetadata(entity);
         ReportInvalidNavigationMetadata(entity);
         ReportInvalidImageZoom(entity);
+        ReportCodeAnnotations(entity, markdownContent);
         foreach (var problem in Markdown.Renderer.PageNavigation.FindProblems(entity.FrontMatter))
             ErrorReceiver.Add(entity.FileInfo.FullName, 1, $"{RuleCodes.InvalidPageNavigation}: {problem}");
         foreach (var issue in MarkdownCompatibility.FindIssues(markdownContent))
@@ -404,6 +405,46 @@ public class LinterVisitor: IVisitor<MarkdownFile>
         catch (YamlException)
         {
         }
+    }
+
+    private void ReportCodeAnnotations(MarkdownFile page, string markdown)
+    {
+        var path = page.FileInfo.FullName;
+        if (Markdown.Renderer.CodeAnnotations.FindProblem(page.FrontMatter) is { } setting)
+            ErrorReceiver.Add(path, 1, $"{RuleCodes.InvalidCodeAnnotate}: {setting}");
+        var enabled = Markdown.Renderer.CodeAnnotations.ReadFrontMatter(page.FrontMatter) ?? SiteCodeAnnotations();
+        foreach (var problem in Markdown.Renderer.CodeAnnotations.FindProblems(markdown, enabled))
+        {
+            switch (problem.Kind)
+            {
+                case Markdown.Renderer.CodeAnnotations.ProblemKind.InvalidSetting:
+                    ErrorReceiver.Add(path, problem.Line, $"{RuleCodes.InvalidCodeAnnotate}: {problem.Message}");
+                    break;
+                case Markdown.Renderer.CodeAnnotations.ProblemKind.MarkerWithoutEntry:
+                    ErrorReceiver.AddWarning(path, problem.Line, $"{RuleCodes.AnnotationWithoutEntry}: {problem.Message}");
+                    break;
+                default:
+                    ErrorReceiver.AddWarning(path, problem.Line, $"{RuleCodes.AnnotationEntryUnused}: {problem.Message}");
+                    break;
+            }
+        }
+    }
+
+    private bool? _siteCodeAnnotations;
+
+    // An unreadable mdu.yml is reported by the commands that need it; the lint keeps the default here.
+    private bool SiteCodeAnnotations()
+    {
+        if (_siteCodeAnnotations is { } known) return known;
+        try
+        {
+            _siteCodeAnnotations = SiteConfigurationReader.ReadForContent(_rootPath).CodeAnnotations;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or YamlException)
+        {
+            _siteCodeAnnotations = true;
+        }
+        return _siteCodeAnnotations.Value;
     }
 
     private void ReportInvalidImageZoom(MarkdownFile page)

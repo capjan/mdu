@@ -104,6 +104,7 @@ public class RenderCommand
         }
         if (siteTags.Report(rootPath)) return 1;
         _pdfCommand.Tags = siteTags;
+        _pdfCommand.SiteCodeAnnotations = siteConfiguration.CodeAnnotations;
 
         _renderer.PrepareBasePath(outPath, siteConfiguration);
         SearchClientAsset.WriteTo(outPath);

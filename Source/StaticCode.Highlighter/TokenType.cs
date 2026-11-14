@@ -26,5 +26,7 @@ public enum TokenType
     MarkdownAlertTip,
     MarkdownAlertImportant,
     MarkdownAlertWarning,
-    MarkdownAlertCaution
+    MarkdownAlertCaution,
+    /// <summary>A code annotation marker such as <c>(1)</c>. Its text is the annotation number.</summary>
+    Annotation
 }

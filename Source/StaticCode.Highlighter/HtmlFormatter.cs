@@ -8,14 +8,38 @@ namespace StaticCode.Highlighter;
 /// </summary>
 public class HtmlFormatter : ITextFormatter<IEnumerable<LanguageToken>>
 {
+    /// <summary>
+    /// Prefix of the element ids that annotation markers open. Each marker opens the element whose id is this prefix
+    /// followed by the annotation number.
+    /// </summary>
+    public string AnnotationIdPrefix { get; init; } = "code-annotation-";
+
     public void Write(IEnumerable<LanguageToken> tokens, TextWriter writer)
     {
         writer.Write("<pre>");
         writer.Write("<code>");
+        var occurrences = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var token in tokens)
         {
             switch (token.Type)
             {
+                case TokenType.Annotation:
+                    var number = WebUtility.HtmlEncode(token.Text);
+                    var target = WebUtility.HtmlEncode(AnnotationIdPrefix) + number;
+                    // Each marker has its own anchor name. The popover's own position anchor is the first marker of its
+                    // number; code-copy.js moves it to the marker that opens it when a number appears more than once.
+                    var occurrence = occurrences[target] = occurrences.GetValueOrDefault(target) + 1;
+                    var anchor = occurrence == 1 ? target : $"{target}-{occurrence}";
+                    writer.Write("<button class=\"code-annotation\" type=\"button\" popovertarget=\"");
+                    writer.Write(target);
+                    writer.Write("\" style=\"anchor-name: --");
+                    writer.Write(anchor);
+                    writer.Write("\" aria-label=\"Annotation ");
+                    writer.Write(number);
+                    writer.Write("\">");
+                    writer.Write(number);
+                    writer.Write("</button>");
+                    break;
                 case TokenType.Comment:
                     writer.Write("<span class=\"comment\">");
                     writer.Write(WebUtility.HtmlEncode(token.Text));

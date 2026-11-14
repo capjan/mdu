@@ -16,6 +16,27 @@ public class HighlightedCodeBlockRenderer : HtmlObjectRenderer<CodeBlock>
 {
   private readonly HtmlFormatter _codeFormatter = new();
 
+  // Languages whose blocks are not code: each renders its block, or returns null to keep the block as readable code.
+  // The instance, the block's position, tells equal diagrams on one page apart.
+  private static readonly Dictionary<string, Func<string, int, string?>> SpecialLanguages = new(StringComparer.OrdinalIgnoreCase)
+  {
+      [IconSearch.CodeBlockLanguage] = (_, _) => IconSearch.Html,
+      [Hero.CodeBlockLanguage] = (code, _) => Hero.Render(code),
+      ["math"] = (code, _) => MathFormulaRenderer.Render(code, display: true),
+      ["mermaid"] = RenderDiagram("mermaid"),
+      ["context"] = RenderDiagram("context"),
+      ["plantuml"] = RenderDiagram("plantuml"),
+      ["puml"] = RenderDiagram("puml"),
+      [DiagramRenderer.IsometricLanguage] = RenderDiagram(DiagramRenderer.IsometricLanguage)
+  };
+
+  // Supported diagrams become static SVG, isometric ones with phase controls; everything else stays a readable code block.
+  private static Func<string, int, string?> RenderDiagram(string language) => (code, instance) =>
+      DiagramRenderer.TryRenderHtml(language, code, instance, out var diagram) ? $"<figure class=\"diagram\">{diagram}</figure>" : null;
+
+  /// <summary>Returns whether blocks of a language are code, as opposed to diagrams, formulas, or page components.</summary>
+  internal static bool IsCodeLanguage(string language) => !SpecialLanguages.ContainsKey(language);
+
   protected override void Write(Markdig.Renderers.HtmlRenderer renderer, CodeBlock obj)
     {
         var code = GetCode(obj);
@@ -24,69 +45,92 @@ public class HighlightedCodeBlockRenderer : HtmlObjectRenderer<CodeBlock>
 
         if (obj is FencedCodeBlock fencedCodeBlock)
         {
-            var parser = fencedCodeBlock.Parser as FencedCodeBlockParser
-                ?? throw new InvalidOperationException("expected FencedCodeBlockParser");
-            var info = fencedCodeBlock.Info?.Trim() ?? string.Empty;
-            var infoPrefix = parser.InfoPrefix ?? string.Empty;
-            if (info.StartsWith(infoPrefix, StringComparison.Ordinal))
-                info = info[infoPrefix.Length..].TrimStart();
-
-            var languageEnd = info.IndexOfAny([' ', '\t']);
-            languageName = languageEnd < 0 ? info : info[..languageEnd];
+            languageName = GetLanguage(fencedCodeBlock);
             title = GetTitle(fencedCodeBlock.Arguments ?? string.Empty);
-            if (string.IsNullOrEmpty(languageName)) languageName = "NoHighlight";
 
-            if (languageName == IconSearch.CodeBlockLanguage)
+            if (SpecialLanguages.TryGetValue(languageName, out var render) &&
+                render(code, fencedCodeBlock.Span.Start) is { } special)
             {
-                renderer.WriteLine(IconSearch.Html);
-                return;
-            }
-
-            if (languageName == Hero.CodeBlockLanguage)
-            {
-                renderer.WriteLine(Hero.Render(code));
-                return;
-            }
-
-            if (languageName.Equals("math", StringComparison.OrdinalIgnoreCase))
-            {
-                renderer.WriteLine(MathFormulaRenderer.Render(code, display: true));
-                return;
-            }
-
-            // Supported diagrams become static SVG, isometric ones with phase controls; everything else stays a readable
-            // code block. The block's position tells equal diagrams on one page apart.
-            if (DiagramRenderer.TryRenderHtml(languageName, code, fencedCodeBlock.Span.Start, out var diagram))
-            {
-                renderer.Write("<figure class=\"diagram\">").Write(diagram).WriteLine("</figure>");
+                renderer.WriteLine(special);
                 return;
             }
         }
 
-        var lexer = Lexer.ForLanguage(languageName);
-        var tokens = lexer.Analyse(code);
-        var renderedHtml = _codeFormatter.WriteToString(tokens);
+        var annotations = CodeAnnotations.GetAnnotations(obj);
+        var formatter = _codeFormatter;
+        string? copyText = null;
+        IReadOnlyList<LanguageToken> tokens;
+        if (annotations is not null)
+        {
+            tokens = CodeAnnotationMarkers.Apply(annotations.Tokens, number => number <= annotations.Count);
+            formatter = new HtmlFormatter { AnnotationIdPrefix = CodeAnnotations.IdPrefix(obj) };
+            copyText = CodeAnnotationMarkers.CopyText(tokens);
+        }
+        else
+        {
+            tokens = Lexer.ForLanguage(languageName).Analyse(code).ToList();
+        }
+        var renderedHtml = formatter.WriteToString(tokens);
+        var annotatedClass = annotations is null ? string.Empty : " code-block-annotated";
 
         if (title != null)
         {
-            renderer.WriteLine("<figure class=\"code-block code-block-titled\">");
+            renderer.WriteLine($"<figure class=\"code-block code-block-titled{annotatedClass}\">");
             renderer.Write("<figcaption class=\"code-block-title\">")
                 .Write(WebUtility.HtmlEncode(title))
                 .WriteLine("</figcaption>");
         }
         else
         {
-            renderer.WriteLine("<figure class=\"code-block code-block-untitled\">");
+            renderer.WriteLine($"<figure class=\"code-block code-block-untitled{annotatedClass}\">");
         }
 
-        renderer.WriteLine("<div class=\"code-block-body\">");
+        renderer.Write("<div class=\"code-block-body\"");
+        if (copyText is not null) renderer.Write(" data-copy=\"").Write(WebUtility.HtmlEncode(copyText)).Write('"');
+        renderer.WriteLine(">");
         WriteCopyButton(renderer);
         renderer.WriteLine(renderedHtml);
         renderer.WriteLine("</div>");
+        if (annotations is not null) WriteAnnotations(renderer, obj, annotations.List);
         renderer.WriteLine("</figure>");
     }
 
-    private static string GetCode(LeafBlock obj)
+    // Each entry opens as a popover from its marker. Browsers without popovers show the list below the code.
+    private static void WriteAnnotations(Markdig.Renderers.HtmlRenderer renderer, CodeBlock code, ListBlock list)
+    {
+        var idPrefix = CodeAnnotations.IdPrefix(code);
+        var implicitParagraph = renderer.ImplicitParagraph;
+        renderer.ImplicitParagraph = !list.IsLoose;
+        renderer.WriteLine("<ol class=\"code-annotations\">");
+        var number = 1;
+        foreach (var block in list)
+        {
+            if (block is not ListItemBlock item) continue;
+            var id = WebUtility.HtmlEncode(idPrefix) + number.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            renderer.Write("<li id=\"").Write(id).Write("\" popover=\"auto\" style=\"position-anchor: --").Write(id).Write("\">");
+            renderer.WriteChildren(item);
+            renderer.WriteLine("</li>");
+            number++;
+        }
+        renderer.WriteLine("</ol>");
+        renderer.ImplicitParagraph = implicitParagraph;
+    }
+
+    internal static string GetLanguage(FencedCodeBlock block)
+    {
+        var parser = block.Parser as FencedCodeBlockParser
+            ?? throw new InvalidOperationException("expected FencedCodeBlockParser");
+        var info = block.Info?.Trim() ?? string.Empty;
+        var infoPrefix = parser.InfoPrefix ?? string.Empty;
+        if (info.StartsWith(infoPrefix, StringComparison.Ordinal))
+            info = info[infoPrefix.Length..].TrimStart();
+
+        var languageEnd = info.IndexOfAny([' ', '\t']);
+        var languageName = languageEnd < 0 ? info : info[..languageEnd];
+        return string.IsNullOrEmpty(languageName) ? "NoHighlight" : languageName;
+    }
+
+    internal static string GetCode(LeafBlock obj)
     {
       var stringBuilder = new StringBuilder();
       // An empty code block has no line array.

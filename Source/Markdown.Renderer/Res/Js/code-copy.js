@@ -22,14 +22,25 @@
         }
     };
 
+    // A code annotation opens next to the marker that was used, also when its number appears more than once. The click
+    // runs before the browser opens the popover, so the popover is placed right away.
+    document.addEventListener("click", (event) => {
+        const marker = event.target.closest(".code-annotation");
+        const popover = marker && document.getElementById(marker.getAttribute("popovertarget"));
+        const anchor = marker?.style.getPropertyValue("anchor-name");
+        if (popover && anchor) popover.style.setProperty("position-anchor", anchor);
+    });
+
     document.addEventListener("click", async (event) => {
         const button = event.target.closest(".code-block-copy");
         if (!button) return;
 
-        const code = button.closest(".code-block")?.querySelector("pre code");
+        const body = button.closest(".code-block-body");
+        const code = body?.querySelector("pre code");
         if (!code) return;
 
-        const copied = await copyText(code.textContent ?? "");
+        // Annotated code carries its text without the markers.
+        const copied = await copyText(body.dataset.copy ?? code.textContent ?? "");
         const label = button.querySelector("span");
         clearTimeout(resetTimers.get(button));
         label.textContent = copied ? "Copied" : "Copy failed";
