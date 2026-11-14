@@ -99,16 +99,16 @@ content:
 1. Shown in the header and in the browser tab.
 2. A page whose `##` headings are the allowed tags. Unknown tags then stop `mdu render`.
 ~~~
-
-```yaml title="mdu.yml"
-site:
-  name: Acme Docs # (1)!
-content:
-  tags: Tags.md # (2)!
-```
-
-1. Shown in the header and in the browser tab.
-2. A page whose `##` headings are the allowed tags. Unknown tags then stop `mdu render`.
+> [!RESULT]
+> ```yaml title="mdu.yml"
+> site:
+>   name: Acme Docs # (1)!
+> content:
+>   tags: Tags.md # (2)!
+> ```
+>
+> 1. Shown in the header and in the browser tab.
+> 2. A page whose `##` headings are the allowed tags. Unknown tags then stop `mdu render`.
 
 Point at a marker to read its explanation, like a footnote preview. A click keeps it open until you click elsewhere or press Esc, and on touch screens a tap opens it. With the keyboard, move to a marker with ++tab++. The legend below the code lists all explanations; it starts closed. The copy button copies the code without the markers and without comments that held nothing else.
 
@@ -138,25 +138,25 @@ if (daily > limit /* (6)! */)
 6. Maximum daily amount from the contract.
 7. Stops the billing run so that someone checks the invoice.
 ~~~
-
-```cs title="Billing.cs"
-var gross   = net /* (1)! */ * (1 + vatRate /* (2)! */);
-var payable = gross - discount /* (3)! */ - prepaid /* (4)! */;
-var days    = (end - start).Days /* (5)! */;
-var daily   = payable / days;
-if (daily > limit /* (6)! */)
-{
-    throw new BudgetException(daily, limit); // (7)!
-}
-```
-
-1. Sum of all items before tax.
-2. Tax rate of the customer's country.
-3. Discount granted after tax.
-4. Amount already paid in advance.
-5. Whole days of the billing period.
-6. Maximum daily amount from the contract.
-7. Stops the billing run so that someone checks the invoice.
+> [!RESULT]
+> ```cs title="Billing.cs"
+> var gross   = net /* (1)! */ * (1 + vatRate /* (2)! */);
+> var payable = gross - discount /* (3)! */ - prepaid /* (4)! */;
+> var days    = (end - start).Days /* (5)! */;
+> var daily   = payable / days;
+> if (daily > limit /* (6)! */)
+> {
+>     throw new BudgetException(daily, limit); // (7)!
+> }
+> ```
+>
+> 1. Sum of all items before tax.
+> 2. Tax rate of the customer's country.
+> 3. Discount granted after tax.
+> 4. Amount already paid in advance.
+> 5. Whole days of the billing period.
+> 6. Maximum daily amount from the contract.
+> 7. Stops the billing run so that someone checks the invoice.
 
 This works in every language with block comments, such as C#, Java, JavaScript, TypeScript, Go, Rust, Swift, Kotlin, CSS, and SQL. The copy button copies the code without the markers and without the comments that only held them.
 
