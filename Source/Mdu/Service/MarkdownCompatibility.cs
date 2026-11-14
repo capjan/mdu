@@ -20,9 +20,13 @@ public static class MarkdownCompatibility
         """<div\b(?=[^>]*\bclass=["'][^"']*(?:\bgrid\b[^"']*\bcards\b|\bcards\b[^"']*\bgrid\b)[^"']*["'])(?=[^>]*\bmarkdown\b)[^>]*>""",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex DivTag = new("</?div\\b[^>]*>", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-    private static readonly Regex Fence = new(@"^\s*(```+|~~~+)", RegexOptions.Compiled);
+    private static readonly Regex Fence = new(@"^\s*(```+|~~~+)(?<rest>.*)$", RegexOptions.Compiled);
     private static readonly Regex BlockquotePrefix = new(@"^\s*(?:>\s*)*", RegexOptions.Compiled);
     private static readonly Regex AnnotationMarker = new(@"^\s*(?:>\s*)*\{ \.annotate \}\s*$", RegexOptions.Compiled);
+    private static readonly Regex AttributeFence = new(
+        @"^(?<prefix>\s*(?:>\s*)*)(?<fence>```+|~~~+)[ \t]*\{(?<attributes>[^}]*)\}[ \t]*$", RegexOptions.Compiled);
+    private static readonly Regex FenceAttribute = new(
+        """\.(?<class>[A-Za-z0-9_+#-]+)|title=(?:"(?<title>[^"]*)"|'(?<title>[^']*)')|\S+""", RegexOptions.Compiled);
 
     public static IReadOnlyList<CompatibilityIssue> FindIssues(string content)
     {
@@ -39,9 +43,11 @@ public static class MarkdownCompatibility
                 if (!inFence)
                 {
                     inFence = true;
-                    fence = fenceMatch.Groups[1].Value[..3];
+                    fence = fenceMatch.Groups[1].Value;
+                    if (ConvertAttributeFence(line) != line)
+                        issues.Add(new CompatibilityIssue(index + 1, RuleCodes.CodeAnnotations, "Material code fence attributes such as '{ .yaml .annotate }' are unsupported; run 'mdu fix' to write the language after the fence."));
                 }
-                else if (fenceMatch.Groups[1].Value.StartsWith(fence, StringComparison.Ordinal))
+                else if (IsClosingFence(fenceMatch, fence))
                 {
                     inFence = false;
                 }
@@ -56,7 +62,7 @@ public static class MarkdownCompatibility
             else if (line.TrimStart().StartsWith("=== ", StringComparison.Ordinal))
                 issues.Add(new CompatibilityIssue(index + 1, RuleCodes.MaterialTabs, "Material for MkDocs tab syntax is unsupported; run 'mdu fix' to convert tabs to headings."));
             else if (AnnotationMarker.IsMatch(line))
-                issues.Add(new CompatibilityIssue(index + 1, RuleCodes.CodeAnnotations, "Material code annotations are unsupported."));
+                issues.Add(new CompatibilityIssue(index + 1, RuleCodes.CodeAnnotations, "Material annotations outside code blocks are unsupported; code annotations work without '{ .annotate }'. Run 'mdu fix' to remove the marker."));
         }
 
         foreach (var cardGrid in FindCardGrids(content))
@@ -118,11 +124,11 @@ public static class MarkdownCompatibility
             var fenceMatch = Fence.Match(BlockquotePrefix.Replace(lines[index], string.Empty));
             if (fenceMatch.Success)
             {
-                var fence = fenceMatch.Groups[1].Value[..3];
+                var fence = fenceMatch.Groups[1].Value;
                 while (++index < lines.Length)
                 {
                     var close = Fence.Match(BlockquotePrefix.Replace(lines[index], string.Empty));
-                    if (close.Success && close.Groups[1].Value.StartsWith(fence, StringComparison.Ordinal)) break;
+                    if (close.Success && IsClosingFence(close, fence)) break;
                 }
                 continue;
             }
@@ -140,9 +146,9 @@ public static class MarkdownCompatibility
                     if (!inFence)
                     {
                         inFence = true;
-                        fenceCharacter = currentFence.Groups[1].Value[..3];
+                        fenceCharacter = currentFence.Groups[1].Value;
                     }
-                    else if (currentFence.Groups[1].Value.StartsWith(fenceCharacter, StringComparison.Ordinal))
+                    else if (IsClosingFence(currentFence, fenceCharacter))
                     {
                         inFence = false;
                     }
@@ -185,9 +191,11 @@ public static class MarkdownCompatibility
                 if (!inFence)
                 {
                     inFence = true;
-                    fence = fenceMatch.Groups[1].Value[..3];
+                    fence = fenceMatch.Groups[1].Value;
+                    output.Add(ConvertAttributeFence(line));
+                    continue;
                 }
-                else if (fenceMatch.Groups[1].Value.StartsWith(fence, StringComparison.Ordinal))
+                if (IsClosingFence(fenceMatch, fence))
                 {
                     inFence = false;
                 }
@@ -200,6 +208,45 @@ public static class MarkdownCompatibility
         }
 
         return string.Join('\n', output);
+    }
+
+    // A fence closes with the same character, at least as many times as it opened, and nothing after it. So a ``` line
+    // inside a ```` block and a ```yaml line inside a ``` block are content.
+    private static bool IsClosingFence(Match fence, string opening)
+    {
+        var run = fence.Groups[1].Value;
+        return opening.Length > 0 && run[0] == opening[0] && run.Length >= opening.Length &&
+               string.IsNullOrWhiteSpace(fence.Groups["rest"].Value);
+    }
+
+    // Material writes "``` { .yaml .annotate title="mdu.yml" }"; MDU reads "```yaml title="mdu.yml"" and annotates without a class.
+    private static string ConvertAttributeFence(string line)
+    {
+        var match = AttributeFence.Match(line);
+        if (!match.Success) return line;
+        var language = string.Empty;
+        string? title = null;
+        foreach (Match attribute in FenceAttribute.Matches(match.Groups["attributes"].Value))
+        {
+            if (attribute.Groups["class"].Success)
+            {
+                var name = attribute.Groups["class"].Value;
+                if (name == "annotate") continue;
+                if (language.Length > 0) return line;
+                language = name;
+            }
+            else if (attribute.Groups["title"].Success && title is null)
+            {
+                title = attribute.Groups["title"].Value;
+            }
+            else
+            {
+                return line;
+            }
+        }
+
+        var titleArgument = title is null ? string.Empty : $" title=\"{title}\"";
+        return $"{match.Groups["prefix"].Value}{match.Groups["fence"].Value}{language}{titleArgument}";
     }
 
     private static string[] ConvertCardGrid(IEnumerable<string> bodyLines)
@@ -247,9 +294,9 @@ public static class MarkdownCompatibility
                 if (!inFence)
                 {
                     inFence = true;
-                    fence = fenceMatch.Groups[1].Value[..3];
+                    fence = fenceMatch.Groups[1].Value;
                 }
-                else if (fenceMatch.Groups[1].Value.StartsWith(fence, StringComparison.Ordinal))
+                else if (IsClosingFence(fenceMatch, fence))
                 {
                     inFence = false;
                 }

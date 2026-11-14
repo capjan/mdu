@@ -7,7 +7,9 @@ using Markdown.Renderer.MarkdigExtension;
 namespace Markdown.Renderer;
 
 /// <param name="Tags">The tag names of the page, one per line, for the line below its title and the keywords; null without tags.</param>
-public sealed record PdfSourceSection(string Title, string RelativeHtmlPath, string Markdown, int Depth = 0, string? Tags = null);
+/// <param name="CodeAnnotations">Whether the page's code blocks show annotations, or null for the renderer's site setting.</param>
+public sealed record PdfSourceSection(string Title, string RelativeHtmlPath, string Markdown, int Depth = 0, string? Tags = null,
+    bool? CodeAnnotations = null);
 
 /// <summary>Writes a paginated PDF from the HTML fragment produced by MDU's Markdown pipeline.</summary>
 public sealed class PdfRenderer(HtmlRenderer htmlRenderer)
@@ -143,7 +145,7 @@ internal sealed class PdfLayout
         string html;
         try
         {
-            html = _htmlRenderer.RenderPdfMarkdownFragment(section.Markdown);
+            html = _htmlRenderer.RenderPdfMarkdownFragment(section.Markdown, section.CodeAnnotations);
         }
         catch (PdfHiddenContentException exception)
         {
@@ -197,8 +199,8 @@ internal sealed class PdfLayout
                 var paragraphLines = ParagraphLines(element, 10.5, indent).Length;
                 return 4 + (paragraphLines <= 3 ? paragraphLines : 2) * 10.5 * 1.35;
             case "pre":
-                var codeLines = CodeLineCount(element, indent);
-                return (codeLines <= ShortCodeLineLimit ? codeLines : 2) * 11 + 5;
+                var codeLines = WrapCodeLines(element, indent);
+                return (codeLines.Count <= ShortCodeLineLimit ? codeLines.Count : 2) * CodeLineHeight(codeLines) + 5;
             case "table":
                 var (_, rows) = PrepareTable(element, indent);
                 return TableStartHeight(rows);
@@ -310,6 +312,12 @@ internal sealed class PdfLayout
                 return;
             case "pre":
                 RenderCode(element, indent);
+                return;
+            // The web page's collapsible legend repeats the explanations, which the PDF already lists below the code.
+            case "details" when HasClass(element, "code-legend"):
+                return;
+            case "ol" when HasClass(element, "code-annotations"):
+                RenderAnnotationLegend(element, indent);
                 return;
             case "ul": case "ol":
                 RenderList(element, indent + 12, name == "ol");
@@ -430,18 +438,34 @@ internal sealed class PdfLayout
     {
         var lines = WrapCodeLines(pre, indent);
         const double fontSize = 8.5;
-        const double lineHeight = 11;
+        var lineHeight = CodeLineHeight(lines);
+        // Annotated code moves down by the extra line height, so the raised numbers of its first line fit too.
+        var raise = lineHeight - CodeLineHeightPlain;
         var codeLeft = Left + indent + 8;
         var maxWidth = PageWidth - Right - codeLeft - 8;
         EnsureRoom((lines.Count <= ShortCodeLineLimit ? lines.Count : 2) * lineHeight + 5);
-        foreach (var segments in lines)
+        var pageStart = -1;
+        for (var index = 0; index < lines.Count; index++)
         {
+            var segments = lines[index];
             EnsureRoom(lineHeight + 5);
-            FillRect(codeLeft - 5, _y - 2, maxWidth + 10, lineHeight + 3, PdfColor.CodeBackground);
+            // The background of a line starts where the one above ends, so it never covers the descenders of the
+            // line above; only the first line on a page and the last line add padding.
+            var startsBlock = pageStart != _pages.Count;
+            pageStart = _pages.Count;
+            var top = startsBlock ? _y - 2 : _y;
+            var bottom = _y + lineHeight + (index == lines.Count - 1 ? 1 : 0);
+            FillRect(codeLeft - 5, top, maxWidth + 10, bottom - top, PdfColor.CodeBackground);
             var x = codeLeft;
+            var baseline = _y + raise + fontSize;
             foreach (var segment in segments)
             {
-                DrawText(segment.Text, x, _y + fontSize, fontSize, PdfFont.Courier, segment.Color);
+                if (segment.Marker)
+                {
+                    DrawAnnotationNumber(segment.Text, x, baseline);
+                    continue;
+                }
+                DrawText(segment.Text, x, baseline, fontSize, PdfFont.Courier, segment.Color);
                 x += TextWidth(segment.Text, fontSize, PdfFont.Courier);
             }
             _y += lineHeight;
@@ -449,30 +473,59 @@ internal sealed class PdfLayout
         _y += 7;
     }
 
-    private static List<List<(string Text, PdfColor Color)>> WrapCodeLines(XmlElement pre, int indent)
+    private const double CodeLineHeightPlain = 11;
+
+    // Code with annotation markers gets more room between its lines for the raised numbers, as on the web page.
+    private static double CodeLineHeight(IEnumerable<List<CodeRun>> lines) =>
+        lines.Any(line => line.Any(segment => segment.Marker)) ? 14.5 : CodeLineHeightPlain;
+
+    // Like a footnote reference, an annotation marker is a small raised number at the end of the word before it. It
+    // takes no width, so the code keeps its own spacing, and it needs no parentheses that could read as code.
+    private void DrawAnnotationNumber(string number, double x, double codeBaseline)
     {
-        var codeRuns = new List<(string Text, PdfColor Color)>();
+        const double size = 5.5;
+        // Raised above the cap height of the code, so it clears a closing parenthesis right after the word.
+        DrawText(number, x - 0.4, codeBaseline - 6.4, size, PdfFont.HelveticaBold, PdfColor.Secondary);
+    }
+
+    /// <summary>A piece of a code line in one color, or an annotation marker whose text is its number.</summary>
+    private readonly record struct CodeRun(string Text, PdfColor Color, bool Marker = false, bool Comment = false);
+
+    private static List<List<CodeRun>> WrapCodeLines(XmlElement pre, int indent)
+    {
+        var codeRuns = new List<CodeRun>();
         ReadCodeRuns(pre, PdfColor.Text, codeRuns);
-        var lines = new List<List<(string Text, PdfColor Color)>> { new() };
+        var lines = new List<List<CodeRun>> { new() };
         foreach (var run in codeRuns)
         {
+            if (run.Marker)
+            {
+                lines[^1].Add(run);
+                continue;
+            }
             var parts = run.Text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
             for (var part = 0; part < parts.Length; part++)
             {
-                if (parts[part].Length > 0) lines[^1].Add((parts[part], run.Color));
-                if (part < parts.Length - 1) lines.Add(new List<(string Text, PdfColor Color)>());
+                if (parts[part].Length > 0) lines[^1].Add(run with { Text = parts[part] });
+                if (part < parts.Length - 1) lines.Add(new List<CodeRun>());
             }
         }
         if (lines.Count > 1 && lines[^1].Count == 0) lines.RemoveAt(lines.Count - 1);
+        foreach (var line in lines) RemoveMarkerOnlyComments(line);
         const double fontSize = 8.5;
         var maxWidth = PageWidth - Left - Right - indent - 16;
-        var wrapped = new List<List<(string Text, PdfColor Color)>>();
+        var wrapped = new List<List<CodeRun>>();
         foreach (var segments in lines)
         {
             wrapped.Add([]);
             var width = 0.0;
             foreach (var segment in segments)
             {
+                if (segment.Marker)
+                {
+                    wrapped[^1].Add(segment);
+                    continue;
+                }
                 var remaining = segment.Text;
                 while (remaining.Length > 0)
                 {
@@ -489,7 +542,7 @@ internal sealed class PdfLayout
                         take = TextElementLength(remaining, 0);
                     }
                     var text = remaining[..take];
-                    wrapped[^1].Add((text, segment.Color));
+                    wrapped[^1].Add(segment with { Text = text });
                     width += TextWidth(text, fontSize, PdfFont.Courier);
                     remaining = remaining[take..];
                 }
@@ -500,15 +553,21 @@ internal sealed class PdfLayout
 
     private static int CodeLineCount(XmlElement pre, int indent) => WrapCodeLines(pre, indent).Count;
 
-    private static void ReadCodeRuns(XmlNode node, PdfColor color, List<(string Text, PdfColor Color)> runs)
+    private static void ReadCodeRuns(XmlNode node, PdfColor color, List<CodeRun> runs, bool comment = false)
     {
         if (node is XmlText text)
         {
-            if (!string.IsNullOrEmpty(text.Value)) runs.Add((text.Value, color));
+            if (!string.IsNullOrEmpty(text.Value)) runs.Add(new CodeRun(text.Value, color, Comment: comment));
             return;
         }
         if (node is not XmlElement element) return;
         var className = element.GetAttribute("class");
+        // An annotation marker becomes a raised number that points to the numbered entry below the code.
+        if (HasClass(element, "code-annotation"))
+        {
+            runs.Add(new CodeRun(element.InnerText.Trim(), PdfColor.Secondary, Marker: true));
+            return;
+        }
         var childColor = className switch
         {
             "comment" => new PdfColor(56, 118, 29),
@@ -517,7 +576,41 @@ internal sealed class PdfLayout
             "operator" => new PdfColor(5, 80, 174),
             _ => color
         };
-        foreach (XmlNode child in element.ChildNodes) ReadCodeRuns(child, childColor, runs);
+        foreach (XmlNode child in element.ChildNodes) ReadCodeRuns(child, childColor, runs, comment || className == "comment");
+    }
+
+    private const string CommentCharacters = " \t#/*-<>!;%'";
+
+    // A reader of the PDF cannot open a marker, so the comment characters that only carry it, such as "// " before a
+    // marker at the end of a line or " */" after one, are left out together with the spaces before them.
+    private static void RemoveMarkerOnlyComments(List<CodeRun> line)
+    {
+        static bool IsCommentCharacters(CodeRun run) => run is { Comment: true, Marker: false } &&
+            run.Text.Trim(CommentCharacters.ToCharArray()).Length == 0;
+
+        for (var index = 0; index < line.Count; index++)
+        {
+            if (!line[index].Marker) continue;
+            if (index > 0 && IsCommentCharacters(line[index - 1]))
+            {
+                line.RemoveAt(index - 1);
+                index--;
+                while (index > 0 && !line[index - 1].Marker && line[index - 1].Text.TrimEnd(' ', '\t').Length < line[index - 1].Text.Length)
+                {
+                    var trimmed = line[index - 1].Text.TrimEnd(' ', '\t');
+                    if (trimmed.Length > 0)
+                    {
+                        line[index - 1] = line[index - 1] with { Text = trimmed };
+                        break;
+                    }
+                    line.RemoveAt(index - 1);
+                    index--;
+                }
+            }
+            var next = index + 1;
+            while (next < line.Count && line[next].Marker) next++;
+            if (next < line.Count && IsCommentCharacters(line[next])) line.RemoveAt(next);
+        }
     }
 
     private void RenderTable(XmlElement table, int indent)
@@ -1003,6 +1096,53 @@ internal sealed class PdfLayout
         _page.Content.Append(ColorCommand(color, fill: true)).Append("BT /").Append(PdfFileWriter.FontResource(font))
             .Append(' ').Append(F(size)).Append(" Tf 1 0 0 1 ").Append(F(x)).Append(' ').Append(F(y))
             .Append(" Tm <").Append(PdfEncoding.Hex(text)).Append("> Tj ET\n");
+    }
+
+    // Four Bézier curves approximate a circle; 0.5523 is the usual control point distance for a quarter circle.
+    private void FillCircle(double centerX, double centerTop, double radius, PdfColor color)
+    {
+        var cx = centerX;
+        var cy = PageHeight - centerTop;
+        var k = radius * 0.5523;
+        _page.Content.Append(ColorCommand(color, fill: true))
+            .Append(F(cx + radius)).Append(' ').Append(F(cy)).Append(" m ")
+            .Append(F(cx + radius)).Append(' ').Append(F(cy + k)).Append(' ').Append(F(cx + k)).Append(' ').Append(F(cy + radius)).Append(' ').Append(F(cx)).Append(' ').Append(F(cy + radius)).Append(" c ")
+            .Append(F(cx - k)).Append(' ').Append(F(cy + radius)).Append(' ').Append(F(cx - radius)).Append(' ').Append(F(cy + k)).Append(' ').Append(F(cx - radius)).Append(' ').Append(F(cy)).Append(" c ")
+            .Append(F(cx - radius)).Append(' ').Append(F(cy - k)).Append(' ').Append(F(cx - k)).Append(' ').Append(F(cy - radius)).Append(' ').Append(F(cx)).Append(' ').Append(F(cy - radius)).Append(" c ")
+            .Append(F(cx + k)).Append(' ').Append(F(cy - radius)).Append(' ').Append(F(cx + radius)).Append(' ').Append(F(cy - k)).Append(' ').Append(F(cx + radius)).Append(' ').Append(F(cy)).Append(" c f\n");
+    }
+
+    // The explanations of annotated code, as on the web page: compact entries whose numbers sit in light bubbles.
+    private void RenderAnnotationLegend(XmlElement list, int indent)
+    {
+        const double fontSize = 9;
+        const double lineHeight = fontSize * 1.35;
+        const double badgeRadius = 5.6;
+        var textIndent = indent + 20;
+        var number = 0;
+        _y += 2;
+        foreach (XmlNode child in list.ChildNodes)
+        {
+            if (child is not XmlElement { LocalName: "li" } item) continue;
+            number++;
+            // The entry's own number is drawn as the bubble below; the text is in its own element.
+            var text = item.ChildNodes.OfType<XmlElement>().FirstOrDefault(child => HasClass(child, "code-annotation-text"));
+            var runs = ReadInlineRuns((text ?? item).ChildNodes.Cast<XmlNode>(), PdfTextStyle.Body, _sectionPath);
+            if (item.HasAttribute("id")) runs.Insert(0, new PdfRun(string.Empty, PdfTextStyle.Body, Anchor: item.GetAttribute("id")));
+            // The first line must not move to the next page after its bubble is drawn.
+            EnsureRoom(1 + Math.Min(3, WrapRuns(runs, fontSize, PageWidth - Left - Right - textIndent, mergeText: false).Length) * lineHeight);
+            // WriteParagraph adds its space before the text only below the top of a page; the bubble follows it.
+            var top = _y > Top ? _y + 1 : _y;
+            var centerX = Left + indent + 8 + badgeRadius;
+            var centerTop = top + fontSize * 0.62;
+            var label = number.ToString(CultureInfo.InvariantCulture);
+            const double labelSize = 6.5;
+            FillCircle(centerX, centerTop, badgeRadius, new PdfColor(232, 232, 237));
+            DrawText(label, centerX - TextWidth(label, labelSize, PdfFont.HelveticaBold) / 2, centerTop + labelSize * 0.36,
+                labelSize, PdfFont.HelveticaBold, PdfColor.Secondary);
+            WriteParagraph(runs, fontSize, textIndent, 1, 2);
+        }
+        _y += 6;
     }
 
     private void FillRect(double x, double top, double width, double height, PdfColor color) =>

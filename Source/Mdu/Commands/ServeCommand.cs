@@ -43,6 +43,7 @@ public sealed class ServeCommand
 
     private MarkdownFile[] _navigationRoots = Array.Empty<MarkdownFile>();
     private SiteTags _siteTags = SiteTags.Empty;
+    private bool _siteCodeAnnotations = true;
     private IReadOnlyList<string> _tagPagePaths = Array.Empty<string>();
     private IReadOnlyCollection<string> _siteMediaProviders = Array.Empty<string>();
     private RenderCommandSettings _settings = new();
@@ -194,7 +195,8 @@ public sealed class ServeCommand
         _server?.SetBuilding(true);
         var previousFiles = new HashSet<string>(_generatedFiles, PathComparer);
         var siteConfiguration = SiteConfigurationReader.Read(_rootPath);
-        _glossaryPath = SiteConfigurationReader.GetGlossaryPath(_rootPath, siteConfiguration);
+        _siteCodeAnnotations = siteConfiguration.CodeAnnotations;
+        _glossaryPath =SiteConfigurationReader.GetGlossaryPath(_rootPath, siteConfiguration);
         _watchers?.UpdateExternalFiles(_openApiSpecsByPage.Values.SelectMany(paths => paths), _glossaryPath);
         var glossaryPath = SiteConfigurationReader.ResolveGlossaryPath(_rootPath, siteConfiguration);
         var glossaryMarkdown = glossaryPath is null ? null : File.ReadAllText(glossaryPath);
@@ -216,6 +218,7 @@ public sealed class ServeCommand
         }
         _siteTags.Report(_rootPath);
         _pdfCommand.Tags = _siteTags;
+        _pdfCommand.SiteCodeAnnotations = siteConfiguration.CodeAnnotations;
 
         _renderer.PrepareBasePath(_outputPath, siteConfiguration);
         SiteConfigurationReader.CopyAssets(_rootPath, _outputPath, siteConfiguration);
@@ -241,7 +244,8 @@ public sealed class ServeCommand
             _navigationRoots,
             _siteMediaProviders,
             _gitDates.Read(_rootPath),
-            _siteTags);
+            _siteTags,
+            _siteCodeAnnotations);
         rendererVisitor.PrepareSearchIndex();
         rendererVisitor.AddTagsToSearchIndex();
         SchedulePdfs(reuseUnchanged: false);
@@ -712,7 +716,8 @@ public sealed class ServeCommand
                 _navigationRoots,
                 _siteMediaProviders,
                 _gitDates.Read(_rootPath),
-                _siteTags);
+                _siteTags,
+                _siteCodeAnnotations);
 
             rendererVisitor.Process(page, depth);
             var specPages = rendererVisitor.OpenApiSpecPagePaths.GetValueOrDefault(page) ?? Array.Empty<string>();

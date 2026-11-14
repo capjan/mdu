@@ -84,6 +84,105 @@ Press ++ctrl+s++ to **save**.
 
 Your file stays ordinary Markdown: GitHub shows the code block followed by a block quote with the marker as its first line. The rules of [callouts](Callouts.md#rules) apply, so a result has content, its marker stands alone, and it cannot sit inside a list or another block quote. Without a code block above it, a result is a card of its own. A heading in a result looks like a heading but is only an example, so it has no permalink and stays out of **On this Page** and the search sections.
 
+## Annotations
+
+Explain single lines without cluttering the code. Write a marker such as `(1)` in a comment, and a numbered list directly after the code block. Like a footnote reference, each marker becomes a small raised number that opens the matching entry next to it. In a comment at the end of a line, it explains the whole line:
+
+~~~markdown title="Markdown"
+```yaml title="mdu.yml"
+site:
+  name: Acme Docs # (1)!
+content:
+  tags: Tags.md # (2)!
+```
+
+1. Shown in the header and in the browser tab.
+2. A page whose `##` headings are the allowed tags. Unknown tags then stop `mdu render`.
+~~~
+> [!RESULT]
+> ```yaml title="mdu.yml"
+> site:
+>   name: Acme Docs # (1)!
+> content:
+>   tags: Tags.md # (2)!
+> ```
+>
+> 1. Shown in the header and in the browser tab.
+> 2. A page whose `##` headings are the allowed tags. Unknown tags then stop `mdu render`.
+
+Point at a marker to read its explanation, like a footnote preview. A click keeps it open until you click elsewhere or press Esc, and on touch screens a tap opens it. With the keyboard, move to a marker with ++tab++. The legend below the code lists all explanations; it starts closed. The copy button copies the code without the markers and without comments that held nothing else.
+
+The syntax is the one of Material for MkDocs, so annotated pages need no changes when you migrate. On GitHub and in your editor, the comment and the numbered list stay readable as they are.
+
+### Explain parts of a line
+
+A marker can also explain a single operand. Put it in a block comment right after the operand, such as `/* (1)! */`. Because more code follows, the comment disappears and the number floats above the operand, so the code keeps its own spacing. The comment at the end of a line stays and explains the whole statement:
+
+~~~markdown title="Markdown"
+```cs title="Billing.cs"
+var gross   = net /* (1)! */ * (1 + vatRate /* (2)! */);
+var payable = gross - discount /* (3)! */ - prepaid /* (4)! */;
+var days    = (end - start).Days /* (5)! */;
+var daily   = payable / days;
+if (daily > limit /* (6)! */)
+{
+    throw new BudgetException(daily, limit); // (7)!
+}
+```
+
+1. Sum of all items before tax.
+2. Tax rate of the customer's country.
+3. Discount granted after tax.
+4. Amount already paid in advance.
+5. Whole days of the billing period.
+6. Maximum daily amount from the contract.
+7. Stops the billing run so that someone checks the invoice.
+~~~
+> [!RESULT]
+> ```cs title="Billing.cs"
+> var gross   = net /* (1)! */ * (1 + vatRate /* (2)! */);
+> var payable = gross - discount /* (3)! */ - prepaid /* (4)! */;
+> var days    = (end - start).Days /* (5)! */;
+> var daily   = payable / days;
+> if (daily > limit /* (6)! */)
+> {
+>     throw new BudgetException(daily, limit); // (7)!
+> }
+> ```
+>
+> 1. Sum of all items before tax.
+> 2. Tax rate of the customer's country.
+> 3. Discount granted after tax.
+> 4. Amount already paid in advance.
+> 5. Whole days of the billing period.
+> 6. Maximum daily amount from the contract.
+> 7. Stops the billing run so that someone checks the invoice.
+
+This works in every language with block comments, such as C#, Java, JavaScript, TypeScript, Go, Rust, Swift, Kotlin, CSS, and SQL. The copy button copies the code without the markers and without the comments that only held them.
+
+### Rules
+
+- A marker is a number in parentheses: `(1)`, `(2)`, and so on. In a comment it counts anywhere.
+- In shell commands and in blocks without comments, such as `text`, console output, or JSON, write `(1)!` at the end of a line after a space to annotate it without a comment, such as `kubectl apply -f app.yaml (1)!`. The `!` keeps code and output such as `VALUES (1)` or `Retrying (1)` as they are. In other languages, put the marker in a comment.
+- `(1)!` in an otherwise empty comment between code, such as `net /* (1)! */ * rate`, removes the comment, and the number sits on the word before it. A comment at the end of a line stays visible, so `total # (1)!` shows as `total #` and the marker.
+- The numbered list starts at `1.` and is the next block after the code block, or after its [result](#show-the-result). Its entries can contain any Markdown, such as code, links, or lists.
+- A code block is annotated when at least one marker matches an entry. The whole list then belongs to the code block. A list after code without matching markers stays an ordinary list.
+- Several markers on one line and the same marker in several places are fine.
+
+In the [PDF](../Usage/pdf.md), markers are small raised numbers after the word they explain, without the comments that hold them, and the entries follow as a numbered list below the code. `mdu lint` warns about a marker without an entry (`MDU029`) and an entry without a marker (`MDU030`).
+
+### Turn annotations off
+
+Annotations are on by default. If a numbered list after code is not about the code, turn them off where it happens. The narrowest setting wins:
+
+| Where | Write | Applies to |
+| --- | --- | --- |
+| Code block | `annotate=false` after the language, such as ` ```python annotate=false ` | This code block |
+| Front matter | `content.code.annotate: false` | All code blocks of the page |
+| `mdu.yml` | `content.code.annotate: false` | All pages |
+
+`annotate=true` on a code block turns annotations back on where a page or the site has turned them off. Like `title=`, GitHub ignores `annotate=`.
+
 ## Supported languages
 
 Use one of these language identifiers:

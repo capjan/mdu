@@ -8,14 +8,49 @@ namespace StaticCode.Highlighter;
 /// </summary>
 public class HtmlFormatter : ITextFormatter<IEnumerable<LanguageToken>>
 {
+    /// <summary>
+    /// Prefix of the element ids that annotation markers open. Each marker opens the element whose id is this prefix
+    /// followed by the annotation number.
+    /// </summary>
+    public string AnnotationIdPrefix { get; init; } = "code-annotation-";
+
+    /// <summary>Class of a marker in a comment that ends its line: it explains the line and sits in it.</summary>
+    public const string InlineAnnotationClass = "code-annotation-inline";
+
+    /// <summary>Class of any other marker: it explains the word before it and floats above it without taking width.</summary>
+    public const string FloatingAnnotationClass = "code-annotation-floating";
     public void Write(IEnumerable<LanguageToken> tokens, TextWriter writer)
     {
         writer.Write("<pre>");
         writer.Write("<code>");
+        var occurrences = new Dictionary<string, int>(StringComparer.Ordinal);
+        TokenType? previous = null;
+        // A marker right after visible comment characters, or after another such marker, stays in the line.
+        var previousInline = false;
         foreach (var token in tokens)
         {
             switch (token.Type)
             {
+                case TokenType.Annotation:
+                    var number = WebUtility.HtmlEncode(token.Text);
+                    var target = WebUtility.HtmlEncode(AnnotationIdPrefix) + number;
+                    // Each marker has its own anchor name. The popover's own position anchor is the first marker of its
+                    // number; code-copy.js moves it to the marker that opens it when a number appears more than once.
+                    var occurrence = occurrences[target] = occurrences.GetValueOrDefault(target) + 1;
+                    var anchor = occurrence == 1 ? target : $"{target}-{occurrence}";
+                    previousInline = previous is TokenType.Comment || previous is TokenType.Annotation && previousInline;
+                    writer.Write("<button class=\"code-annotation ");
+                    writer.Write(previousInline ? InlineAnnotationClass : FloatingAnnotationClass);
+                    writer.Write("\" type=\"button\" popovertarget=\"");
+                    writer.Write(target);
+                    writer.Write("\" style=\"anchor-name: --");
+                    writer.Write(anchor);
+                    writer.Write("\" aria-label=\"Annotation ");
+                    writer.Write(number);
+                    writer.Write("\"><span class=\"code-annotation-number\">");
+                    writer.Write(number);
+                    writer.Write("</span></button>");
+                    break;
                 case TokenType.Comment:
                     writer.Write("<span class=\"comment\">");
                     writer.Write(WebUtility.HtmlEncode(token.Text));
@@ -124,6 +159,7 @@ public class HtmlFormatter : ITextFormatter<IEnumerable<LanguageToken>>
                     WriteMarkdownAlert(token, writer, "caution");
                     break;
             }
+            previous = token.Type;
         }
         writer.Write("</code>");
         writer.Write("</pre>");

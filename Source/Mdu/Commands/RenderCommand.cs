@@ -104,6 +104,7 @@ public class RenderCommand
         }
         if (siteTags.Report(rootPath)) return 1;
         _pdfCommand.Tags = siteTags;
+        _pdfCommand.SiteCodeAnnotations = siteConfiguration.CodeAnnotations;
 
         _renderer.PrepareBasePath(outPath, siteConfiguration);
         SearchClientAsset.WriteTo(outPath);
@@ -120,7 +121,7 @@ public class RenderCommand
                 return 1;
 
             Console.WriteLine($"Rendering {nodeCount} Files");
-            RenderNodesToHtml(rootPath, outPath, graph, settings.EditPageRoot, siteTags);
+            RenderNodesToHtml(rootPath, outPath, graph, settings.EditPageRoot, siteTags, siteConfiguration.CodeAnnotations);
             _searchIndexBuilder.WriteIndex(outPath);
 
             return 0;
@@ -137,10 +138,11 @@ public class RenderCommand
         string outPath,
         MarkdownFile[] graph,
         string editPageRoot,
-        SiteTags siteTags)
+        SiteTags siteTags,
+        bool siteCodeAnnotations)
     {
         var rendererVisitor = new MarkdigVisitor(rootPath, outPath, _renderer, editPageRoot, _searchIndexBuilder, graph,
-            siteTags: siteTags);
+            siteTags: siteTags, siteCodeAnnotations: siteCodeAnnotations);
         rendererVisitor.PrepareNavigation();
 
         graph.Visit(rendererVisitor);

@@ -21,7 +21,7 @@ navigation:
 | `MDU008` | `MaterialTabs` | Error | Material tabs must be converted to headings. | [fix](../fix.md#migrating-mkdocs-material-markdown) |
 | `MDU009` | `MaterialCards` | Error | Material card grids must be converted to Markdown link lists. | [fix](../fix.md#migrating-mkdocs-material-markdown) |
 | `MDU010` | `UnsupportedMermaid` | Error | A Mermaid diagram uses syntax MDU cannot render. | — |
-| `MDU011` | `CodeAnnotations` | Error | Material code-annotation markers are unsupported. | [fix](../fix.md#migrating-mkdocs-material-markdown) |
+| `MDU011` | `CodeAnnotations` | Error | Material `{ .annotate }` markers outside code blocks are unsupported; [code annotations](../../Features/CodeBlocks.md#annotations) work without them. | [fix](../fix.md#migrating-mkdocs-material-markdown) |
 | `MDU012` | `MkDocsIndexPage` | Warning | Rename the MkDocs `index.md` page to `README.md`. | [fix](../fix.md#migrating-mkdocs-material-markdown) |
 | `MDU013` | `MissingSectionReadme` | Warning | A section with child pages needs a `README.md` page. | [fix](../fix.md#migrating-mkdocs-material-markdown) |
 | `MDU014` | `MkDocsPagesFile` | Error | Migrate MkDocs `.pages` settings to Markdown front matter. | [fix](../fix.md#migrating-mkdocs-material-markdown) |
@@ -39,6 +39,9 @@ navigation:
 | `MDU026` | `UnknownTag` | Error | Every tag is defined in the tag vocabulary, and `tags` is one tag or a list of tags. | [Tags](../../Features/Tags.md#define-the-vocabulary) |
 | `MDU027` | `TagSpelling` | Warning | A tag is written like its name in the vocabulary, or like most pages write it. | [Tags](../../Features/Tags.md#tag-a-page) |
 | `MDU028` | `UnusedTag` | Warning | A tag is carried by more than one page, and every vocabulary tag by at least one. | [Tags](../../Features/Tags.md#check-the-tags) |
+| `MDU029` | `AnnotationWithoutEntry` | Warning | Every marker of an annotated code block has an entry in the list after it. | [Annotations](../../Features/CodeBlocks.md#annotations) |
+| `MDU030` | `AnnotationEntryUnused` | Warning | Every entry of an annotation list has a marker in the code. | [Annotations](../../Features/CodeBlocks.md#turn-annotations-off) |
+| `MDU031` | `InvalidCodeAnnotate` | Error | `content.code.annotate` in the front matter and `annotate=` on a code block accept `true` or `false`. | [Annotations](../../Features/CodeBlocks.md#turn-annotations-off) |
 
 ## MDU001: HeadingRequired
 
@@ -125,6 +128,18 @@ This warning points to a tag that differs from its name only in letter case or s
 ## MDU028: UnusedTag
 
 This warning points to a tag that only one page carries, and to a tag of the vocabulary that no page carries. Its tag page would list a single page or none, so it helps nobody find related pages. Tag the other pages that belong to the topic, or remove the tag. Warnings do not make `mdu lint` fail.
+
+## MDU029: AnnotationWithoutEntry
+
+This warning points to a code block whose marker, such as `(3)`, has no entry 3 in the numbered list after it. The marker stays visible as code. Add the entry, or remove the marker.
+
+## MDU030: AnnotationEntryUnused
+
+This warning points to an entry of an annotation list that no marker in the code opens, so readers never see it. Add the marker to the code. If the list is not about the code at all, write `annotate=false` after the code block's language, and the list stays an ordinary list.
+
+## MDU031: InvalidCodeAnnotate
+
+`content.code.annotate` in the front matter and `annotate=` after a code block's language take `true` or `false`. Other values are ignored, so this error points to them.
 
 ## Informational output
 

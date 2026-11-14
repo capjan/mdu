@@ -32,4 +32,7 @@ public static class RuleCodes
     public const string UnknownTag = "MDU026";
     public const string TagSpelling = "MDU027";
     public const string UnusedTag = "MDU028";
+    public const string AnnotationWithoutEntry = "MDU029";
+    public const string AnnotationEntryUnused = "MDU030";
+    public const string InvalidCodeAnnotate = "MDU031";
 }

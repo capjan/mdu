@@ -35,4 +35,19 @@ public static class FrontMatterYaml
             return nestedNode;
         return metadata.Children.TryGetValue(new YamlScalarNode($"{section}.{key}"), out var dottedNode) ? dottedNode : null;
     }
+
+    /// <summary>
+    /// Returns a setting of several parts in any mix of nested and dotted forms, such as <c>content: { code: { annotate: … } }</c>,
+    /// <c>content.code: { annotate: … }</c>, or <c>content.code.annotate: …</c>. Nested forms win over dotted ones.
+    /// </summary>
+    public static YamlNode? FindPath(YamlMappingNode mapping, IReadOnlyList<string> parts)
+    {
+        for (var count = 1; count <= parts.Count; count++)
+        {
+            if (!mapping.Children.TryGetValue(new YamlScalarNode(string.Join('.', parts.Take(count))), out var node)) continue;
+            if (count == parts.Count) return node;
+            if (node is YamlMappingNode nested && FindPath(nested, parts.Skip(count).ToArray()) is { } found) return found;
+        }
+        return null;
+    }
 }

@@ -1,0 +1,172 @@
+using Core.Extensions.TextRelated;
+
+namespace StaticCode.Highlighter.Test;
+
+public class CodeAnnotationMarkersTest
+{
+    private static IReadOnlyList<LanguageToken> Apply(string language, string code, int count = 9)
+    {
+        var lexer = Lexer.ForLanguage(language);
+        return CodeAnnotationMarkers.Apply(lexer.Analyse(code), number => number <= count, lexer.AllowsLineEndMarkers);
+    }
+
+    private static string Render(IEnumerable<LanguageToken> tokens) =>
+        string.Concat(tokens.Select(token => token.Type == TokenType.Annotation ? $"[{token.Text}]" : token.Text));
+
+    [Fact]
+    public void AttachesAMarkerInTheMiddleOfALineAndKeepsTheSpaceAfterItWhenCopying()
+    {
+        var tokens = Apply("csharp", "var result = sum /* (1)! */ * days /* (2)! */;");
+
+        Assert.Equal("var result = sum[1] * days[2];", Render(tokens));
+        Assert.Equal("var result = sum * days;", CodeAnnotationMarkers.CopyText(tokens));
+    }
+
+    [Fact]
+    public void KeepsTheIndentationBeforeAMarkerOnItsOwnLine() =>
+        Assert.Equal("x = 1\n    [1]", Render(Apply("csharp", "x = 1\n    /* (1)! */ y")).Replace(" y", string.Empty));
+
+    [Fact]
+    public void ReplacesAMarkerAnywhereInAComment()
+    {
+        var tokens = Apply("yaml", "name: Handbook # shown in the header (1)\n");
+
+        Assert.Equal("name: Handbook # shown in the header[1]\n", Render(tokens));
+        Assert.Contains(tokens, token => token.Type == TokenType.Comment && token.Text == "# shown in the header");
+    }
+
+    [Theory]
+    [InlineData("yaml", "name: Handbook # (1)!", "name: Handbook # [1]", "name: Handbook")]
+    [InlineData("csharp", "var x = 1; // (1)!", "var x = 1; // [1]", "var x = 1;")]
+    [InlineData("sql", "select 1 -- (1)!", "select 1 -- [1]", "select 1")]
+    [InlineData("html", "<p>Hi</p> <!-- (1)! -->", "<p>Hi</p> <!-- [1] -->", "<p>Hi</p>")]
+    [InlineData("csharp", "var x = 1; /* (1)! (2)! */", "var x = 1; /* [1][2] */", "var x = 1;")]
+    public void KeepsACommentAtTheEndOfALineAndCopiesWithoutIt(string language, string code, string expected, string copied)
+    {
+        var tokens = Apply(language, code);
+
+        Assert.Equal(expected, Render(tokens));
+        Assert.Equal(copied, CodeAnnotationMarkers.CopyText(tokens));
+    }
+
+    [Theory]
+    [InlineData("csharp", "f(a /* (1)! */, b);", "f(a[1], b);")]
+    [InlineData("sql", "select a /* (1)! */ from t", "select a[1] from t")]
+    [InlineData("html", "<b><!-- (1)! --></b>", "<b>[1]</b>")]
+    public void RemovesAnEmptyCommentBetweenCode(string language, string code, string expected) =>
+        Assert.Equal(expected, Render(Apply(language, code)));
+
+    [Fact]
+    public void KeepsACommentWithTextWhenTheMarkerStripsIt() =>
+        Assert.Equal("x = 1 # the value[1]", Render(Apply("python", "x = 1 # the value (1)!")));
+
+    [Theory]
+    [InlineData("bash", "kubectl apply -f app.yaml (1)!", "kubectl apply -f app.yaml[1]")]
+    [InlineData("text", "Server started (2)!", "Server started[2]")]
+    [InlineData("json", "{ \"port\": 8080 } (1)!", "{ \"port\": 8080 }[1]")]
+    [InlineData("unknown-language", "run (1)!  ", "run[1]")]
+    public void ReplacesAnExplicitMarkerOutsideCommentsAtTheEndOfALine(string language, string code, string expected) =>
+        Assert.Equal(expected, Render(Apply(language, code)));
+
+    [Theory]
+    [InlineData("bash", "kubectl apply -f app.yaml (1)")]
+    [InlineData("text", "Retrying download (1)")]
+    [InlineData("unknown-language", "INSERT INTO t VALUES (1)")]
+    [InlineData("NoHighlight", "x = (1)")]
+    public void KeepsAPlainLineEndMarkerOutsideComments(string language, string code) =>
+        Assert.Equal(code, Render(Apply(language, code)));
+
+    [Theory]
+    [InlineData("python", "print(1)")]
+    [InlineData("python", "items[(1)]")]
+    [InlineData("python", "f (1) + 2")]
+    [InlineData("python", "value = \"(1)\" + x")]
+    [InlineData("text", "Step(1)")]
+    public void KeepsParenthesesInCode(string language, string code) =>
+        Assert.Equal(code, Render(Apply(language, code)));
+
+    [Theory]
+    [InlineData("sql", "INSERT INTO t VALUES (1)")]
+    [InlineData("sql", "SELECT * FROM t WHERE id IN (1)")]
+    [InlineData("python", "x = (1)")]
+    [InlineData("csharp", "var x = (1)")]
+    [InlineData("yaml", "title: Release notes (1)")]
+    public void KeepsLineEndParenthesesInLanguagesWithComments(string language, string code) =>
+        Assert.Equal(code, Render(Apply(language, code)));
+
+    [Theory]
+    [InlineData("bash", true)]
+    [InlineData("text", true)]
+    [InlineData("json", true)]
+    [InlineData("unknown-language", true)]
+    [InlineData("sql", false)]
+    [InlineData("python", false)]
+    [InlineData("yaml", false)]
+    [InlineData("markdown", false)]
+    public void AllowsLineEndMarkersWhereTheyCannotBeCode(string language, bool allowed) =>
+        Assert.Equal(allowed, Lexer.ForLanguage(language).AllowsLineEndMarkers);
+
+    [Fact]
+    public void KeepsMarkersWithoutAnEntry() =>
+        Assert.Equal("a = 1 # (3)", Render(Apply("python", "a = 1 # (3)", count: 2)));
+
+    [Fact]
+    public void AllowsSeveralMarkersInOneCommentAndTheSameMarkerTwice() =>
+        Assert.Equal("a = 1 # see[1] and[2]\nb = 2 # [1]\n", Render(Apply("python", "a = 1 # see (1) and (2)\nb = 2 # (1)\n")));
+
+    [Fact]
+    public void FindsTheNumbersInOrder() =>
+        Assert.Equal([2, 1], CodeAnnotationMarkers.FindNumbers(Lexer.ForLanguage("python").Analyse("a # (2)\nb # (1)\nc # (2)"), lineEndMarkers: false));
+
+    [Fact]
+    public void CopiesTheCodeWithoutMarkers()
+    {
+        var tokens = Apply("yaml", "name: Handbook # (1)!\nurl: https://example.com # docs (2)\n");
+
+        Assert.Equal("name: Handbook\nurl: https://example.com # docs\n", CodeAnnotationMarkers.CopyText(tokens));
+    }
+
+    [Fact]
+    public void KeepsTrailingSpacesOfLinesWithoutMarkers() =>
+        Assert.Equal("Line one  \nx = 1 # note", CodeAnnotationMarkers.CopyText(Apply("python", "Line one  \nx = 1 # note (1)")));
+
+    [Fact]
+    public void GivesEachMarkerOfARepeatedNumberItsOwnAnchor()
+    {
+        var html = new HtmlFormatter { AnnotationIdPrefix = "a-" }.WriteToString(Apply("python", "x = 1 # (1)\ny = 2 # (1)\nz = 3 # (1)"));
+
+        Assert.Contains("popovertarget=\"a-1\" style=\"anchor-name: --a-1\"", html);
+        Assert.Contains("popovertarget=\"a-1\" style=\"anchor-name: --a-1-2\"", html);
+        Assert.Contains("popovertarget=\"a-1\" style=\"anchor-name: --a-1-3\"", html);
+    }
+
+    [Fact]
+    public void CopiesWithoutACommentThatHeldOnlyAMarker() =>
+        Assert.Equal("url: https://example.com", CodeAnnotationMarkers.CopyText(Apply("yaml", "url: https://example.com # (2)")));
+
+    [Fact]
+    public void WritesAMarkerAsAPopoverButton()
+    {
+        var html = new HtmlFormatter { AnnotationIdPrefix = "a-7-" }.WriteToString(Apply("python", "x = 1 # (1)!"));
+
+        Assert.Contains(
+            "<button class=\"code-annotation code-annotation-inline\" type=\"button\" popovertarget=\"a-7-1\" style=\"anchor-name: --a-7-1\" aria-label=\"Annotation 1\"><span class=\"code-annotation-number\">1</span></button>",
+            html);
+        Assert.Contains("<span class=\"comment\"># </span><button", html);
+    }
+
+    [Theory]
+    [InlineData("csharp", "var total = net /* (1)! */ * rate;", "code-annotation-floating")]
+    [InlineData("csharp", "var total = net; // (1)!", "code-annotation-inline")]
+    [InlineData("csharp", "var total = net; /* (1)! (2)! */", "code-annotation-inline")]
+    [InlineData("bash", "kubectl apply -f app.yaml (1)!", "code-annotation-floating")]
+    public void FloatsMarkersInTheLineAndKeepsMarkersInLineEndCommentsInline(string language, string code, string kind)
+    {
+        var html = new HtmlFormatter().WriteToString(Apply(language, code));
+        var classes = System.Text.RegularExpressions.Regex.Matches(html, "class=\"code-annotation (?<kind>[a-z-]+)\"")
+            .Select(match => match.Groups["kind"].Value);
+
+        Assert.All(classes, value => Assert.Equal(kind, value));
+        Assert.NotEmpty(classes);
+    }
+}

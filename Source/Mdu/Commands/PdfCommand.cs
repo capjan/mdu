@@ -16,6 +16,8 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
     public IReadOnlyCollection<string> GeneratedSitePdfPaths { get; private set; } = Array.Empty<string>();
     /// <summary>The tags of the site, shown below each page title. mdu render and mdu serve set them; mdu pdf loads them.</summary>
     public SiteTags Tags { get; set; } = SiteTags.Empty;
+    /// <summary>The site's <c>content.code.annotate</c> setting. mdu render and mdu serve set it; mdu pdf reads it.</summary>
+    public bool SiteCodeAnnotations { get; set; } = true;
 
     public int Execute(RenderCommandSettings settings)
     {
@@ -50,6 +52,7 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         try
         {
             siteConfiguration = SiteConfigurationReader.ReadForContent(rootPath);
+            SiteCodeAnnotations = siteConfiguration.CodeAnnotations;
             SiteConfigurationReader.UseCustomIcons(rootPath, siteConfiguration);
             SiteConfigurationReader.UseDiagramLimits(siteConfiguration);
         }
@@ -214,7 +217,8 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
                         GetRelativeHtmlPath(rootPath, item.File),
                         markdown,
                         item.Depth,
-                        GetTagNames(item.File));
+                        GetTagNames(item.File),
+                        CodeAnnotations.ReadFrontMatter(item.File.FrontMatter) ?? SiteCodeAnnotations);
                 })
                 .ToArray();
         }
@@ -394,6 +398,7 @@ public sealed class PdfCommand(GraphBuilder graphBuilder, PdfRenderer pdfRendere
         frontMatter.Length > 0 && markdown.StartsWith(frontMatter, StringComparison.Ordinal)
             ? markdown[frontMatter.Length..].TrimStart('\r', '\n')
             : markdown;
+
 
     private static bool IsPdfVisible(string frontMatter)
     {
