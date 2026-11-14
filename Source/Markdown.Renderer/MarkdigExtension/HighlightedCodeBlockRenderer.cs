@@ -104,44 +104,63 @@ public class HighlightedCodeBlockRenderer : HtmlObjectRenderer<CodeBlock>
     private static void WriteAnnotations(Markdig.Renderers.HtmlRenderer renderer, CodeBlock code, ListBlock list)
     {
         var idPrefix = WebUtility.HtmlEncode(CodeAnnotations.IdPrefix(code));
-        var items = list.OfType<ListItemBlock>().ToList();
         var implicitParagraph = renderer.ImplicitParagraph;
         renderer.ImplicitParagraph = !list.IsLoose;
+        // Each entry is rendered once and shown twice. Only the popover keeps the ids of its content, such as those of
+        // footnote references, so the page has every id once.
+        var entries = list.OfType<ListItemBlock>().Select(item => RenderToString(renderer, item)).ToList();
+        renderer.ImplicitParagraph = implicitParagraph;
 
         renderer.WriteLine("<ol class=\"code-annotations\">");
-        for (var index = 0; index < items.Count; index++)
+        for (var index = 0; index < entries.Count; index++)
         {
             var number = Number(index);
             var id = idPrefix + number;
             renderer.Write("<li id=\"").Write(id).Write("\" popover=\"auto\" style=\"position-anchor: --").Write(id).Write("\">");
-            WriteEntry(renderer, number, items[index]);
+            WriteEntry(renderer, number, entries[index]);
             renderer.WriteLine("</li>");
         }
         renderer.WriteLine("</ol>");
 
-        var count = items.Count == 1 ? "1 annotation" : $"{Number(items.Count - 1)} annotations";
+        var count = entries.Count == 1 ? "1 annotation" : $"{Number(entries.Count - 1)} annotations";
         renderer.Write("<details class=\"code-legend\"><summary>").Write(count).WriteLine("</summary>");
         renderer.WriteLine("<ol>");
-        for (var index = 0; index < items.Count; index++)
+        for (var index = 0; index < entries.Count; index++)
         {
             var number = Number(index);
             renderer.Write("<li data-annotation=\"").Write(idPrefix + number).Write("\">");
-            WriteEntry(renderer, number, items[index]);
+            WriteEntry(renderer, number, IdAttribute.Replace(entries[index], string.Empty));
             renderer.WriteLine("</li>");
         }
         renderer.WriteLine("</ol>");
         renderer.WriteLine("</details>");
-        renderer.ImplicitParagraph = implicitParagraph;
 
         static string Number(int index) => (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
     }
 
-    private static void WriteEntry(Markdig.Renderers.HtmlRenderer renderer, string number, ListItemBlock item)
+    private static readonly System.Text.RegularExpressions.Regex IdAttribute = new(
+        "\\s+id=\"[^\"]*\"", System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    private static string RenderToString(Markdig.Renderers.HtmlRenderer renderer, ListItemBlock item)
+    {
+        var writer = renderer.Writer;
+        using var text = new StringWriter();
+        renderer.Writer = text;
+        try
+        {
+            renderer.WriteChildren(item);
+        }
+        finally
+        {
+            renderer.Writer = writer;
+        }
+        return text.ToString();
+    }
+
+    private static void WriteEntry(Markdig.Renderers.HtmlRenderer renderer, string number, string html)
     {
         renderer.Write("<span class=\"code-annotation-number\" aria-hidden=\"true\">").Write(number).Write("</span>");
-        renderer.Write("<div class=\"code-annotation-text\">");
-        renderer.WriteChildren(item);
-        renderer.Write("</div>");
+        renderer.Write("<div class=\"code-annotation-text\">").Write(html).Write("</div>");
     }
 
     internal static string GetLanguage(FencedCodeBlock block)

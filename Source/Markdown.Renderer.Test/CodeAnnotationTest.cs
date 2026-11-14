@@ -41,6 +41,17 @@ public class CodeAnnotationTest
     }
 
     [Fact]
+    public void ShowsEachEntryTwiceWithEveryIdOnce()
+    {
+        var html = new HtmlRenderer().RenderMarkdownFragment(
+            "```python\nx = 1 # (1)\n```\n\n1. See the note[^n] and {#local}[the anchor](#top).\n\n[^n]: A footnote.\n");
+        var ids = Regex.Matches(html, "\\sid=\"(?<id>[^\"]+)\"").Select(match => match.Groups["id"].Value).ToList();
+
+        Assert.Equal(2, Regex.Matches(html, "See the note").Count);
+        Assert.Equal(ids.Count, ids.Distinct().Count());
+    }
+
+    [Fact]
     public void GivesBlocksWithFloatingMarkersMoreRoomBetweenLines()
     {
         var floating = new HtmlRenderer().RenderMarkdownFragment("```cs\nvar total = net /* (1)! */ * rate;\n```\n\n1. One\n");

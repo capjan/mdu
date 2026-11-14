@@ -76,6 +76,9 @@
         if (marker && !marker.contains(event.relatedTarget)) {
             const popover = annotationPopover(marker);
             if (!popover) return;
+            // A pinned explanation stays while the pointer passes other markers; opening another would close it, since
+            // popovers close each other. A click moves the pin.
+            if (pinnedAnnotation && pinnedAnnotation !== popover && pinnedAnnotation.matches(":popover-open")) return;
             clearAnnotationTimer(popover);
             annotationTimers.set(popover, window.setTimeout(() => openAnnotation(marker), annotationOpenDelay));
             return;
@@ -105,7 +108,22 @@
 
     // A click pins an explanation that pointing or focus opened, instead of letting the button toggle it closed. The
     // click runs before the browser toggles the popover, so placing it here also positions it right away.
+    // Browsers without popovers show the explanations in the legend: a click on a marker opens it there.
+    const popoversSupported = Object.prototype.hasOwnProperty.call(HTMLElement.prototype, "popover");
     document.addEventListener("click", (event) => {
+        const marker = event.target.closest(".code-annotation");
+        if (!marker || popoversSupported) return;
+        const legend = marker.closest(".code-block")?.querySelector("details.code-legend");
+        if (!legend) return;
+        legend.open = true;
+        const id = marker.getAttribute("popovertarget");
+        legend.querySelectorAll("li[data-annotation]").forEach((entry) =>
+            entry.classList.toggle("is-active", entry.dataset.annotation === id));
+        legend.querySelector("li.is-active")?.scrollIntoView({ block: "nearest" });
+    });
+
+    document.addEventListener("click", (event) => {
+        if (!popoversSupported) return;
         const marker = event.target.closest(".code-annotation");
         const popover = marker && annotationPopover(marker);
         if (!popover) return;

@@ -1131,7 +1131,8 @@ internal sealed class PdfLayout
             if (item.HasAttribute("id")) runs.Insert(0, new PdfRun(string.Empty, PdfTextStyle.Body, Anchor: item.GetAttribute("id")));
             // The first line must not move to the next page after its bubble is drawn.
             EnsureRoom(1 + Math.Min(3, WrapRuns(runs, fontSize, PageWidth - Left - Right - textIndent, mergeText: false).Length) * lineHeight);
-            var top = _y + 1;
+            // WriteParagraph adds its space before the text only below the top of a page; the bubble follows it.
+            var top = _y > Top ? _y + 1 : _y;
             var centerX = Left + indent + 8 + badgeRadius;
             var centerTop = top + fontSize * 0.62;
             var label = number.ToString(CultureInfo.InvariantCulture);
