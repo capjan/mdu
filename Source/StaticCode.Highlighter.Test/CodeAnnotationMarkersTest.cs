@@ -24,7 +24,7 @@ public class CodeAnnotationMarkersTest
 
     [Fact]
     public void KeepsTheIndentationBeforeAMarkerOnItsOwnLine() =>
-        Assert.Equal("x = 1\n    [1]", Render(Apply("python", "x = 1\n    # (1)!")));
+        Assert.Equal("x = 1\n    [1]", Render(Apply("csharp", "x = 1\n    /* (1)! */ y")).Replace(" y", string.Empty));
 
     [Fact]
     public void ReplacesAMarkerAnywhereInAComment()
@@ -36,12 +36,24 @@ public class CodeAnnotationMarkersTest
     }
 
     [Theory]
-    [InlineData("yaml", "name: Handbook # (1)!", "name: Handbook[1]")]
-    [InlineData("csharp", "var x = 1; // (1)!", "var x = 1;[1]")]
-    [InlineData("sql", "select 1 -- (1)!", "select 1[1]")]
-    [InlineData("html", "<p>Hi</p> <!-- (1)! -->", "<p>Hi</p>[1]")]
-    [InlineData("csharp", "var x = 1; /* (1)! (2)! */", "var x = 1;[1][2]")]
-    public void RemovesTheCharactersOfAnOtherwiseEmptyComment(string language, string code, string expected) =>
+    [InlineData("yaml", "name: Handbook # (1)!", "name: Handbook # [1]", "name: Handbook")]
+    [InlineData("csharp", "var x = 1; // (1)!", "var x = 1; // [1]", "var x = 1;")]
+    [InlineData("sql", "select 1 -- (1)!", "select 1 -- [1]", "select 1")]
+    [InlineData("html", "<p>Hi</p> <!-- (1)! -->", "<p>Hi</p> <!-- [1] -->", "<p>Hi</p>")]
+    [InlineData("csharp", "var x = 1; /* (1)! (2)! */", "var x = 1; /* [1][2] */", "var x = 1;")]
+    public void KeepsACommentAtTheEndOfALineAndCopiesWithoutIt(string language, string code, string expected, string copied)
+    {
+        var tokens = Apply(language, code);
+
+        Assert.Equal(expected, Render(tokens));
+        Assert.Equal(copied, CodeAnnotationMarkers.CopyText(tokens));
+    }
+
+    [Theory]
+    [InlineData("csharp", "f(a /* (1)! */, b);", "f(a[1], b);")]
+    [InlineData("sql", "select a /* (1)! */ from t", "select a[1] from t")]
+    [InlineData("html", "<b><!-- (1)! --></b>", "<b>[1]</b>")]
+    public void RemovesAnEmptyCommentBetweenCode(string language, string code, string expected) =>
         Assert.Equal(expected, Render(Apply(language, code)));
 
     [Fact]
@@ -140,6 +152,6 @@ public class CodeAnnotationMarkersTest
         Assert.Contains(
             "<button class=\"code-annotation\" type=\"button\" popovertarget=\"a-7-1\" style=\"anchor-name: --a-7-1\" aria-label=\"Annotation 1\">1</button>",
             html);
-        Assert.DoesNotContain("#", html);
+        Assert.Contains("<span class=\"comment\"># </span><button", html);
     }
 }

@@ -106,14 +106,21 @@ public static class CodeAnnotationMarkers
         return true;
     }
 
-    // A comment whose text is only comment characters and that a marker follows, such as "# " before "(2)".
+    // A piece of comment that is only comment characters next to a marker, such as "# " before a marker or " */"
+    // after one: the comment held nothing but markers.
     private static bool IsMarkerOnlyComment(IReadOnlyList<LanguageToken> tokens, int index)
     {
         if (tokens[index].Type != TokenType.Comment || tokens[index].Text.Trim(CommentCharacters.ToCharArray()).Length > 0) return false;
-        for (var next = index + 1; next < tokens.Count; next++)
+        return IsNextToMarker(tokens, index, 1) || IsNextToMarker(tokens, index, -1);
+    }
+
+    private static bool IsNextToMarker(IReadOnlyList<LanguageToken> tokens, int index, int step)
+    {
+        for (var other = index + step; other >= 0 && other < tokens.Count; other += step)
         {
-            if (tokens[next].Type == TokenType.Whitespace) continue;
-            return tokens[next].Type == TokenType.Annotation;
+            if (tokens[other].Type is TokenType.Whitespace) continue;
+            if (tokens[other].Type is TokenType.Comment && tokens[other].Text.Trim(CommentCharacters.ToCharArray()).Length == 0) continue;
+            return tokens[other].Type == TokenType.Annotation;
         }
         return false;
     }
@@ -131,10 +138,10 @@ public static class CodeAnnotationMarkers
         {
             var start = source.Length;
             source.Append(token.Text);
-            if (token.Type != TokenType.Comment) continue;
-            comments.Add((start, source.Length));
-            AddCommentMarkers(token.Text, start, isAnnotation, markers);
+            if (token.Type == TokenType.Comment) comments.Add((start, source.Length));
         }
+        foreach (var (start, end) in comments)
+            AddCommentMarkers(source.ToString(start, end - start), start, EndsLine(source, end), isAnnotation, markers);
 
         IEnumerable<Match> lineEnds = lineEndMarkers ? LineEndMarker.Matches(source.ToString()) : [];
         foreach (var match in lineEnds)
@@ -167,14 +174,29 @@ public static class CodeAnnotationMarkers
         return markers;
     }
 
-    private static void AddCommentMarkers(string comment, int offset, Func<int, bool> isAnnotation, List<Marker> markers)
+    // Whether only spaces follow the position on its line.
+    private static bool EndsLine(StringBuilder source, int position)
+    {
+        while (position < source.Length && source[position] is ' ' or '\t') position++;
+        return position == source.Length || source[position] is '\n' or '\r';
+    }
+
+    /// <param name="comment">The comment's text.</param>
+    /// <param name="offset">Where the comment starts in the code.</param>
+    /// <param name="endsLine">
+    /// Whether the comment ends its line. Such a comment explains the whole line, so it stays visible even with
+    /// <c>(1)!</c>; only a comment between code, such as <c>net /* (1)! */ * rate</c>, makes way for its marker.
+    /// </param>
+    /// <param name="isAnnotation">Whether a number has an entry.</param>
+    /// <param name="markers">The markers found so far.</param>
+    private static void AddCommentMarkers(string comment, int offset, bool endsLine, Func<int, bool> isAnnotation, List<Marker> markers)
     {
         var matches = CommentMarker.Matches(comment)
             .Where(match => isAnnotation(int.Parse(match.Groups["number"].Value, CultureInfo.InvariantCulture)))
             .ToList();
         if (matches.Count == 0) return;
 
-        var removesComment = matches.Any(match => match.Groups["strip"].Length > 0) && IsOnlyMarkers(comment, matches);
+        var removesComment = !endsLine && matches.Any(match => match.Groups["strip"].Length > 0) && IsOnlyMarkers(comment, matches);
         var previousEnd = 0;
         foreach (var match in matches)
         {

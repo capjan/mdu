@@ -86,7 +86,7 @@ Your file stays ordinary Markdown: GitHub shows the code block followed by a blo
 
 ## Annotations
 
-Explain single lines without cluttering the code. Write a marker such as `(1)` in a comment, and a numbered list directly after the code block. Like a footnote reference, each marker becomes a small raised number right after the word before it, and opens the matching entry next to it:
+Explain single lines without cluttering the code. Write a marker such as `(1)` in a comment, and a numbered list directly after the code block. Like a footnote reference, each marker becomes a small raised number that opens the matching entry next to it. In a comment at the end of a line, it explains the whole line:
 
 ~~~markdown title="Markdown"
 ```yaml title="mdu.yml"
@@ -110,13 +110,13 @@ content:
 1. Shown in the header and in the browser tab.
 2. A page whose `##` headings are the allowed tags. Unknown tags then stop `mdu render`.
 
-Select a marker, or move to it with ++tab++ and press ++enter++. ++esc++ or a click elsewhere closes the explanation. The copy button copies the code without the markers.
+Select a marker, or move to it with ++tab++ and press ++enter++. The marker stays filled while its explanation is open. Esc or a click elsewhere closes it. The copy button copies the code without the markers and without comments that held nothing else.
 
 The syntax is the one of Material for MkDocs, so annotated pages need no changes when you migrate. On GitHub and in your editor, the comment and the numbered list stay readable as they are.
 
 ### Explain parts of a line
 
-A marker can also explain a single operand. Put it in a block comment right after the operand, such as `/* (1)! */`. The comment disappears and the number sits on the operand:
+A marker can also explain a single operand. Put it in a block comment right after the operand, such as `/* (1)! */`. Because more code follows, the comment disappears and the number sits on the operand. The comment at the end of the line stays and explains the whole statement:
 
 ~~~markdown title="Markdown"
 ```cs title="Invoice.cs"
@@ -142,7 +142,7 @@ This works in every language with block comments, such as C#, Java, JavaScript, 
 
 - A marker is a number in parentheses: `(1)`, `(2)`, and so on. In a comment it counts anywhere.
 - In shell commands and in blocks without comments, such as `text`, console output, or JSON, write `(1)!` at the end of a line after a space to annotate it without a comment, such as `kubectl apply -f app.yaml (1)!`. The `!` keeps code and output such as `VALUES (1)` or `Retrying (1)` as they are. In other languages, put the marker in a comment.
-- `(1)!` removes more than the marker: the comment characters of an otherwise empty comment, such as `# (1)!`, or the space before a marker outside comments.
+- `(1)!` in an otherwise empty comment between code, such as `net /* (1)! */ * rate`, removes the comment, and the number sits on the word before it. A comment at the end of a line stays visible, so `total # (1)!` shows as `total #` and the marker.
 - The numbered list starts at `1.` and is the next block after the code block, or after its [result](#show-the-result). Its entries can contain any Markdown, such as code, links, or lists.
 - A code block is annotated when at least one marker matches an entry. The whole list then belongs to the code block. A list after code without matching markers stays an ordinary list.
 - Several markers on one line and the same marker in several places are fine.

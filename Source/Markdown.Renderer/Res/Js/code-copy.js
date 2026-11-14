@@ -24,12 +24,25 @@
 
     // A code annotation opens next to the marker that was used, also when its number appears more than once. The click
     // runs before the browser opens the popover, so the popover is placed right away.
+    const openingMarkers = new WeakMap();
     document.addEventListener("click", (event) => {
         const marker = event.target.closest(".code-annotation");
         const popover = marker && document.getElementById(marker.getAttribute("popovertarget"));
-        const anchor = marker?.style.getPropertyValue("anchor-name");
-        if (popover && anchor) popover.style.setProperty("position-anchor", anchor);
+        if (!popover) return;
+        openingMarkers.set(popover, marker);
+        const anchor = marker.style.getPropertyValue("anchor-name");
+        if (anchor) popover.style.setProperty("position-anchor", anchor);
     });
+
+    // The marker of an open explanation stays filled, so readers see which line it belongs to. Toggle events do not
+    // bubble, so the document listens while they pass down.
+    document.addEventListener("toggle", (event) => {
+        const popover = event.target;
+        if (!(popover instanceof HTMLElement) || !popover.matches(".code-annotations > [popover]")) return;
+        const markers = document.querySelectorAll(`.code-annotation[popovertarget="${CSS.escape(popover.id)}"]`);
+        markers.forEach((marker) => marker.classList.remove("is-open"));
+        if (event.newState === "open") (openingMarkers.get(popover) ?? markers[0])?.classList.add("is-open");
+    }, true);
 
     document.addEventListener("click", async (event) => {
         const button = event.target.closest(".code-block-copy");

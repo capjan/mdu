@@ -2419,15 +2419,17 @@ pre code {
     padding: 0 0.3em;
     border: 0;
     border-radius: 999px;
-    background: var(--link);
-    color: var(--page-background);
+    /* At rest the marker is a soft tint, so it does not compete with keywords that share the link color. */
+    background: var(--surface-code);
+    background: color-mix(in srgb, var(--link) 16%, transparent);
+    color: var(--link);
     font-family: inherit;
     font-size: 0.7em;
     font-weight: 600;
     line-height: 1;
     vertical-align: baseline;
     cursor: pointer;
-    transition: opacity 0.15s ease;
+    transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 /* The marker looks small, but takes clicks and taps on a 24px square around it. */
@@ -2441,17 +2443,22 @@ pre code {
     transform: translate(-50%, -50%);
 }
 
-.code-annotation:hover {
-    opacity: 0.85;
+/* A marker whose explanation is open, and one under the pointer, is filled. */
+.code-annotation:hover,
+.code-annotation.is-open {
+    background: var(--link);
+    color: var(--page-background);
 }
 
-/* The scrolling code clips overflow, so the ring is inset. The focused marker turns light so the ring shows on it. */
+/* The scrolling code clips overflow, so the ring is inset. The ring keeps the room of a light marker, so it shows
+   on a filled one too. */
 .code-annotation:focus-visible {
     outline: 2px solid var(--link);
     outline-offset: -2px;
-    background: var(--page-background);
-    color: var(--link);
-    opacity: 1;
+}
+
+.code-annotation.is-open:focus-visible {
+    box-shadow: inset 0 0 0 3px var(--page-background);
 }
 
 .code-annotations {
