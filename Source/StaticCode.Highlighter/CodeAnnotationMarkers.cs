@@ -6,9 +6,10 @@ namespace StaticCode.Highlighter;
 
 /// <summary>
 /// Finds code annotation markers in a token stream, in the syntax of Material for MkDocs. A marker <c>(1)</c> counts
-/// anywhere in a comment and, outside comments, only at the end of a line after a space, so that calls such as
-/// <c>print(1)</c> stay code. <c>(1)!</c> also removes what only carried the marker: the comment characters of an
-/// otherwise empty comment, or the space before a marker outside comments.
+/// anywhere in a comment. Outside comments it counts only where the language allows it (see
+/// <see cref="Lexer.AllowsLineEndMarkers"/>), and only at the end of a line after a space, so that code such as
+/// <c>print(1)</c> or SQL's <c>VALUES (1)</c> stays code. <c>(1)!</c> also removes what only carried the marker: the
+/// comment characters of an otherwise empty comment, or the space before a marker outside comments.
 /// </summary>
 public static class CodeAnnotationMarkers
 {
@@ -21,8 +22,10 @@ public static class CodeAnnotationMarkers
     private const string CommentCharacters = " \t#/*-<>!;%'";
 
     /// <summary>Returns the annotation numbers that the tokens contain, in order of appearance and without duplicates.</summary>
-    public static IReadOnlyList<int> FindNumbers(IEnumerable<LanguageToken> tokens) =>
-        Find(tokens as IReadOnlyList<LanguageToken> ?? tokens.ToList(), _ => true)
+    /// <param name="tokens">The analysed code.</param>
+    /// <param name="lineEndMarkers">Whether markers also count outside comments at the end of a line.</param>
+    public static IReadOnlyList<int> FindNumbers(IEnumerable<LanguageToken> tokens, bool lineEndMarkers) =>
+        Find(tokens as IReadOnlyList<LanguageToken> ?? tokens.ToList(), _ => true, lineEndMarkers)
             .Where(marker => marker.Number > 0)
             .Select(marker => marker.Number)
             .Distinct()
@@ -32,10 +35,13 @@ public static class CodeAnnotationMarkers
     /// Replaces each marker whose number <paramref name="isAnnotation"/> accepts with an <see cref="TokenType.Annotation"/>
     /// token. Other markers stay code.
     /// </summary>
-    public static IReadOnlyList<LanguageToken> Apply(IEnumerable<LanguageToken> tokens, Func<int, bool> isAnnotation)
+    /// <param name="tokens">The analysed code.</param>
+    /// <param name="isAnnotation">Whether a number has an entry.</param>
+    /// <param name="lineEndMarkers">Whether markers also count outside comments at the end of a line.</param>
+    public static IReadOnlyList<LanguageToken> Apply(IEnumerable<LanguageToken> tokens, Func<int, bool> isAnnotation, bool lineEndMarkers)
     {
         var list = tokens as IReadOnlyList<LanguageToken> ?? tokens.ToList();
-        var markers = Find(list, isAnnotation);
+        var markers = Find(list, isAnnotation, lineEndMarkers);
         if (markers.Count == 0) return list;
 
         var result = new List<LanguageToken>(list.Count + markers.Count * 2);
@@ -102,7 +108,7 @@ public static class CodeAnnotationMarkers
     // A marker removes Start..End from the code and, unless its number is 0, puts an annotation token at Start.
     private readonly record struct Marker(int Start, int End, int Number);
 
-    private static List<Marker> Find(IReadOnlyList<LanguageToken> tokens, Func<int, bool> isAnnotation)
+    private static List<Marker> Find(IReadOnlyList<LanguageToken> tokens, Func<int, bool> isAnnotation, bool lineEndMarkers)
     {
         var markers = new List<Marker>();
         var comments = new List<(int Start, int End)>();
@@ -116,7 +122,8 @@ public static class CodeAnnotationMarkers
             AddCommentMarkers(token.Text, start, isAnnotation, markers);
         }
 
-        foreach (Match match in LineEndMarker.Matches(source.ToString()))
+        IEnumerable<Match> lineEnds = lineEndMarkers ? LineEndMarker.Matches(source.ToString()) : [];
+        foreach (var match in lineEnds)
         {
             var number = int.Parse(match.Groups["number"].Value, CultureInfo.InvariantCulture);
             if (!isAnnotation(number)) continue;

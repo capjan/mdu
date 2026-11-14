@@ -115,7 +115,8 @@ public partial class MarkdigVisitor : BaseVisitor
             out var specifications, page.SourceRootPath, Path.GetFileName(outputFileName),
             GetOutputSiblings(_pageOutputs, Path.GetDirectoryName(outputFileName)!));
         _searchIndexBuilder.AddPage(NavigationPage.GetTitle(page), GetSiteRelativeUrl(outputFileName), markdown,
-            _siteTags.For(page).Select(tag => tag.Name).ToArray());
+            _siteTags.For(page).Select(tag => tag.Name).ToArray(),
+            _htmlFoundation.CodeAnnotationsFor(CodeAnnotations.ReadFrontMatter(page.FrontMatter)));
         return new PreparedPage(markdown, specifications);
     }
 

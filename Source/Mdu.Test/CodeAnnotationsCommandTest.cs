@@ -113,6 +113,32 @@ public class CodeAnnotationsCommandTest
     }
 
     [Fact]
+    public void FixAndLintTreatAFenceWithAnInfoStringAsContent()
+    {
+        const string markdown = "```markdown\n```yaml\n{ .annotate }\n!!! note\n```\n";
+
+        Assert.Equal(markdown, MarkdownCompatibility.FixMarkdown(markdown));
+        Assert.Empty(MarkdownCompatibility.FindIssues(markdown));
+    }
+
+    [Theory]
+    [InlineData("", false)]
+    [InlineData("content.code.annotate: false", true)]
+    public void ThePdfFollowsTheSiteSetting(string yaml, bool markersAsCode) => WithRoot(root =>
+    {
+        File.WriteAllText(Path.Combine(root, "mdu.yml"), yaml);
+        File.WriteAllText(Path.Combine(root, "README.md"), "# Home\n\n" + AnnotatedPage);
+        var output = Path.Combine(root, "site.pdf");
+
+        var result = new PdfCommand(new GraphBuilder(new DataPreparationVisitor(new MarkdownDocumentReader())),
+            new PdfRenderer(new HtmlRenderer())).Execute(new RenderCommandSettings { RootPath = root, OutputPath = output });
+
+        Assert.Equal(0, result);
+        var pdf = System.Text.Encoding.Latin1.GetString(File.ReadAllBytes(output));
+        Assert.Equal(markersAsCode, pdf.Contains(Convert.ToHexString(System.Text.Encoding.Latin1.GetBytes("# (1)!")), StringComparison.Ordinal));
+    });
+
+    [Fact]
     public void LintReportsAttributeFences()
     {
         var issue = Assert.Single(MarkdownCompatibility.FindIssues("# Page\n\n``` { .yaml .annotate }\nkey: 1\n```\n"));

@@ -35,6 +35,7 @@ public sealed class SearchIndexBuilder
     private readonly List<SearchIndexEntry> _entries = new();
     private readonly Dictionary<IconGlyph, string> _iconText = new();
     private readonly string _codePrefix = $"mdu-search-code-{Guid.NewGuid():N}:";
+    private bool _codeAnnotations = true;
     private HtmlParser? _htmlParser;
     private IElement? _svgContext;
 
@@ -55,11 +56,25 @@ public sealed class SearchIndexBuilder
         _iconText.Clear();
     }
 
-    public void AddPage(string title, string url, string markdown, IReadOnlyList<string>? tags = null)
+    /// <param name="title">The page title.</param>
+    /// <param name="url">The page URL relative to the site.</param>
+    /// <param name="markdown">The page without front matter.</param>
+    /// <param name="tags">The tag names of the page.</param>
+    /// <param name="codeAnnotations">Whether the page's code blocks show annotations: its front matter, or else the site's setting.</param>
+    public void AddPage(string title, string url, string markdown, IReadOnlyList<string>? tags = null, bool codeAnnotations = true)
     {
+        // Read while the page's entries are built, by GetCode.
         _entries.RemoveAll(entry => entry.PageUrl.Equals(url, StringComparison.Ordinal));
         var firstEntry = _entries.Count;
-        AddPageEntries(title, url, markdown);
+        _codeAnnotations = codeAnnotations;
+        try
+        {
+            AddPageEntries(title, url, markdown);
+        }
+        finally
+        {
+            _codeAnnotations = true;
+        }
         if (tags is not { Count: > 0 }) return;
         var pageTags = tags.ToArray();
         for (var index = firstEntry; index < _entries.Count; index++)
@@ -310,7 +325,7 @@ public sealed class SearchIndexBuilder
         using var writer = new StringWriter();
         var renderer = new Markdig.Renderers.HtmlRenderer(writer);
         pipeline.Setup(renderer);
-        renderer.ObjectRenderers.Insert(0, new SearchCodeBlockRenderer(code, prefix));
+        renderer.ObjectRenderers.Insert(0, new SearchCodeBlockRenderer(code, prefix, GetCode));
         renderer.ObjectRenderers.Insert(0, new SearchCodeInlineRenderer(code, prefix));
         renderer.ObjectRenderers.Insert(0, new SearchLinkInlineRenderer(code, prefix));
         renderer.Render(document);
@@ -324,11 +339,11 @@ public sealed class SearchIndexBuilder
         values.Add(code.Trim());
     }
 
-    private sealed class SearchCodeBlockRenderer(List<string> code, string prefix) : HtmlObjectRenderer<CodeBlock>
+    private sealed class SearchCodeBlockRenderer(List<string> code, string prefix, Func<CodeBlock, string> getCode) : HtmlObjectRenderer<CodeBlock>
     {
         protected override void Write(Markdig.Renderers.HtmlRenderer renderer, CodeBlock block)
         {
-            if (IsSearchableCodeBlock(block)) WriteCodeMarker(renderer, GetCode(block), code, prefix);
+            if (IsSearchableCodeBlock(block)) WriteCodeMarker(renderer, getCode(block), code, prefix);
         }
     }
 
@@ -659,9 +674,11 @@ public sealed class SearchIndexBuilder
         if (!string.IsNullOrWhiteSpace(value)) code.Add(value.Trim());
     }
 
-    // Annotated code is indexed without its markers, which readers see as buttons rather than as code.
-    private static string GetCode(CodeBlock block) =>
-        block is FencedCodeBlock fenced ? Markdown.Renderer.CodeAnnotations.SearchText(fenced).ReplaceLineEndings(Environment.NewLine) :
+    // Annotated code is indexed without its markers, which readers see as buttons rather than as code. Where the page
+    // turns annotations off, the markers stay, as on the page.
+    private string GetCode(CodeBlock block) =>
+        block is FencedCodeBlock fenced
+            ? Markdown.Renderer.CodeAnnotations.SearchText(fenced, _codeAnnotations).ReplaceLineEndings(Environment.NewLine) :
         block is LeafBlock leaf && leaf.Lines.Lines is not null
             ? string.Join(Environment.NewLine, leaf.Lines.Lines.Select(line => line.Slice.ToString()))
             : string.Empty;

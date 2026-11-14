@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using Markdig.Renderers.Html;
 using Markdig.Syntax;
 using Markdown.Renderer.MarkdigExtension;
 using StaticCode.Highlighter;
@@ -18,14 +19,23 @@ public static class CodeAnnotations
     public const string Setting = "content.code.annotate";
     private static readonly object DataKey = typeof(CodeAnnotations);
     private static readonly Regex InfoSetting = new(@"(?:^|\s)annotate=(?<value>\S*)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex QuotedArgument = new("\"[^\"]*\"|'[^']*'", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    // A page can only have annotations or annotate= problems when it has a fence and a numbered list that starts at 1.
+    private static readonly Regex FirstListEntry = new(@"^[ \t>]*1[.)](?:[ \t]|$)", RegexOptions.Compiled | RegexOptions.Multiline | RegexOptions.CultureInvariant);
 
     /// <summary>
     /// A pair of a code block and its annotation list, with the code's tokens and the numbers of the markers that the code
-    /// contains. The renderer reuses the tokens, so the code is analysed once.
+    /// contains. The renderer reuses the tokens, so the code is analysed once. <paramref name="LineEndMarkers"/> tells
+    /// whether the language lets markers count outside comments.
     /// </summary>
-    public sealed record Annotations(FencedCodeBlock Code, ListBlock List, IReadOnlyList<LanguageToken> Tokens, IReadOnlyList<int> Markers)
+    public sealed record Annotations(
+        FencedCodeBlock Code, ListBlock List, IReadOnlyList<LanguageToken> Tokens, IReadOnlyList<int> Markers, bool LineEndMarkers)
     {
         public int Count => List.Count;
+
+        /// <summary>The tokens with each marker that has an entry replaced by an annotation token.</summary>
+        public IReadOnlyList<LanguageToken> MarkedTokens() =>
+            CodeAnnotationMarkers.Apply(Tokens, number => number <= Count, LineEndMarkers);
     }
 
     /// <summary>
@@ -40,6 +50,9 @@ public static class CodeAnnotations
         {
             annotations.List.Parent?.Remove(annotations.List);
             annotations.Code.SetData(DataKey, annotations);
+            // A heading in an explanation opens in a popover, so it gets no id: it stays out of the page contents and
+            // gets no permalink, as in a result block.
+            foreach (var heading in annotations.List.Descendants<HeadingBlock>()) heading.GetAttributes().Id = null;
         }
     }
 
@@ -57,11 +70,13 @@ public static class CodeAnnotations
     /// Returns the code of a block as the search index stores it: without the markers of its annotations, which readers
     /// see as buttons. Blocks without annotations keep their code.
     /// </summary>
-    public static string SearchText(FencedCodeBlock code)
+    /// <param name="code">The code block.</param>
+    /// <param name="enabled">The page's setting: its front matter, or else the site's.</param>
+    public static string SearchText(FencedCodeBlock code, bool enabled)
     {
-        if (code.Parent is not { } parent || TryPair(parent, parent.IndexOf(code), enabled: true) is not { } annotations)
+        if (code.Parent is not { } parent || TryPair(parent, parent.IndexOf(code), enabled) is not { } annotations)
             return HighlightedCodeBlockRenderer.GetCode(code);
-        return CodeAnnotationMarkers.CopyText(CodeAnnotationMarkers.Apply(annotations.Tokens, number => number <= annotations.Count));
+        return CodeAnnotationMarkers.CopyText(annotations.MarkedTokens());
     }
 
     private static Annotations? TryPair(ContainerBlock container, int index, bool enabled)
@@ -75,9 +90,12 @@ public static class CodeAnnotations
 
         var language = HighlightedCodeBlockRenderer.GetLanguage(code);
         if (!HighlightedCodeBlockRenderer.IsCodeLanguage(language)) return null;
-        var tokens = Lexer.ForLanguage(language).Analyse(HighlightedCodeBlockRenderer.GetCode(code)).ToList();
-        var markers = CodeAnnotationMarkers.FindNumbers(tokens);
-        return markers.Any(number => number <= list.Count) ? new Annotations(code, list, tokens, markers) : null;
+        var lexer = Lexer.ForLanguage(language);
+        var tokens = lexer.Analyse(HighlightedCodeBlockRenderer.GetCode(code)).ToList();
+        var markers = CodeAnnotationMarkers.FindNumbers(tokens, lexer.AllowsLineEndMarkers);
+        return markers.Any(number => number <= list.Count)
+            ? new Annotations(code, list, tokens, markers, lexer.AllowsLineEndMarkers)
+            : null;
     }
 
     /// <summary>A problem with the annotations of a page, at a 1-based line.</summary>
@@ -100,12 +118,13 @@ public static class CodeAnnotations
     /// <param name="enabled">The page's setting: its front matter, or else the site's.</param>
     public static IReadOnlyList<Problem> FindProblems(string markdown, bool enabled)
     {
-        if (!markdown.Contains('(') && !markdown.Contains("annotate=", StringComparison.Ordinal)) return [];
+        var hasFence = markdown.Contains("```", StringComparison.Ordinal) || markdown.Contains("~~~", StringComparison.Ordinal);
+        if (!hasFence || !markdown.Contains("annotate=", StringComparison.Ordinal) && !FirstListEntry.IsMatch(markdown)) return [];
         var document = Markdig.Markdown.Parse(markdown, Pipeline.Value);
         var problems = new List<Problem>();
         foreach (var code in document.Descendants<FencedCodeBlock>())
         {
-            var match = InfoSetting.Match(code.Arguments ?? string.Empty);
+            var match = MatchInfo(code);
             if (match.Success && !bool.TryParse(match.Groups["value"].Value, out _))
                 problems.Add(new Problem(code.Line + 1, ProblemKind.InvalidSetting,
                     $"annotate= after the code block's language must be 'true' or 'false', not '{match.Groups["value"].Value}'."));
@@ -137,9 +156,13 @@ public static class CodeAnnotations
     /// <summary>Returns the <c>annotate=</c> setting after the code block's language, or null when it has none.</summary>
     public static bool? ReadInfo(FencedCodeBlock code)
     {
-        var match = InfoSetting.Match(code.Arguments ?? string.Empty);
+        var match = MatchInfo(code);
         return match.Success && bool.TryParse(match.Groups["value"].Value, out var value) ? value : null;
     }
+
+    // Quoted arguments such as title="Use annotate=false" are text, not settings, so they are blanked before matching.
+    private static Match MatchInfo(FencedCodeBlock code) =>
+        InfoSetting.Match(QuotedArgument.Replace(code.Arguments ?? string.Empty, quoted => new string(' ', quoted.Length)));
 
     /// <summary>Returns the page's <c>content.code.annotate</c> setting, nested or dotted, or null when it has none.</summary>
     public static bool? ReadFrontMatter(string? frontMatter) =>

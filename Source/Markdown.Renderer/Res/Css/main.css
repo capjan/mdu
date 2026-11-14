@@ -2447,9 +2447,13 @@ pre code {
     font-size: 0.875rem;
 }
 
+/* The entries open as popovers, so the list itself takes no room. It keeps its box, and with it the list role
+   for assistive technology, which display: contents can drop. */
 @supports selector(:popover-open) {
     .code-annotations {
-        display: contents;
+        margin: 0;
+        padding: 0;
+        border: 0;
     }
 
     .code-annotations > [popover] {

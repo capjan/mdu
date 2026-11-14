@@ -20,7 +20,7 @@ public static class MarkdownCompatibility
         """<div\b(?=[^>]*\bclass=["'][^"']*(?:\bgrid\b[^"']*\bcards\b|\bcards\b[^"']*\bgrid\b)[^"']*["'])(?=[^>]*\bmarkdown\b)[^>]*>""",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex DivTag = new("</?div\\b[^>]*>", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-    private static readonly Regex Fence = new(@"^\s*(```+|~~~+)", RegexOptions.Compiled);
+    private static readonly Regex Fence = new(@"^\s*(```+|~~~+)(?<rest>.*)$", RegexOptions.Compiled);
     private static readonly Regex BlockquotePrefix = new(@"^\s*(?:>\s*)*", RegexOptions.Compiled);
     private static readonly Regex AnnotationMarker = new(@"^\s*(?:>\s*)*\{ \.annotate \}\s*$", RegexOptions.Compiled);
     private static readonly Regex AttributeFence = new(
@@ -47,7 +47,7 @@ public static class MarkdownCompatibility
                     if (ConvertAttributeFence(line) != line)
                         issues.Add(new CompatibilityIssue(index + 1, RuleCodes.CodeAnnotations, "Material code fence attributes such as '{ .yaml .annotate }' are unsupported; run 'mdu fix' to write the language after the fence."));
                 }
-                else if (IsClosingFence(fenceMatch.Groups[1].Value, fence))
+                else if (IsClosingFence(fenceMatch, fence))
                 {
                     inFence = false;
                 }
@@ -128,7 +128,7 @@ public static class MarkdownCompatibility
                 while (++index < lines.Length)
                 {
                     var close = Fence.Match(BlockquotePrefix.Replace(lines[index], string.Empty));
-                    if (close.Success && IsClosingFence(close.Groups[1].Value, fence)) break;
+                    if (close.Success && IsClosingFence(close, fence)) break;
                 }
                 continue;
             }
@@ -148,7 +148,7 @@ public static class MarkdownCompatibility
                         inFence = true;
                         fenceCharacter = currentFence.Groups[1].Value;
                     }
-                    else if (IsClosingFence(currentFence.Groups[1].Value, fenceCharacter))
+                    else if (IsClosingFence(currentFence, fenceCharacter))
                     {
                         inFence = false;
                     }
@@ -195,7 +195,7 @@ public static class MarkdownCompatibility
                     output.Add(ConvertAttributeFence(line));
                     continue;
                 }
-                if (IsClosingFence(fenceMatch.Groups[1].Value, fence))
+                if (IsClosingFence(fenceMatch, fence))
                 {
                     inFence = false;
                 }
@@ -210,9 +210,14 @@ public static class MarkdownCompatibility
         return string.Join('\n', output);
     }
 
-    // A fence closes with the same character, at least as many times as it opened, so a ``` line inside a ```` block is content.
-    private static bool IsClosingFence(string run, string opening) =>
-        opening.Length > 0 && run[0] == opening[0] && run.Length >= opening.Length;
+    // A fence closes with the same character, at least as many times as it opened, and nothing after it. So a ``` line
+    // inside a ```` block and a ```yaml line inside a ``` block are content.
+    private static bool IsClosingFence(Match fence, string opening)
+    {
+        var run = fence.Groups[1].Value;
+        return opening.Length > 0 && run[0] == opening[0] && run.Length >= opening.Length &&
+               string.IsNullOrWhiteSpace(fence.Groups["rest"].Value);
+    }
 
     // Material writes "``` { .yaml .annotate title="mdu.yml" }"; MDU reads "```yaml title="mdu.yml"" and annotates without a class.
     private static string ConvertAttributeFence(string line)
@@ -291,7 +296,7 @@ public static class MarkdownCompatibility
                     inFence = true;
                     fence = fenceMatch.Groups[1].Value;
                 }
-                else if (IsClosingFence(fenceMatch.Groups[1].Value, fence))
+                else if (IsClosingFence(fenceMatch, fence))
                 {
                     inFence = false;
                 }

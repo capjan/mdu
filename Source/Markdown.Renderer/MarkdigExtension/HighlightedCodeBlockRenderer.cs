@@ -62,7 +62,7 @@ public class HighlightedCodeBlockRenderer : HtmlObjectRenderer<CodeBlock>
         IReadOnlyList<LanguageToken> tokens;
         if (annotations is not null)
         {
-            tokens = CodeAnnotationMarkers.Apply(annotations.Tokens, number => number <= annotations.Count);
+            tokens = annotations.MarkedTokens();
             formatter = new HtmlFormatter { AnnotationIdPrefix = CodeAnnotations.IdPrefix(obj) };
             copyText = CodeAnnotationMarkers.CopyText(tokens);
         }

@@ -238,7 +238,10 @@ public partial class HtmlRenderer
 
     /// <summary>Pairs code blocks with their annotation lists; only pages that are rendered need it.</summary>
     private void ApplyCodeAnnotations(MarkdownDocument document, bool? pageSetting) =>
-        CodeAnnotations.Apply(document, pageSetting ?? _siteConfiguration.CodeAnnotations);
+        CodeAnnotations.Apply(document, CodeAnnotationsFor(pageSetting));
+
+    /// <summary>Returns whether a page shows code annotations: its own setting, or else the site's.</summary>
+    public bool CodeAnnotationsFor(bool? pageSetting) => pageSetting ?? _siteConfiguration.CodeAnnotations;
 
     public IReadOnlyList<string> FindPdfLinks(string markdown) =>
         Markdig.Markdown.Parse(markdown, _pipeline)
@@ -371,8 +374,9 @@ public partial class HtmlRenderer
         
         var document = ParseMarkdown(markdown, pdfDownloadUrl, pdfDownloadUrls, pdfDownloadNames, pipeline);
         ApplyCodeAnnotations(document, codeAnnotations);
+        // Like the renderer, the language matches in any case.
         var hasIconSearch = document.Descendants<FencedCodeBlock>()
-            .Any(block => block.Info == IconSearch.CodeBlockLanguage);
+            .Any(block => string.Equals(block.Info, IconSearch.CodeBlockLanguage, StringComparison.OrdinalIgnoreCase));
         if (hasIconSearch) EnsureIconSearchAssets();
         var renderedMarkdown = dashboard is null ? document.ToHtml(pipeline) : Dashboard.Render(document, pipeline, dashboard);
         var hasHero = renderedMarkdown.Contains(" data-hero-scene=\"", StringComparison.Ordinal);

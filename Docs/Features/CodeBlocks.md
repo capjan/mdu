@@ -117,7 +117,7 @@ The syntax is the one of Material for MkDocs, so annotated pages need no changes
 ### Rules
 
 - A marker is a number in parentheses: `(1)`, `(2)`, and so on. In a comment it counts anywhere.
-- Outside comments, a marker counts only at the end of a line and after a space, such as `kubectl apply -f app.yaml (1)`. So `print(1)` stays code. This also annotates `text` blocks, console output, and languages without comments.
+- In shell commands and in blocks without comments, such as `text`, console output, or JSON, a marker also counts at the end of a line after a space, such as `kubectl apply -f app.yaml (1)`. In other languages, a trailing `(1)` can be code, such as SQL's `VALUES (1)`, so put the marker in a comment there.
 - `(1)!` removes more than the marker: the comment characters of an otherwise empty comment, such as `# (1)!`, or the space before a marker outside comments.
 - The numbered list starts at `1.` and is the next block after the code block, or after its [result](#show-the-result). Its entries can contain any Markdown, such as code, links, or lists.
 - A code block is annotated when at least one marker matches an entry. The whole list then belongs to the code block. A list after code without matching markers stays an ordinary list.

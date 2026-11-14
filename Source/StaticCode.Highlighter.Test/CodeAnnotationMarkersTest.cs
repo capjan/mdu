@@ -4,8 +4,11 @@ namespace StaticCode.Highlighter.Test;
 
 public class CodeAnnotationMarkersTest
 {
-    private static IReadOnlyList<LanguageToken> Apply(string language, string code, int count = 9) =>
-        CodeAnnotationMarkers.Apply(Lexer.ForLanguage(language).Analyse(code), number => number <= count);
+    private static IReadOnlyList<LanguageToken> Apply(string language, string code, int count = 9)
+    {
+        var lexer = Lexer.ForLanguage(language);
+        return CodeAnnotationMarkers.Apply(lexer.Analyse(code), number => number <= count, lexer.AllowsLineEndMarkers);
+    }
 
     private static string Render(IEnumerable<LanguageToken> tokens) =>
         string.Concat(tokens.Select(token => token.Type == TokenType.Annotation ? $"[{token.Text}]" : token.Text));
@@ -49,6 +52,27 @@ public class CodeAnnotationMarkersTest
     public void KeepsParenthesesInCode(string language, string code) =>
         Assert.Equal(code, Render(Apply(language, code)));
 
+    [Theory]
+    [InlineData("sql", "INSERT INTO t VALUES (1)")]
+    [InlineData("sql", "SELECT * FROM t WHERE id IN (1)")]
+    [InlineData("python", "x = (1)")]
+    [InlineData("csharp", "var x = (1)")]
+    [InlineData("yaml", "title: Release notes (1)")]
+    public void KeepsLineEndParenthesesInLanguagesWithComments(string language, string code) =>
+        Assert.Equal(code, Render(Apply(language, code)));
+
+    [Theory]
+    [InlineData("bash", true)]
+    [InlineData("text", true)]
+    [InlineData("json", true)]
+    [InlineData("unknown-language", true)]
+    [InlineData("sql", false)]
+    [InlineData("python", false)]
+    [InlineData("yaml", false)]
+    [InlineData("markdown", false)]
+    public void AllowsLineEndMarkersWhereTheyCannotBeCode(string language, bool allowed) =>
+        Assert.Equal(allowed, Lexer.ForLanguage(language).AllowsLineEndMarkers);
+
     [Fact]
     public void KeepsMarkersWithoutAnEntry() =>
         Assert.Equal("a = 1 # (3)", Render(Apply("python", "a = 1 # (3)", count: 2)));
@@ -59,7 +83,7 @@ public class CodeAnnotationMarkersTest
 
     [Fact]
     public void FindsTheNumbersInOrder() =>
-        Assert.Equal([2, 1], CodeAnnotationMarkers.FindNumbers(Lexer.ForLanguage("python").Analyse("a # (2)\nb # (1)\nc # (2)")));
+        Assert.Equal([2, 1], CodeAnnotationMarkers.FindNumbers(Lexer.ForLanguage("python").Analyse("a # (2)\nb # (1)\nc # (2)"), lineEndMarkers: false));
 
     [Fact]
     public void CopiesTheCodeWithoutMarkers()

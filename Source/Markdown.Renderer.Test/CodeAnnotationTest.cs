@@ -121,7 +121,56 @@ public class CodeAnnotationTest
         var document = Markdig.Markdown.Parse("```python\nx = 1 # (1)!\ny = 2 # keep (2)\n```\n\n1. One\n2. Two\n", HtmlRenderer.CreatePipeline());
         var code = document.Descendants<Markdig.Syntax.FencedCodeBlock>().Single();
 
-        Assert.Equal("x = 1\ny = 2 # keep", CodeAnnotations.SearchText(code).ReplaceLineEndings("\n"));
+        Assert.Equal("x = 1\ny = 2 # keep", CodeAnnotations.SearchText(code, enabled: true).ReplaceLineEndings("\n"));
+        Assert.Equal("x = 1 # (1)!\ny = 2 # keep (2)", CodeAnnotations.SearchText(code, enabled: false).ReplaceLineEndings("\n"));
+    }
+
+    [Fact]
+    public void KeepsSqlValuesAndTheStepsAfterThem()
+    {
+        var html = new HtmlRenderer().RenderMarkdownFragment("```sql\nINSERT INTO t VALUES (1)\n```\n\n1. Run the migration.\n");
+
+        Assert.DoesNotContain("code-annotation", html);
+        Assert.Contains("<li>Run the migration.</li>", html);
+    }
+
+    [Fact]
+    public void HeadingsInAnnotationsStayOutOfThePageContents()
+    {
+        var html = new HtmlRenderer().RenderMarkdownFragment("```python\nx = 1 # (1)\n```\n\n1. Note\n\n    ### Details\n\n    More.\n");
+
+        Assert.Contains("<h3>Details</h3>", html);
+        Assert.DoesNotContain("id=\"details\"", html);
+    }
+
+    [Theory]
+    [InlineData("```python title=\"Use annotate=false to opt out\"\nx = 1 # (1)\n```\n\n1. One\n", true)]
+    [InlineData("```python title='annotate=false' annotate=true\nx = 1 # (1)\n```\n\n1. One\n", true)]
+    [InlineData("```python title=\"x\" annotate=false\nx = 1 # (1)\n```\n\n1. One\n", false)]
+    public void ReadsAnnotateOutsideQuotedArguments(string markdown, bool annotated)
+    {
+        Assert.Equal(annotated, new HtmlRenderer().RenderMarkdownFragment(markdown).Contains("class=\"code-annotation\"", StringComparison.Ordinal));
+        Assert.Empty(CodeAnnotations.FindProblems(markdown, enabled: true)
+            .Where(problem => problem.Kind == CodeAnnotations.ProblemKind.InvalidSetting));
+    }
+
+    [Fact]
+    public void PublishesTheIconSearchInAnyCase()
+    {
+        var output = Path.Combine(Path.GetTempPath(), $"mdu-icon-search-{Guid.NewGuid():N}");
+        try
+        {
+            var renderer = new HtmlRenderer();
+            renderer.PrepareBasePath(output);
+            using var writer = new StringWriter();
+            renderer.WriteHtml(writer, "Icons", "", 0, "# Icons\n\n```Icon-Search\n```\n", "").GetAwaiter().GetResult();
+
+            Assert.NotEmpty(renderer.IconSearchAssets);
+        }
+        finally
+        {
+            if (Directory.Exists(output)) Directory.Delete(output, recursive: true);
+        }
     }
 
     [Theory]
