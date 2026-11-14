@@ -211,6 +211,92 @@ public class LexerTests
         Assert.Contains(tokens, token => token.Text == "Orders" && token.Type == TokenType.MarkdownHeading);
     }
 
+    [Fact]
+    public void MarkdownLeavesNestedFencedCodeUnhighlighted()
+    {
+        const string markdown = """
+            # Price calculation
+
+            A *calculation* example.
+
+            ```cs
+            var total = net /* (1)! */ * (1 + vatRate /* (2)! */) - discount;
+            var name = first_name + _last_name_;
+            # not a heading
+            ```
+
+            Some **strong** and _emphasis_ text.
+            """;
+
+        var tokens = Lexer.ForLanguage("markdown").Analyse(markdown).ToList();
+
+        Assert.Equal(markdown, string.Concat(tokens.Select(token => token.Text)));
+        Assert.Contains(tokens, token => token.Text == "Price" && token.Type == TokenType.MarkdownHeading);
+        Assert.Contains(tokens, token => token.Text == "calculation" && token.Type == TokenType.MarkdownEmphasis);
+        Assert.Contains(tokens, token => token.Text == "strong" && token.Type == TokenType.MarkdownStrong);
+        Assert.Contains(tokens, token => token.Text == "emphasis" && token.Type == TokenType.MarkdownEmphasis);
+        Assert.Contains(tokens, token => token.Text.StartsWith("```cs") && token.Type == TokenType.MarkdownSyntax);
+        AssertNoMarkdownTokens(tokens, markdown, "var total", "```\n\nSome");
+    }
+
+    [Fact]
+    public void MarkdownNestedFenceEndsOnlyAtAMatchingClosingFence()
+    {
+        const string markdown = """
+            ~~~~markdown
+            ```cs
+            var total = net /* (1)! */ * vatRate;
+            ```
+            ~~~
+            *still code* and [a](link)
+            ~~~~~
+            After *fence*.
+            """;
+
+        var tokens = Lexer.ForLanguage("markdown").Analyse(markdown).ToList();
+
+        Assert.Equal(markdown, string.Concat(tokens.Select(token => token.Text)));
+        AssertNoMarkdownTokens(tokens, markdown, "```cs", "~~~~~");
+        Assert.Contains(tokens, token => token.Text == "fence" && token.Type == TokenType.MarkdownEmphasis);
+    }
+
+    [Fact]
+    public void MarkdownUnclosedFenceRunsToTheEnd()
+    {
+        const string markdown = """
+            Before *text*.
+
+            ```
+            a * b * c and __init__
+            """;
+
+        var tokens = Lexer.ForLanguage("markdown").Analyse(markdown).ToList();
+
+        Assert.Equal(markdown, string.Concat(tokens.Select(token => token.Text)));
+        Assert.Contains(tokens, token => token.Text == "text" && token.Type == TokenType.MarkdownEmphasis);
+        AssertNoMarkdownTokens(tokens, markdown, "a * b", null);
+    }
+
+    private static void AssertNoMarkdownTokens(
+        IReadOnlyList<LanguageToken> tokens,
+        string source,
+        string from,
+        string? to)
+    {
+        var start = source.IndexOf(from, StringComparison.Ordinal);
+        var end = to is null ? source.Length : source.IndexOf(to, start, StringComparison.Ordinal);
+        Assert.True(start >= 0 && end > start);
+        var position = 0;
+        foreach (var token in tokens)
+        {
+            if (position >= start && position < end)
+                Assert.False(
+                    token.Type.ToString().StartsWith("Markdown", StringComparison.Ordinal),
+                    $"Unexpected {token.Type} token '{token.Text}' inside fenced code.");
+            position += token.Text.Length;
+        }
+    }
+
     [Theory]
     [InlineData("javascript")]
     [InlineData("css")]
