@@ -33,6 +33,8 @@
     --surface-code: #f5f5f7;
     --surface-code-block: #f5f5f7;
     --surface-code-block-body: #fff;
+    /* Strength of the grey bubble behind the numbers of a code annotation legend. */
+    --annotation-number-tint: 14%;
     --code-block-border: #e5e5ea;
     --border: #d5d7dc;
     --border-subtle: #e7e8ec;
@@ -108,6 +110,7 @@
     --surface-code: #1d1f24;
     --surface-code-block: #16181c;
     --surface-code-block-body: #121317;
+    --annotation-number-tint: 22%;
     --code-block-border: #23262c;
     --border: #262930;
     --border-subtle: #1e2026;
@@ -178,6 +181,7 @@
         --surface-code: #1d1f24;
         --surface-code-block: #16181c;
         --surface-code-block-body: #121317;
+        --annotation-number-tint: 22%;
         --code-block-border: #23262c;
         --border: #262930;
         --border-subtle: #1e2026;
@@ -2401,6 +2405,268 @@ pre code {
     border: 0;
     border-radius: 0;
     padding-right: 3.25rem;
+}
+
+/* Code annotations. Like a footnote reference, a marker is a small raised number after the word it explains. A marker
+   in the middle of a line floats above the end of its word and takes no width, so the code keeps its own spacing; a
+   marker in a comment at the end of a line sits in the line. At rest the number is secondary grey without a
+   background, so the code stays in front; on hover, while its explanation is open, or while its legend entry is
+   pointed at, it fills with the link color. */
+.code-annotation {
+    position: relative;
+    display: inline-block;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    line-height: inherit;
+    vertical-align: baseline;
+    cursor: pointer;
+}
+
+.code-annotation-floating {
+    width: 0;
+    height: 1em;
+}
+
+/* System font digits with the line box trimmed to their cap height sit in the middle of the bubble. */
+.code-annotation-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    min-width: 1.6em;
+    height: 1.6em;
+    padding: 0 0.35em;
+    border-radius: 999px;
+    color: var(--text-secondary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 0.62em;
+    font-weight: 700;
+    font-variant-numeric: lining-nums tabular-nums;
+    line-height: 1;
+    text-box: trim-both cap alphabetic;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.code-annotation-floating .code-annotation-number {
+    position: absolute;
+    top: -1.15em;
+    left: -0.3em;
+}
+
+.code-annotation-inline .code-annotation-number {
+    position: relative;
+    top: -0.45em;
+}
+
+/* The number looks small, but takes clicks and taps on a 24px square centered on it. */
+.code-annotation-number::before {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 24px;
+    height: 24px;
+    content: "";
+    transform: translate(-50%, -50%);
+}
+
+.code-annotation:hover .code-annotation-number,
+.code-annotation.is-open .code-annotation-number,
+.code-annotation.is-highlighted .code-annotation-number {
+    background: var(--link);
+    color: var(--page-background);
+}
+
+/* The scrolling code clips overflow, so the ring sits inset on the number, which is what readers see of the marker. */
+.code-annotation:focus-visible {
+    outline: none;
+}
+
+.code-annotation:focus-visible .code-annotation-number {
+    outline: 2px solid var(--link);
+    outline-offset: -2px;
+}
+
+.code-annotation.is-open:focus-visible .code-annotation-number {
+    box-shadow: inset 0 0 0 3px var(--page-background);
+}
+
+/* Floating numbers need room above their line. All lines get it, so the rhythm of the code stays even. */
+.code-block-floating-markers pre {
+    line-height: 2;
+}
+
+/* The explanations open as popovers next to their markers. Without popovers, the legend below the code has them. */
+.code-annotations {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+@supports not selector(:popover-open) {
+    .code-annotations {
+        display: none;
+    }
+}
+
+@supports selector(:popover-open) {
+    .code-annotations > [popover] {
+        box-sizing: border-box;
+        gap: 0.55rem;
+        align-items: center;
+        max-width: min(28rem, calc(100vw - 32px));
+        padding: 0.65rem 0.9rem;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--page-background);
+        color: var(--text-body);
+        box-shadow: 0 8px 24px rgb(0 0 0 / 16%);
+        font-size: 0.875rem;
+        line-height: 1.55;
+        list-style: none;
+        /* Layout and fade belong to the popover itself, so nothing moves while it fades out after closing. */
+        opacity: 0;
+        transition: opacity 0.12s ease, display 0.12s allow-discrete, overlay 0.12s allow-discrete;
+    }
+
+    .code-annotations > [popover]:popover-open {
+        display: flex;
+        opacity: 1;
+    }
+
+    @starting-style {
+        .code-annotations > [popover]:popover-open {
+            opacity: 0;
+        }
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .code-annotations > [popover] {
+        transition: none;
+    }
+}
+
+.code-annotations .code-annotation-number,
+.code-legend .code-annotation-number {
+    flex: none;
+    min-width: 1.4rem;
+    height: 1.4rem;
+    font-size: 0.7rem;
+}
+
+.code-annotations .code-annotation-number {
+    background: var(--link);
+    color: var(--page-background);
+}
+
+.code-annotation-text > :first-child {
+    margin-top: 0;
+}
+
+.code-annotation-text > :last-child {
+    margin-bottom: 0;
+}
+
+/* With anchor positioning the explanation opens below its marker and flips where there is no room; without it,
+   it opens in the middle of the window. */
+@supports (position-area: bottom) {
+    .code-annotations > [popover] {
+        inset: auto;
+        /* Keeps the page gutter to the window edge; the fallbacks mirror the margins with the position. */
+        margin: 6px 16px 6px 0;
+        position-area: bottom span-right;
+        position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+    }
+}
+
+/* The legend is the footer of the code card, the counterpart of its title bar. It starts closed. */
+.markdown-content details.code-legend {
+    margin: 0;
+    border: 0;
+    border-top: 1px solid var(--code-block-border);
+    border-radius: 0;
+    background: var(--surface-code-block);
+}
+
+.markdown-content details.code-legend > summary {
+    padding: 0.5rem 2.75rem 0.5rem 1.25rem;
+    border-radius: 0;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.markdown-content details.code-legend > summary::after {
+    width: 0.4rem;
+    height: 0.4rem;
+}
+
+.markdown-content details.code-legend[open] > summary {
+    border-bottom: 1px solid var(--code-block-border);
+    border-radius: 0;
+}
+
+.markdown-content details.code-legend > summary:hover {
+    background: transparent;
+    color: var(--text-primary);
+}
+
+.markdown-content details.code-legend > ol {
+    display: grid;
+    gap: 0.3rem;
+    margin: 0;
+    padding: 0.6rem 1.25rem 0.8rem;
+    background: var(--surface-code-block-body);
+    font-size: 0.8125rem;
+    list-style: none;
+}
+
+.markdown-content .code-legend li {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.6rem;
+    align-items: center;
+    margin: 0 -0.4rem;
+    padding: 0.2rem 0.4rem;
+    border-radius: 6px;
+    color: var(--text-body);
+    line-height: 1.5;
+    transition: background-color 0.15s ease;
+}
+
+.markdown-content .code-legend li.is-active {
+    background: color-mix(in srgb, var(--link) 10%, transparent);
+}
+
+.code-legend .code-annotation-number {
+    background: color-mix(in srgb, var(--text-secondary) var(--annotation-number-tint), var(--surface-code-block-body));
+}
+
+.code-legend li:hover .code-annotation-number,
+.code-legend li.is-active .code-annotation-number {
+    background: var(--link);
+    color: var(--page-background);
+}
+
+/* In print, the explanations are the legend. code-copy.js opens it before printing; ::details-content shows its
+   entries without the script too, where browsers support it. */
+@media print {
+    .code-annotations {
+        display: none;
+    }
+
+    .markdown-content details.code-legend > summary::after {
+        display: none;
+    }
+
+    details.code-legend::details-content {
+        content-visibility: visible;
+        display: block;
+    }
 }
 
 .diagram,

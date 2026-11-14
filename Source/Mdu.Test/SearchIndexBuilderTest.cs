@@ -724,6 +724,15 @@ public class SearchIndexBuilderTest
         Assert.Equal("user-command", entries[1].GetProperty("code").GetString());
     }
 
+    [Fact]
+    public void HeadingsInCodeAnnotationsStartNoSection()
+    {
+        var entries = BuildIndex("# Guide\n\n```python\nx = 1 # (1)!\n```\n\n1. Note\n\n    ### Details\n\n    More text.\n");
+
+        Assert.DoesNotContain(entries, entry => entry.GetProperty("url").GetString()!.Contains("#details", StringComparison.Ordinal));
+        Assert.Contains(entries, entry => entry.GetProperty("code").GetString() == "x = 1");
+    }
+
     private static JsonElement[] BuildIndex(string markdown)
     {
         var outputPath = Path.Combine(Path.GetTempPath(), $"mdu-search-test-{Guid.NewGuid():N}");

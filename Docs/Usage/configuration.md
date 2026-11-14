@@ -97,6 +97,7 @@ Both approaches follow the browser's effective preference, which can come from a
 | `content.glossary` | None | Markdown file with [abbreviations](../Features/Abbreviations.md#shared-glossary) for all pages |
 | `content.icons` | `.icons`, if it exists | Folder with [your own icon sets](../Features/Icons-and-Emojis.md#your-own-icons) |
 | `content.tags` | None | Markdown page that defines the allowed [tags](../Features/Tags.md#define-the-vocabulary); unknown tags then stop `mdu render` and `mdu pdf` |
+| `content.code.annotate` | `true` | `false` turns off [code annotations](../Features/CodeBlocks.md#annotations) on all pages |
 
 ### `diagrams`
 
@@ -107,7 +108,7 @@ Both approaches follow the browser's effective preference, which can come from a
 
 ## Settings for one page
 
-`mdu.yml` applies to the whole site. YAML front matter at the top of a page applies to that page and uses the same naming. Its `navigation`, `pdf`, `images`, and `page` keys also work in the dotted form, such as `navigation.order: 10`:
+`mdu.yml` applies to the whole site. YAML front matter at the top of a page applies to that page and uses the same naming. Its `navigation`, `pdf`, `images`, `page`, and `content` keys also work in the dotted form, such as `navigation.order: 10`:
 
 ```yaml title="docs/Setup/README.md"
 ---
@@ -136,5 +137,6 @@ navigation:
 | `page.breadcrumbs` | `false` hides the page’s breadcrumb trail |
 | `page.pagination` | `false` hides the page’s previous and next links |
 | `page.toc` | `false` hides the table of contents and gives its space to the content |
+| `content.code.annotate` | `false` turns off [code annotations](../Features/CodeBlocks.md#turn-annotations-off) on the page, `true` turns them on against the site setting |
 
 [Navigation](../Features/Navigation.md) explains the navigation keys in detail.

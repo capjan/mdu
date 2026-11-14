@@ -55,11 +55,16 @@ public sealed class SearchIndexBuilder
         _iconText.Clear();
     }
 
-    public void AddPage(string title, string url, string markdown, IReadOnlyList<string>? tags = null)
+    /// <param name="title">The page title.</param>
+    /// <param name="url">The page URL relative to the site.</param>
+    /// <param name="markdown">The page without front matter.</param>
+    /// <param name="tags">The tag names of the page.</param>
+    /// <param name="codeAnnotations">Whether the page's code blocks show annotations: its front matter, or else the site's setting.</param>
+    public void AddPage(string title, string url, string markdown, IReadOnlyList<string>? tags = null, bool codeAnnotations = true)
     {
         _entries.RemoveAll(entry => entry.PageUrl.Equals(url, StringComparison.Ordinal));
         var firstEntry = _entries.Count;
-        AddPageEntries(title, url, markdown);
+        AddPageEntries(title, url, markdown, codeAnnotations);
         if (tags is not { Count: > 0 }) return;
         var pageTags = tags.ToArray();
         for (var index = firstEntry; index < _entries.Count; index++)
@@ -77,13 +82,15 @@ public sealed class SearchIndexBuilder
         });
     }
 
-    private void AddPageEntries(string title, string url, string markdown)
+    private void AddPageEntries(string title, string url, string markdown, bool codeAnnotations)
     {
         var firstEntry = _entries.Count;
         var document = Markdig.Markdown.Parse(markdown, _pipeline);
+        // Headings in annotations have no anchor on the page, so they start no search section.
+        Markdown.Renderer.CodeAnnotations.ClearHeadingIds(document, codeAnnotations);
         var parts = document.Descendants().All(IsSupportedNode)
-            ? ReadMarkdown(document)
-            : ReadRenderedHtml(document, _pipeline);
+            ? ReadMarkdown(document, codeAnnotations)
+            : ReadRenderedHtml(document, _pipeline, codeAnnotations);
         var pairedMarkers = GetPairedMarkers(parts);
         var inOpenApi = pairedMarkers.Count == 0 && parts.Any(part => part.IsOperation);
         var currentEntry = -1;
@@ -189,7 +196,9 @@ public sealed class SearchIndexBuilder
         public List<string> Code { get; } = new();
     }
 
-    internal List<SearchPart> ReadMarkdown(MarkdownDocument document)
+    /// <param name="document">The parsed page.</param>
+    /// <param name="codeAnnotations">Whether the page's code blocks show annotations, whose markers are then left out.</param>
+    internal List<SearchPart> ReadMarkdown(MarkdownDocument document, bool codeAnnotations = true)
     {
         var parts = new List<SearchPart> { new() };
         void Read(MarkdownObject node)
@@ -207,7 +216,7 @@ public sealed class SearchIndexBuilder
             }
             else if (node is CodeBlock code)
             {
-                if (IsSearchableCodeBlock(code)) AddCode(parts[^1].Code, GetCode(code));
+                if (IsSearchableCodeBlock(code)) AddCode(parts[^1].Code, GetCode(code, codeAnnotations));
                 parts[^1].Text.Append(' ');
             }
             else if (node is ParagraphBlock or HeadingBlock)
@@ -303,14 +312,14 @@ public sealed class SearchIndexBuilder
         }
     }
 
-    internal List<SearchPart> ReadRenderedHtml(MarkdownDocument document, MarkdownPipeline pipeline)
+    internal List<SearchPart> ReadRenderedHtml(MarkdownDocument document, MarkdownPipeline pipeline, bool codeAnnotations = true)
     {
         var prefix = _codePrefix;
         var code = new List<string>();
         using var writer = new StringWriter();
         var renderer = new Markdig.Renderers.HtmlRenderer(writer);
         pipeline.Setup(renderer);
-        renderer.ObjectRenderers.Insert(0, new SearchCodeBlockRenderer(code, prefix));
+        renderer.ObjectRenderers.Insert(0, new SearchCodeBlockRenderer(code, prefix, codeAnnotations));
         renderer.ObjectRenderers.Insert(0, new SearchCodeInlineRenderer(code, prefix));
         renderer.ObjectRenderers.Insert(0, new SearchLinkInlineRenderer(code, prefix));
         renderer.Render(document);
@@ -324,11 +333,11 @@ public sealed class SearchIndexBuilder
         values.Add(code.Trim());
     }
 
-    private sealed class SearchCodeBlockRenderer(List<string> code, string prefix) : HtmlObjectRenderer<CodeBlock>
+    private sealed class SearchCodeBlockRenderer(List<string> code, string prefix, bool codeAnnotations) : HtmlObjectRenderer<CodeBlock>
     {
         protected override void Write(Markdig.Renderers.HtmlRenderer renderer, CodeBlock block)
         {
-            if (IsSearchableCodeBlock(block)) WriteCodeMarker(renderer, GetCode(block), code, prefix);
+            if (IsSearchableCodeBlock(block)) WriteCodeMarker(renderer, GetCode(block, codeAnnotations), code, prefix);
         }
     }
 
@@ -659,7 +668,11 @@ public sealed class SearchIndexBuilder
         if (!string.IsNullOrWhiteSpace(value)) code.Add(value.Trim());
     }
 
-    private static string GetCode(CodeBlock block) =>
+    // Annotated code is indexed without its markers, which readers see as buttons rather than as code. Where the page
+    // turns annotations off, the markers stay, as on the page.
+    private static string GetCode(CodeBlock block, bool codeAnnotations) =>
+        block is FencedCodeBlock fenced
+            ? Markdown.Renderer.CodeAnnotations.SearchText(fenced, codeAnnotations).ReplaceLineEndings(Environment.NewLine) :
         block is LeafBlock leaf && leaf.Lines.Lines is not null
             ? string.Join(Environment.NewLine, leaf.Lines.Lines.Select(line => line.Slice.ToString()))
             : string.Empty;
@@ -671,8 +684,10 @@ public sealed class SearchIndexBuilder
         var languageEnd = info.IndexOfAny([' ', '\t']);
         var language = languageEnd < 0 ? info : info[..languageEnd];
 
-        return language.ToLowerInvariant() is not (
-            "mermaid" or "plantuml" or "puml" or "context" or "isometric" or "hero" or "icon-search" or "openapi" or "tags");
+        // Diagrams, formulas, and page components are not code; openapi and tags blocks expand into the page before it is indexed.
+        return Markdown.Renderer.HighlightedCodeBlockRenderer.IsCodeLanguage(language) &&
+               !language.Equals(Markdown.Renderer.OpenApiMarkdownRenderer.CodeBlockLanguage, StringComparison.OrdinalIgnoreCase) &&
+               !language.Equals("tags", StringComparison.OrdinalIgnoreCase);
     }
 
     private static void NormalizeMarkdownLinks(CodeInline code)

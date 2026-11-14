@@ -70,6 +70,15 @@ public class Lexer
     private readonly bool _highlightMarkdown;
     private readonly bool _highlightHtml;
     private readonly bool _highlightNumbers;
+
+    /// <summary>
+    /// Whether code annotation markers count outside comments, at the end of a line: in languages without comments,
+    /// such as plain text, console output, or JSON, and in shell commands, where a trailing <c> (1)</c> is never code.
+    /// Elsewhere, such as SQL's <c>VALUES (1)</c> or a sentence in Markdown, it can be content, so markers belong in comments.
+    /// </summary>
+    public bool AllowsLineEndMarkers => _highlightShellTokens ||
+        (_lineCommentStart.Length == 0 && _blockCommentStart is null && !_highlightMarkdown && !_highlightHtml);
+
     private readonly string? _blockCommentStart;
     private readonly string? _blockCommentEnd;
 

@@ -21,9 +21,11 @@ public partial class MarkdigVisitor : BaseVisitor
         MarkdownFile[]? navigationRoots = null,
         IReadOnlyCollection<string>? siteMediaProviders = null,
         IReadOnlyDictionary<string, DateTimeOffset>? lastModifiedDates = null,
-        SiteTags? siteTags = null) : base(rootPath, outPath, ".html")
+        SiteTags? siteTags = null,
+        bool siteCodeAnnotations = true) : base(rootPath, outPath, ".html")
     {
         _siteTags = siteTags ?? SiteTags.Empty;
+        _siteCodeAnnotations = siteCodeAnnotations;
         _rootPath = rootPath;
         _outPath = outPath;
         _htmlFoundation = htmlFoundation;
@@ -61,6 +63,8 @@ public partial class MarkdigVisitor : BaseVisitor
     private readonly Dictionary<MarkdownFile, IReadOnlyList<string>> _openApiSpecPagePaths = new();
     private readonly Dictionary<MarkdownFile, PreparedPage> _preparedPages = new();
     private readonly SiteTags _siteTags;
+    // The site's content.code.annotate setting, which pages override in their front matter.
+    private readonly bool _siteCodeAnnotations;
 
     public IReadOnlyCollection<string> SiteMediaProviders => _siteMediaProviders;
     public IReadOnlyDictionary<MarkdownFile, IReadOnlyList<string>> OpenApiSpecPagePaths => _openApiSpecPagePaths;
@@ -115,7 +119,8 @@ public partial class MarkdigVisitor : BaseVisitor
             out var specifications, page.SourceRootPath, Path.GetFileName(outputFileName),
             GetOutputSiblings(_pageOutputs, Path.GetDirectoryName(outputFileName)!));
         _searchIndexBuilder.AddPage(NavigationPage.GetTitle(page), GetSiteRelativeUrl(outputFileName), markdown,
-            _siteTags.For(page).Select(tag => tag.Name).ToArray());
+            _siteTags.For(page).Select(tag => tag.Name).ToArray(),
+            CodeAnnotations.ReadFrontMatter(page.FrontMatter) ?? _siteCodeAnnotations);
         return new PreparedPage(markdown, specifications);
     }
 
@@ -213,7 +218,8 @@ public partial class MarkdigVisitor : BaseVisitor
                     pageTags: GetTagLinks(_siteTags.For(entity), outputDirectory),
                     tagSectionLinks: ReferenceEquals(entity, _siteTags.VocabularyPage)
                         ? GetTagLinks(_siteTags.Tags, outputDirectory)
-                        : null).GetAwaiter().GetResult();
+                        : null,
+                    codeAnnotations: CodeAnnotations.ReadFrontMatter(entity.FrontMatter)).GetAwaiter().GetResult();
 
             File.Move(temporaryPath, outputFileName, true);
             WriteAliasPage(entity, outputFileName);
@@ -325,7 +331,8 @@ public partial class MarkdigVisitor : BaseVisitor
                         pdfDownloadUrls: pdfDownloadUrls,
                         pdfDownloadNames: pdfDownloadNames,
                         glossaryScope: GetGlossaryScope(entity),
-                        imageZoom: ImageZoom.ReadFrontMatter(entity.FrontMatter)).GetAwaiter().GetResult();
+                        imageZoom: ImageZoom.ReadFrontMatter(entity.FrontMatter),
+                        codeAnnotations: CodeAnnotations.ReadFrontMatter(entity.FrontMatter)).GetAwaiter().GetResult();
 
                 File.Move(temporaryPath, specOutputPath, true);
                 generatedPagePaths.Add(specOutputPath);
