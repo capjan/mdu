@@ -150,8 +150,23 @@ public class CodeAnnotationMarkersTest
         var html = new HtmlFormatter { AnnotationIdPrefix = "a-7-" }.WriteToString(Apply("python", "x = 1 # (1)!"));
 
         Assert.Contains(
-            "<button class=\"code-annotation\" type=\"button\" popovertarget=\"a-7-1\" style=\"anchor-name: --a-7-1\" aria-label=\"Annotation 1\">1</button>",
+            "<button class=\"code-annotation code-annotation-inline\" type=\"button\" popovertarget=\"a-7-1\" style=\"anchor-name: --a-7-1\" aria-label=\"Annotation 1\"><span class=\"code-annotation-number\">1</span></button>",
             html);
         Assert.Contains("<span class=\"comment\"># </span><button", html);
+    }
+
+    [Theory]
+    [InlineData("csharp", "var total = net /* (1)! */ * rate;", "code-annotation-floating")]
+    [InlineData("csharp", "var total = net; // (1)!", "code-annotation-inline")]
+    [InlineData("csharp", "var total = net; /* (1)! (2)! */", "code-annotation-inline")]
+    [InlineData("bash", "kubectl apply -f app.yaml (1)!", "code-annotation-floating")]
+    public void FloatsMarkersInTheLineAndKeepsMarkersInLineEndCommentsInline(string language, string code, string kind)
+    {
+        var html = new HtmlFormatter().WriteToString(Apply(language, code));
+        var classes = System.Text.RegularExpressions.Regex.Matches(html, "class=\"code-annotation (?<kind>[a-z-]+)\"")
+            .Select(match => match.Groups["kind"].Value);
+
+        Assert.All(classes, value => Assert.Equal(kind, value));
+        Assert.NotEmpty(classes);
     }
 }

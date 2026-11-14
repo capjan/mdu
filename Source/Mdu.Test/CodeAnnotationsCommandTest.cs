@@ -59,8 +59,8 @@ public class CodeAnnotationsCommandTest
         });
 
         Assert.Equal(0, result);
-        Assert.DoesNotContain("class=\"code-annotation\"", File.ReadAllText(Path.Combine(output, "index.html")));
-        Assert.Contains("class=\"code-annotation\"", File.ReadAllText(Path.Combine(output, "On.html")));
+        Assert.DoesNotContain("class=\"code-annotation ", File.ReadAllText(Path.Combine(output, "index.html")));
+        Assert.Contains("class=\"code-annotation ", File.ReadAllText(Path.Combine(output, "On.html")));
     });
 
     [Fact]
@@ -122,7 +122,9 @@ public class CodeAnnotationsCommandTest
     }
 
     [Theory]
-    [InlineData("", "x = 1 # (1)1. The answer.")]
+    // With annotations the comment that only held the marker is gone: the code "x = 1", the raised number 1, then the
+    // legend entry with its number bubble 1 and its text.
+    [InlineData("", "x = 111The answer.")]
     [InlineData("content.code.annotate: false", "x = 1 # (1)!")]
     public void ThePdfFollowsTheSiteSetting(string yaml, string expectedText) => WithRoot(root =>
     {

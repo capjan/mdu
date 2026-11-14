@@ -71,7 +71,11 @@ public class HighlightedCodeBlockRenderer : HtmlObjectRenderer<CodeBlock>
             tokens = Lexer.ForLanguage(languageName).Analyse(code).ToList();
         }
         var renderedHtml = formatter.WriteToString(tokens);
-        var annotatedClass = annotations is null ? string.Empty : " code-block-annotated";
+        // Floating markers need more room between the lines of their block; see main.css.
+        var annotatedClass = annotations is null ? string.Empty
+            : renderedHtml.Contains(HtmlFormatter.FloatingAnnotationClass, StringComparison.Ordinal)
+                ? " code-block-annotated code-block-floating-markers"
+                : " code-block-annotated";
 
         if (title != null)
         {
@@ -95,25 +99,49 @@ public class HighlightedCodeBlockRenderer : HtmlObjectRenderer<CodeBlock>
         renderer.WriteLine("</figure>");
     }
 
-    // Each entry opens as a popover from its marker. Browsers without popovers show the list below the code.
+    // Each entry opens as a popover from its marker, with its number at the start. The legend below the code lists all
+    // entries for an overview, for touch screens, for browsers without popovers, and for print; it starts closed.
     private static void WriteAnnotations(Markdig.Renderers.HtmlRenderer renderer, CodeBlock code, ListBlock list)
     {
-        var idPrefix = CodeAnnotations.IdPrefix(code);
+        var idPrefix = WebUtility.HtmlEncode(CodeAnnotations.IdPrefix(code));
+        var items = list.OfType<ListItemBlock>().ToList();
         var implicitParagraph = renderer.ImplicitParagraph;
         renderer.ImplicitParagraph = !list.IsLoose;
+
         renderer.WriteLine("<ol class=\"code-annotations\">");
-        var number = 1;
-        foreach (var block in list)
+        for (var index = 0; index < items.Count; index++)
         {
-            if (block is not ListItemBlock item) continue;
-            var id = WebUtility.HtmlEncode(idPrefix) + number.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var number = Number(index);
+            var id = idPrefix + number;
             renderer.Write("<li id=\"").Write(id).Write("\" popover=\"auto\" style=\"position-anchor: --").Write(id).Write("\">");
-            renderer.WriteChildren(item);
+            WriteEntry(renderer, number, items[index]);
             renderer.WriteLine("</li>");
-            number++;
         }
         renderer.WriteLine("</ol>");
+
+        var count = items.Count == 1 ? "1 annotation" : $"{Number(items.Count - 1)} annotations";
+        renderer.Write("<details class=\"code-legend\"><summary>").Write(count).WriteLine("</summary>");
+        renderer.WriteLine("<ol>");
+        for (var index = 0; index < items.Count; index++)
+        {
+            var number = Number(index);
+            renderer.Write("<li data-annotation=\"").Write(idPrefix + number).Write("\">");
+            WriteEntry(renderer, number, items[index]);
+            renderer.WriteLine("</li>");
+        }
+        renderer.WriteLine("</ol>");
+        renderer.WriteLine("</details>");
         renderer.ImplicitParagraph = implicitParagraph;
+
+        static string Number(int index) => (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static void WriteEntry(Markdig.Renderers.HtmlRenderer renderer, string number, ListItemBlock item)
+    {
+        renderer.Write("<span class=\"code-annotation-number\" aria-hidden=\"true\">").Write(number).Write("</span>");
+        renderer.Write("<div class=\"code-annotation-text\">");
+        renderer.WriteChildren(item);
+        renderer.Write("</div>");
     }
 
     internal static string GetLanguage(FencedCodeBlock block)

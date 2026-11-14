@@ -110,33 +110,55 @@ content:
 1. Shown in the header and in the browser tab.
 2. A page whose `##` headings are the allowed tags. Unknown tags then stop `mdu render`.
 
-Select a marker, or move to it with ++tab++ and press ++enter++. The marker stays filled while its explanation is open. Esc or a click elsewhere closes it. The copy button copies the code without the markers and without comments that held nothing else.
+Point at a marker to read its explanation, like a footnote preview. A click keeps it open until you click elsewhere or press Esc, and on touch screens a tap opens it. With the keyboard, move to a marker with ++tab++. The legend below the code lists all explanations; it starts closed. The copy button copies the code without the markers and without comments that held nothing else.
 
 The syntax is the one of Material for MkDocs, so annotated pages need no changes when you migrate. On GitHub and in your editor, the comment and the numbered list stay readable as they are.
 
 ### Explain parts of a line
 
-A marker can also explain a single operand. Put it in a block comment right after the operand, such as `/* (1)! */`. Because more code follows, the comment disappears and the number sits on the operand. The comment at the end of the line stays and explains the whole statement:
+A marker can also explain a single operand. Put it in a block comment right after the operand, such as `/* (1)! */`. Because more code follows, the comment disappears and the number floats above the operand, so the code keeps its own spacing. The comment at the end of a line stays and explains the whole statement:
 
 ~~~markdown title="Markdown"
-```cs title="Invoice.cs"
-var total = net /* (1)! */ * (1 + vatRate /* (2)! */) - discount; // (3)!
+```cs title="Billing.cs"
+var gross   = net /* (1)! */ * (1 + vatRate /* (2)! */);
+var payable = gross - discount /* (3)! */ - prepaid /* (4)! */;
+var days    = (end - start).Days /* (5)! */;
+var daily   = payable / days;
+if (daily > limit /* (6)! */)
+{
+    throw new BudgetException(daily, limit); // (7)!
+}
 ```
 
-1. The price of all items before tax.
-2. The tax rate of the customer's country, such as `0.19` for Germany.
-3. Discounts apply after tax, so they lower the amount the customer pays.
+1. Sum of all items before tax.
+2. Tax rate of the customer's country.
+3. Discount granted after tax.
+4. Amount already paid in advance.
+5. Whole days of the billing period.
+6. Maximum daily amount from the contract.
+7. Stops the billing run so that someone checks the invoice.
 ~~~
 
-```cs title="Invoice.cs"
-var total = net /* (1)! */ * (1 + vatRate /* (2)! */) - discount; // (3)!
+```cs title="Billing.cs"
+var gross   = net /* (1)! */ * (1 + vatRate /* (2)! */);
+var payable = gross - discount /* (3)! */ - prepaid /* (4)! */;
+var days    = (end - start).Days /* (5)! */;
+var daily   = payable / days;
+if (daily > limit /* (6)! */)
+{
+    throw new BudgetException(daily, limit); // (7)!
+}
 ```
 
-1. The price of all items before tax.
-2. The tax rate of the customer's country, such as `0.19` for Germany.
-3. Discounts apply after tax, so they lower the amount the customer pays.
+1. Sum of all items before tax.
+2. Tax rate of the customer's country.
+3. Discount granted after tax.
+4. Amount already paid in advance.
+5. Whole days of the billing period.
+6. Maximum daily amount from the contract.
+7. Stops the billing run so that someone checks the invoice.
 
-This works in every language with block comments, such as C#, Java, JavaScript, TypeScript, Go, Rust, Swift, Kotlin, CSS, and SQL. The copy button copies `var total = net * (1 + vatRate) - discount;`.
+This works in every language with block comments, such as C#, Java, JavaScript, TypeScript, Go, Rust, Swift, Kotlin, CSS, and SQL. The copy button copies the code without the markers and without the comments that only held them.
 
 ### Rules
 
@@ -147,7 +169,7 @@ This works in every language with block comments, such as C#, Java, JavaScript, 
 - A code block is annotated when at least one marker matches an entry. The whole list then belongs to the code block. A list after code without matching markers stays an ordinary list.
 - Several markers on one line and the same marker in several places are fine.
 
-In the [PDF](../Usage/pdf.md), markers read as `(1)` in the code and the entries follow as a numbered list below it. `mdu lint` warns about a marker without an entry (`MDU029`) and an entry without a marker (`MDU030`).
+In the [PDF](../Usage/pdf.md), markers are small raised numbers after the word they explain, without the comments that hold them, and the entries follow as a numbered list below the code. `mdu lint` warns about a marker without an entry (`MDU029`) and an entry without a marker (`MDU030`).
 
 ### Turn annotations off
 

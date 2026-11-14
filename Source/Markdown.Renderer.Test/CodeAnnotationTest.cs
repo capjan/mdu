@@ -27,14 +27,29 @@ public class CodeAnnotationTest
 
         Assert.Contains("<figure class=\"code-block code-block-titled code-block-annotated\">", html);
         Assert.NotEmpty(id);
-        Assert.Contains($": Handbook <span class=\"comment\"># </span><button class=\"code-annotation\" type=\"button\" popovertarget=\"{id}1\"", html);
-        Assert.Contains($"<span class=\"comment\"># </span><button class=\"code-annotation\" type=\"button\" popovertarget=\"{id}2\"", html);
-        Assert.Contains($"<li id=\"{id}1\" popover=\"auto\" style=\"position-anchor: --{id}1\">Shown in the header and the browser tab.</li>", html);
-        Assert.Contains($"<li id=\"{id}2\" popover=\"auto\" style=\"position-anchor: --{id}2\">Without <code>url</code> there is no sitemap.</li>", html);
+        Assert.Contains($": Handbook <span class=\"comment\"># </span><button class=\"code-annotation code-annotation-inline\" type=\"button\" popovertarget=\"{id}1\"", html);
+        Assert.Contains($"<span class=\"comment\"># </span><button class=\"code-annotation code-annotation-inline\" type=\"button\" popovertarget=\"{id}2\"", html);
+        Assert.Contains($"<li id=\"{id}1\" popover=\"auto\" style=\"position-anchor: --{id}1\"><span class=\"code-annotation-number\" aria-hidden=\"true\">1</span><div class=\"code-annotation-text\">Shown in the header and the browser tab.</div></li>", html);
+        Assert.Contains($"<li id=\"{id}2\" popover=\"auto\" style=\"position-anchor: --{id}2\"><span class=\"code-annotation-number\" aria-hidden=\"true\">2</span><div class=\"code-annotation-text\">Without <code>url</code> there is no sitemap.</div></li>", html);
         Assert.Contains("data-copy=\"site:\n  name: Handbook\n  url: https://docs.example.com\">", html.ReplaceLineEndings("\n"));
-        // The list moved into the code block and is no longer an ordinary list after it.
-        Assert.Single(Regex.Matches(html, "<ol"));
+        // The list moved into the code block: popovers and a closed legend, and no ordinary list after the code.
+        Assert.Equal(2, Regex.Matches(html, "<ol").Count);
+        Assert.Contains("<details class=\"code-legend\"><summary>2 annotations</summary>", html);
+        Assert.Contains($"<li data-annotation=\"{id}1\"><span class=\"code-annotation-number\" aria-hidden=\"true\">1</span>", html);
+        Assert.DoesNotContain("<details class=\"code-legend\" open", html);
         Assert.True(html.IndexOf("</figure>", StringComparison.Ordinal) < html.IndexOf("<p>After.</p>", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void GivesBlocksWithFloatingMarkersMoreRoomBetweenLines()
+    {
+        var floating = new HtmlRenderer().RenderMarkdownFragment("```cs\nvar total = net /* (1)! */ * rate;\n```\n\n1. One\n");
+        var lineEnd = new HtmlRenderer().RenderMarkdownFragment("```cs\nvar total = net; // (1)!\n```\n\n1. One\n");
+
+        Assert.Contains("code-block-annotated code-block-floating-markers", floating);
+        Assert.Contains("code-annotation-floating", floating);
+        Assert.DoesNotContain("code-block-floating-markers", lineEnd);
+        Assert.Contains("<summary>1 annotation</summary>", lineEnd);
     }
 
     [Fact]
@@ -79,8 +94,8 @@ public class CodeAnnotationTest
     {
         var html = new HtmlRenderer().RenderMarkdownFragment("```bash\nmdu tree (1)!\n```\n> [!RESULT]\n> Docs\n\n1. Prints the tree.\n");
 
-        Assert.Contains("class=\"code-annotation\"", html);
-        Assert.Contains("Prints the tree.</li>", html);
+        Assert.Contains("class=\"code-annotation ", html);
+        Assert.Contains("Prints the tree.</div></li>", html);
         Assert.Contains("result-block", html);
     }
 
@@ -89,8 +104,8 @@ public class CodeAnnotationTest
     {
         var html = new HtmlRenderer().RenderMarkdownFragment("- Step\n\n  ```bash\n  mdu render (1)!\n  ```\n\n  1. Writes the site.\n");
 
-        Assert.Contains("class=\"code-annotation\"", html);
-        Assert.Contains("Writes the site.</li>", html);
+        Assert.Contains("class=\"code-annotation ", html);
+        Assert.Contains("Writes the site.</div></li>", html);
     }
 
     [Theory]
@@ -102,7 +117,7 @@ public class CodeAnnotationTest
     {
         var html = new HtmlRenderer().RenderPdfMarkdownFragment(markdown, page);
 
-        Assert.Equal(annotated, html.Contains("class=\"code-annotation\"", StringComparison.Ordinal));
+        Assert.Equal(annotated, html.Contains("class=\"code-annotation ", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -149,7 +164,7 @@ public class CodeAnnotationTest
     [InlineData("```python title=\"x\" annotate=false\nx = 1 # (1)\n```\n\n1. One\n", false)]
     public void ReadsAnnotateOutsideQuotedArguments(string markdown, bool annotated)
     {
-        Assert.Equal(annotated, new HtmlRenderer().RenderMarkdownFragment(markdown).Contains("class=\"code-annotation\"", StringComparison.Ordinal));
+        Assert.Equal(annotated, new HtmlRenderer().RenderMarkdownFragment(markdown).Contains("class=\"code-annotation ", StringComparison.Ordinal));
         Assert.Empty(CodeAnnotations.FindProblems(markdown, enabled: true)
             .Where(problem => problem.Kind == CodeAnnotations.ProblemKind.InvalidSetting));
     }
@@ -220,14 +235,26 @@ public class CodeAnnotationTest
     public void ThePdfShowsMarkersInTheCodeAndTheEntriesBelowIt()
     {
         var layout = new PdfLayout(new HtmlRenderer(), "");
-        layout.RenderSection(new PdfSourceSection("Config", "config.html", Annotated));
-        var text = string.Concat(layout.Complete().Pages.SelectMany(page =>
-            Regex.Matches(page.Content.ToString(), @"<(?<hex>[0-9A-F]*)> Tj")
-                .Select(match => Encoding.Latin1.GetString(Convert.FromHexString(match.Groups["hex"].Value)))));
+        layout.RenderSection(new PdfSourceSection("Config", "config.html",
+            "```cs\nvar total = net /* (1)! */ * rate /* (2)! */;\n```\n\n1. Shown in the header and the browser tab.\n2. Rate.\n"));
+        var operations = layout.Complete().Pages.SelectMany(page =>
+            Regex.Matches(page.Content.ToString(), @"BT /F\d+ (?<size>[\d.]+) Tf 1 0 0 1 (?<x>[-\d.]+) (?<y>[-\d.]+) Tm <(?<hex>[0-9A-F]*)> Tj")
+                .Select(match => (
+                    Size: double.Parse(match.Groups["size"].Value, System.Globalization.CultureInfo.InvariantCulture),
+                    X: double.Parse(match.Groups["x"].Value, System.Globalization.CultureInfo.InvariantCulture),
+                    Y: double.Parse(match.Groups["y"].Value, System.Globalization.CultureInfo.InvariantCulture),
+                    Text: Encoding.Latin1.GetString(Convert.FromHexString(match.Groups["hex"].Value)))))
+            .ToList();
+        var text = string.Concat(operations.Select(operation => operation.Text));
+        var marker = operations.FindIndex(operation => operation is { Size: < 6, Text: "1" });
+        var code = operations[marker - 1];
+        var next = operations[marker + 1];
 
-        Assert.Contains("(1)", text);
-        Assert.Contains("(2)", text);
+        // The marker is a small raised number without parentheses, and the code after it keeps its position.
+        Assert.DoesNotContain("(1)", text);
+        Assert.Contains(operations, operation => operation is { Size: < 6, Text: "2" });
+        Assert.True(operations[marker].Y > code.Y, "The number is raised above the code.");
+        Assert.Equal(code.X + code.Text.Length * 8.5 * 0.6, next.X, 1);
         Assert.Contains("Shown in the header and the browser tab.", text);
-        Assert.True(text.IndexOf("(1)", StringComparison.Ordinal) < text.IndexOf("Shown in the header", StringComparison.Ordinal));
     }
 }
