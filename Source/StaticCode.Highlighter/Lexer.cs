@@ -506,6 +506,75 @@ public class Lexer
 
     private static List<(int Start, int End, TokenType Type)> FindMarkdownRanges(string source)
     {
+        var fencedContent = FindFencedCodeContent(source);
+        if (fencedContent.Count == 0)
+            return FindMarkdownRangesCore(source);
+
+        // Blank out the content of nested fenced code blocks so that their code is not read as
+        // Markdown prose, and drop any range that still reaches into such content.
+        var masked = source.ToCharArray();
+        foreach (var (start, end) in fencedContent)
+            for (var index = start; index < end; index++)
+                if (masked[index] is not ('\r' or '\n'))
+                    masked[index] = ' ';
+
+        return FindMarkdownRangesCore(new string(masked))
+            .Where(range => !fencedContent.Any(content => range.Start < content.End && content.Start < range.End))
+            .ToList();
+    }
+
+    private static List<(int Start, int End)> FindFencedCodeContent(string source)
+    {
+        var regions = new List<(int Start, int End)>();
+        var frontMatter = MarkdownFrontMatterRegex.Match(source);
+        var position = frontMatter.Success ? frontMatter.Length : 0;
+        char fenceChar = default;
+        var fenceLength = 0;
+        var contentStart = -1;
+
+        while (position < source.Length)
+        {
+            var lineEnd = source.IndexOf('\n', position);
+            var nextLine = lineEnd < 0 ? source.Length : lineEnd + 1;
+            var line = source.AsSpan(position, (lineEnd < 0 ? source.Length : lineEnd) - position).TrimEnd('\r');
+
+            var indent = 0;
+            while (indent < line.Length && indent < 4 && line[indent] == ' ')
+                indent++;
+            var marker = indent < 4 && indent < line.Length ? line[indent] : default;
+            var markerLength = 0;
+            if (marker is '`' or '~')
+                while (indent + markerLength < line.Length && line[indent + markerLength] == marker)
+                    markerLength++;
+            var rest = line[(indent + markerLength)..];
+
+            if (contentStart < 0)
+            {
+                if (markerLength >= 3 && (marker == '~' || !rest.Contains('`')))
+                {
+                    fenceChar = marker;
+                    fenceLength = markerLength;
+                    contentStart = nextLine;
+                }
+            }
+            else if (marker == fenceChar && markerLength >= fenceLength && rest.Trim(" \t").IsEmpty)
+            {
+                if (position > contentStart)
+                    regions.Add((contentStart, position));
+                contentStart = -1;
+            }
+
+            position = nextLine;
+        }
+
+        if (contentStart >= 0 && contentStart < source.Length)
+            regions.Add((contentStart, source.Length));
+
+        return regions;
+    }
+
+    private static List<(int Start, int End, TokenType Type)> FindMarkdownRangesCore(string source)
+    {
         var ranges = new List<(int Start, int End, TokenType Type)>();
 
         foreach (Match match in MarkdownLinkRegex.Matches(source))
