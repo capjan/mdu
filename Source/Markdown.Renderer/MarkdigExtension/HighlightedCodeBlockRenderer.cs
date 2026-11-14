@@ -35,7 +35,7 @@ public class HighlightedCodeBlockRenderer : HtmlObjectRenderer<CodeBlock>
       DiagramRenderer.TryRenderHtml(language, code, instance, out var diagram) ? $"<figure class=\"diagram\">{diagram}</figure>" : null;
 
   /// <summary>Returns whether blocks of a language are code, as opposed to diagrams, formulas, or page components.</summary>
-  internal static bool IsCodeLanguage(string language) => !SpecialLanguages.ContainsKey(language);
+  public static bool IsCodeLanguage(string language) => !SpecialLanguages.ContainsKey(language);
 
   protected override void Write(Markdig.Renderers.HtmlRenderer renderer, CodeBlock obj)
     {

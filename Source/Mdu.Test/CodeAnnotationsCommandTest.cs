@@ -122,9 +122,9 @@ public class CodeAnnotationsCommandTest
     }
 
     [Theory]
-    [InlineData("", false)]
-    [InlineData("content.code.annotate: false", true)]
-    public void ThePdfFollowsTheSiteSetting(string yaml, bool markersAsCode) => WithRoot(root =>
+    [InlineData("", "x = 1 (1)1. The answer.")]
+    [InlineData("content.code.annotate: false", "x = 1 # (1)!")]
+    public void ThePdfFollowsTheSiteSetting(string yaml, string expectedText) => WithRoot(root =>
     {
         File.WriteAllText(Path.Combine(root, "mdu.yml"), yaml);
         File.WriteAllText(Path.Combine(root, "README.md"), "# Home\n\n" + AnnotatedPage);
@@ -134,8 +134,11 @@ public class CodeAnnotationsCommandTest
             new PdfRenderer(new HtmlRenderer())).Execute(new RenderCommandSettings { RootPath = root, OutputPath = output });
 
         Assert.Equal(0, result);
+        // The text of all drawing operations in order, so it does not matter how the writer splits a line into runs.
         var pdf = System.Text.Encoding.Latin1.GetString(File.ReadAllBytes(output));
-        Assert.Equal(markersAsCode, pdf.Contains(Convert.ToHexString(System.Text.Encoding.Latin1.GetBytes("# (1)!")), StringComparison.Ordinal));
+        var text = string.Concat(System.Text.RegularExpressions.Regex.Matches(pdf, "<(?<hex>[0-9A-F]*)> Tj")
+            .Select(match => System.Text.Encoding.Latin1.GetString(Convert.FromHexString(match.Groups["hex"].Value))));
+        Assert.Contains(expectedText, text);
     });
 
     [Fact]

@@ -21,9 +21,11 @@ public partial class MarkdigVisitor : BaseVisitor
         MarkdownFile[]? navigationRoots = null,
         IReadOnlyCollection<string>? siteMediaProviders = null,
         IReadOnlyDictionary<string, DateTimeOffset>? lastModifiedDates = null,
-        SiteTags? siteTags = null) : base(rootPath, outPath, ".html")
+        SiteTags? siteTags = null,
+        bool siteCodeAnnotations = true) : base(rootPath, outPath, ".html")
     {
         _siteTags = siteTags ?? SiteTags.Empty;
+        _siteCodeAnnotations = siteCodeAnnotations;
         _rootPath = rootPath;
         _outPath = outPath;
         _htmlFoundation = htmlFoundation;
@@ -61,6 +63,8 @@ public partial class MarkdigVisitor : BaseVisitor
     private readonly Dictionary<MarkdownFile, IReadOnlyList<string>> _openApiSpecPagePaths = new();
     private readonly Dictionary<MarkdownFile, PreparedPage> _preparedPages = new();
     private readonly SiteTags _siteTags;
+    // The site's content.code.annotate setting, which pages override in their front matter.
+    private readonly bool _siteCodeAnnotations;
 
     public IReadOnlyCollection<string> SiteMediaProviders => _siteMediaProviders;
     public IReadOnlyDictionary<MarkdownFile, IReadOnlyList<string>> OpenApiSpecPagePaths => _openApiSpecPagePaths;
@@ -116,7 +120,7 @@ public partial class MarkdigVisitor : BaseVisitor
             GetOutputSiblings(_pageOutputs, Path.GetDirectoryName(outputFileName)!));
         _searchIndexBuilder.AddPage(NavigationPage.GetTitle(page), GetSiteRelativeUrl(outputFileName), markdown,
             _siteTags.For(page).Select(tag => tag.Name).ToArray(),
-            _htmlFoundation.CodeAnnotationsFor(CodeAnnotations.ReadFrontMatter(page.FrontMatter)));
+            CodeAnnotations.ReadFrontMatter(page.FrontMatter) ?? _siteCodeAnnotations);
         return new PreparedPage(markdown, specifications);
     }
 

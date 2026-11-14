@@ -6,18 +6,19 @@ namespace StaticCode.Highlighter;
 
 /// <summary>
 /// Finds code annotation markers in a token stream, in the syntax of Material for MkDocs. A marker <c>(1)</c> counts
-/// anywhere in a comment. Outside comments it counts only where the language allows it (see
-/// <see cref="Lexer.AllowsLineEndMarkers"/>), and only at the end of a line after a space, so that code such as
-/// <c>print(1)</c> or SQL's <c>VALUES (1)</c> stays code. <c>(1)!</c> also removes what only carried the marker: the
-/// comment characters of an otherwise empty comment, or the space before a marker outside comments.
+/// anywhere in a comment, and <c>(1)!</c> there also removes the comment characters of an otherwise empty comment.
+/// Outside comments only the explicit form <c>(1)!</c> counts, at the end of a line after a space, and only where the
+/// language allows it (see <see cref="Lexer.AllowsLineEndMarkers"/>). So code and output such as <c>print(1)</c>,
+/// SQL's <c>VALUES (1)</c>, or a log line <c>Retrying (1)</c> stay as they are.
 /// </summary>
 public static class CodeAnnotationMarkers
 {
     private static readonly Regex CommentMarker = new(
         @"\((?<number>[1-9][0-9]{0,2})\)(?<strip>!?)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    // The space before the marker goes with it, so the button follows the code directly.
     private static readonly Regex LineEndMarker = new(
-        @"[ \t]+\((?<number>[1-9][0-9]{0,2})\)(?<strip>!?)[ \t]*(?=\r?\n|\z)",
+        @"[ \t]+\((?<number>[1-9][0-9]{0,2})\)![ \t]*(?=\r?\n|\z)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private const string CommentCharacters = " \t#/*-<>!;%'";
 
@@ -129,9 +130,7 @@ public static class CodeAnnotationMarkers
             if (!isAnnotation(number)) continue;
             var markerStart = match.Groups["number"].Index - 1;
             if (comments.Any(comment => markerStart >= comment.Start && markerStart < comment.End)) continue;
-            markers.Add(match.Groups["strip"].Length > 0
-                ? new Marker(match.Index, match.Index + match.Length, number)
-                : new Marker(markerStart, match.Groups["strip"].Index, number));
+            markers.Add(new Marker(match.Index, match.Index + match.Length, number));
         }
 
         markers.Sort((left, right) => left.Start.CompareTo(right.Start));

@@ -56,6 +56,17 @@ public static class CodeAnnotations
         }
     }
 
+    /// <summary>
+    /// Removes the ids of headings in annotation lists without moving the lists, for readers of the source such as the
+    /// search index: on the page these headings open in a popover and have no anchor.
+    /// </summary>
+    public static void ClearHeadingIds(MarkdownDocument document, bool enabled)
+    {
+        foreach (var annotations in Find(document, enabled))
+        foreach (var heading in annotations.List.Descendants<HeadingBlock>())
+            heading.GetAttributes().Id = null;
+    }
+
     /// <summary>Returns the code blocks that have annotations, without changing the document.</summary>
     public static IReadOnlyList<Annotations> Find(MarkdownDocument document, bool enabled)
     {

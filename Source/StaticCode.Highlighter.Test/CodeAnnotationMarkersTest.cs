@@ -36,12 +36,20 @@ public class CodeAnnotationMarkersTest
         Assert.Equal("x = 1 # the value [1]", Render(Apply("python", "x = 1 # the value (1)!")));
 
     [Theory]
-    [InlineData("bash", "kubectl apply -f app.yaml (1)", "kubectl apply -f app.yaml [1]")]
     [InlineData("bash", "kubectl apply -f app.yaml (1)!", "kubectl apply -f app.yaml[1]")]
-    [InlineData("text", "Server started (2)", "Server started [2]")]
-    [InlineData("json", "{ \"port\": 8080 } (1)", "{ \"port\": 8080 } [1]")]
-    public void ReplacesAMarkerOutsideCommentsAtTheEndOfALine(string language, string code, string expected) =>
+    [InlineData("text", "Server started (2)!", "Server started[2]")]
+    [InlineData("json", "{ \"port\": 8080 } (1)!", "{ \"port\": 8080 }[1]")]
+    [InlineData("unknown-language", "run (1)!  ", "run[1]")]
+    public void ReplacesAnExplicitMarkerOutsideCommentsAtTheEndOfALine(string language, string code, string expected) =>
         Assert.Equal(expected, Render(Apply(language, code)));
+
+    [Theory]
+    [InlineData("bash", "kubectl apply -f app.yaml (1)")]
+    [InlineData("text", "Retrying download (1)")]
+    [InlineData("unknown-language", "INSERT INTO t VALUES (1)")]
+    [InlineData("NoHighlight", "x = (1)")]
+    public void KeepsAPlainLineEndMarkerOutsideComments(string language, string code) =>
+        Assert.Equal(code, Render(Apply(language, code)));
 
     [Theory]
     [InlineData("python", "print(1)")]

@@ -77,7 +77,7 @@ public class CodeAnnotationTest
     [Fact]
     public void AnnotatesBelowAResult()
     {
-        var html = new HtmlRenderer().RenderMarkdownFragment("```bash\nmdu tree (1)\n```\n> [!RESULT]\n> Docs\n\n1. Prints the tree.\n");
+        var html = new HtmlRenderer().RenderMarkdownFragment("```bash\nmdu tree (1)!\n```\n> [!RESULT]\n> Docs\n\n1. Prints the tree.\n");
 
         Assert.Contains("class=\"code-annotation\"", html);
         Assert.Contains("Prints the tree.</li>", html);
@@ -87,7 +87,7 @@ public class CodeAnnotationTest
     [Fact]
     public void AnnotatesCodeInsideAListItem()
     {
-        var html = new HtmlRenderer().RenderMarkdownFragment("- Step\n\n  ```bash\n  mdu render (1)\n  ```\n\n  1. Writes the site.\n");
+        var html = new HtmlRenderer().RenderMarkdownFragment("- Step\n\n  ```bash\n  mdu render (1)!\n  ```\n\n  1. Writes the site.\n");
 
         Assert.Contains("class=\"code-annotation\"", html);
         Assert.Contains("Writes the site.</li>", html);
@@ -185,7 +185,7 @@ public class CodeAnnotationTest
     [Fact]
     public void LeavesDiagramsAlone()
     {
-        var html = new HtmlRenderer().RenderMarkdownFragment("```mermaid\nflowchart LR\n  A --> B (1)\n```\n\n1. One\n");
+        var html = new HtmlRenderer().RenderMarkdownFragment("```mermaid\nflowchart LR\n  A --> B (1)!\n```\n\n1. One\n");
 
         Assert.DoesNotContain("code-annotation", html);
     }
