@@ -86,7 +86,7 @@ Your file stays ordinary Markdown: GitHub shows the code block followed by a blo
 
 ## Annotations
 
-Explain single lines without cluttering the code. Write a marker such as `(1)` in a comment, and a numbered list directly after the code block. Each marker becomes a numbered button that opens the matching entry next to it:
+Explain single lines without cluttering the code. Write a marker such as `(1)` in a comment, and a numbered list directly after the code block. Like a footnote reference, each marker becomes a small raised number right after the word before it, and opens the matching entry next to it:
 
 ~~~markdown title="Markdown"
 ```yaml title="mdu.yml"
@@ -113,6 +113,30 @@ content:
 Select a marker, or move to it with ++tab++ and press ++enter++. ++esc++ or a click elsewhere closes the explanation. The copy button copies the code without the markers.
 
 The syntax is the one of Material for MkDocs, so annotated pages need no changes when you migrate. On GitHub and in your editor, the comment and the numbered list stay readable as they are.
+
+### Explain parts of a line
+
+A marker can also explain a single operand. Put it in a block comment right after the operand, such as `/* (1)! */`. The comment disappears and the number sits on the operand:
+
+~~~markdown title="Markdown"
+```cs title="Invoice.cs"
+var total = net /* (1)! */ * (1 + vatRate /* (2)! */) - discount; // (3)!
+```
+
+1. The price of all items before tax.
+2. The tax rate of the customer's country, such as `0.19` for Germany.
+3. Discounts apply after tax, so they lower the amount the customer pays.
+~~~
+
+```cs title="Invoice.cs"
+var total = net /* (1)! */ * (1 + vatRate /* (2)! */) - discount; // (3)!
+```
+
+1. The price of all items before tax.
+2. The tax rate of the customer's country, such as `0.19` for Germany.
+3. Discounts apply after tax, so they lower the amount the customer pays.
+
+This works in every language with block comments, such as C#, Java, JavaScript, TypeScript, Go, Rust, Swift, Kotlin, CSS, and SQL. The copy button copies `var total = net * (1 + vatRate) - discount;`.
 
 ### Rules
 

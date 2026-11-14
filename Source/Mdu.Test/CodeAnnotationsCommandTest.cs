@@ -122,7 +122,7 @@ public class CodeAnnotationsCommandTest
     }
 
     [Theory]
-    [InlineData("", "x = 1 (1)1. The answer.")]
+    [InlineData("", "x = 1(1)1. The answer.")]
     [InlineData("content.code.annotate: false", "x = 1 # (1)!")]
     public void ThePdfFollowsTheSiteSetting(string yaml, string expectedText) => WithRoot(root =>
     {

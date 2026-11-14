@@ -2405,25 +2405,40 @@ pre code {
 
 /* Code annotations: a numbered marker in the code opens its explanation as a popover next to it. Browsers without
    popovers show the explanations as a numbered list below the code, and so does print. */
+/* Like a footnote reference, the marker is a small raised number right after the word it explains. It moves up with a
+   relative offset rather than vertical-align, so lines with a marker keep the same height as the others. */
 .code-annotation {
+    position: relative;
+    top: -0.5em;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 1.4em;
-    height: 1.4em;
-    margin: 0 0.2em;
-    padding: 0 0.35em;
+    min-width: 1.5em;
+    height: 1.5em;
+    margin: 0 0.1em 0 0.15em;
+    padding: 0 0.3em;
     border: 0;
     border-radius: 999px;
     background: var(--link);
     color: var(--page-background);
     font-family: inherit;
-    font-size: 0.75em;
+    font-size: 0.7em;
     font-weight: 600;
     line-height: 1;
-    vertical-align: 0.1em;
+    vertical-align: baseline;
     cursor: pointer;
     transition: opacity 0.15s ease;
+}
+
+/* The marker looks small, but takes clicks and taps on a 24px square around it. */
+.code-annotation::before {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 24px);
+    height: max(100%, 24px);
+    content: "";
+    transform: translate(-50%, -50%);
 }
 
 .code-annotation:hover {

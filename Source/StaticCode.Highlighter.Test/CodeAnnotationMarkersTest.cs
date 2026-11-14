@@ -14,26 +14,39 @@ public class CodeAnnotationMarkersTest
         string.Concat(tokens.Select(token => token.Type == TokenType.Annotation ? $"[{token.Text}]" : token.Text));
 
     [Fact]
+    public void AttachesAMarkerInTheMiddleOfALineAndKeepsTheSpaceAfterItWhenCopying()
+    {
+        var tokens = Apply("csharp", "var result = sum /* (1)! */ * days /* (2)! */;");
+
+        Assert.Equal("var result = sum[1] * days[2];", Render(tokens));
+        Assert.Equal("var result = sum * days;", CodeAnnotationMarkers.CopyText(tokens));
+    }
+
+    [Fact]
+    public void KeepsTheIndentationBeforeAMarkerOnItsOwnLine() =>
+        Assert.Equal("x = 1\n    [1]", Render(Apply("python", "x = 1\n    # (1)!")));
+
+    [Fact]
     public void ReplacesAMarkerAnywhereInAComment()
     {
         var tokens = Apply("yaml", "name: Handbook # shown in the header (1)\n");
 
-        Assert.Equal("name: Handbook # shown in the header [1]\n", Render(tokens));
-        Assert.Contains(tokens, token => token.Type == TokenType.Comment && token.Text == "# shown in the header ");
+        Assert.Equal("name: Handbook # shown in the header[1]\n", Render(tokens));
+        Assert.Contains(tokens, token => token.Type == TokenType.Comment && token.Text == "# shown in the header");
     }
 
     [Theory]
-    [InlineData("yaml", "name: Handbook # (1)!", "name: Handbook [1]")]
-    [InlineData("csharp", "var x = 1; // (1)!", "var x = 1; [1]")]
-    [InlineData("sql", "select 1 -- (1)!", "select 1 [1]")]
-    [InlineData("html", "<p>Hi</p> <!-- (1)! -->", "<p>Hi</p> [1]")]
-    [InlineData("csharp", "var x = 1; /* (1)! (2)! */", "var x = 1; [1][2]")]
+    [InlineData("yaml", "name: Handbook # (1)!", "name: Handbook[1]")]
+    [InlineData("csharp", "var x = 1; // (1)!", "var x = 1;[1]")]
+    [InlineData("sql", "select 1 -- (1)!", "select 1[1]")]
+    [InlineData("html", "<p>Hi</p> <!-- (1)! -->", "<p>Hi</p>[1]")]
+    [InlineData("csharp", "var x = 1; /* (1)! (2)! */", "var x = 1;[1][2]")]
     public void RemovesTheCharactersOfAnOtherwiseEmptyComment(string language, string code, string expected) =>
         Assert.Equal(expected, Render(Apply(language, code)));
 
     [Fact]
     public void KeepsACommentWithTextWhenTheMarkerStripsIt() =>
-        Assert.Equal("x = 1 # the value [1]", Render(Apply("python", "x = 1 # the value (1)!")));
+        Assert.Equal("x = 1 # the value[1]", Render(Apply("python", "x = 1 # the value (1)!")));
 
     [Theory]
     [InlineData("bash", "kubectl apply -f app.yaml (1)!", "kubectl apply -f app.yaml[1]")]
@@ -87,7 +100,7 @@ public class CodeAnnotationMarkersTest
 
     [Fact]
     public void AllowsSeveralMarkersInOneCommentAndTheSameMarkerTwice() =>
-        Assert.Equal("a = 1 # see [1] and [2]\nb = 2 # [1]\n", Render(Apply("python", "a = 1 # see (1) and (2)\nb = 2 # (1)\n")));
+        Assert.Equal("a = 1 # see[1] and[2]\nb = 2 # [1]\n", Render(Apply("python", "a = 1 # see (1) and (2)\nb = 2 # (1)\n")));
 
     [Fact]
     public void FindsTheNumbersInOrder() =>

@@ -27,7 +27,7 @@ public class CodeAnnotationTest
 
         Assert.Contains("<figure class=\"code-block code-block-titled code-block-annotated\">", html);
         Assert.NotEmpty(id);
-        Assert.Contains($": Handbook <button class=\"code-annotation\" type=\"button\" popovertarget=\"{id}1\"", html);
+        Assert.Contains($": Handbook<button class=\"code-annotation\" type=\"button\" popovertarget=\"{id}1\"", html);
         Assert.Contains($"<span class=\"comment\"># </span><button class=\"code-annotation\" type=\"button\" popovertarget=\"{id}2\"", html);
         Assert.Contains($"<li id=\"{id}1\" popover=\"auto\" style=\"position-anchor: --{id}1\">Shown in the header and the browser tab.</li>", html);
         Assert.Contains($"<li id=\"{id}2\" popover=\"auto\" style=\"position-anchor: --{id}2\">Without <code>url</code> there is no sitemap.</li>", html);

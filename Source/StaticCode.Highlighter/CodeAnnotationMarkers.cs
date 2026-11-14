@@ -71,7 +71,8 @@ public static class CodeAnnotationMarkers
 
     /// <summary>
     /// Returns the code as it is copied: without markers, without comments that held nothing but markers, and without the
-    /// spaces around a removed marker. Other spaces, such as those that end a line of Markdown, stay.
+    /// spaces that a removed marker leaves at the end of a line. Other spaces stay, such as those that end a line of
+    /// Markdown or separate the code around a marker in the middle of a line.
     /// </summary>
     public static string CopyText(IEnumerable<LanguageToken> tokens)
     {
@@ -87,11 +88,22 @@ public static class CodeAnnotationMarkers
                 afterMarker = true;
                 continue;
             }
-            if (afterMarker && token.Type == TokenType.Whitespace) continue;
+            if (afterMarker && token.Type == TokenType.Whitespace && EndsLine(list, index)) continue;
             afterMarker = false;
             text.Append(token.Text);
         }
         return text.ToString();
+    }
+
+    // Whether only whitespace follows the token on its line.
+    private static bool EndsLine(IReadOnlyList<LanguageToken> tokens, int index)
+    {
+        for (var next = index + 1; next < tokens.Count; next++)
+        {
+            if (tokens[next].Type == TokenType.Whitespace) continue;
+            return tokens[next].Type == TokenType.NewLine;
+        }
+        return true;
     }
 
     // A comment whose text is only comment characters and that a marker follows, such as "# " before "(2)".
@@ -106,8 +118,9 @@ public static class CodeAnnotationMarkers
         return false;
     }
 
-    // A marker removes Start..End from the code and, unless its number is 0, puts an annotation token at Start.
-    private readonly record struct Marker(int Start, int End, int Number);
+    // A marker removes Start..End from the code and, unless its number is 0, puts an annotation token at Start. Attach
+    // tells whether it moves to the word before it; a marker right after visible comment characters keeps its space.
+    private readonly record struct Marker(int Start, int End, int Number, bool Attach = true);
 
     private static List<Marker> Find(IReadOnlyList<LanguageToken> tokens, Func<int, bool> isAnnotation, bool lineEndMarkers)
     {
@@ -134,6 +147,23 @@ public static class CodeAnnotationMarkers
         }
 
         markers.Sort((left, right) => left.Start.CompareTo(right.Start));
+        return AttachToPrecedingText(markers, source);
+    }
+
+    // Like a footnote reference, a marker sits directly after the word before it: the spaces between them go, unless
+    // nothing but indentation precedes the marker on its line.
+    private static List<Marker> AttachToPrecedingText(List<Marker> markers, StringBuilder source)
+    {
+        var previousEnd = 0;
+        for (var index = 0; index < markers.Count; index++)
+        {
+            var marker = markers[index];
+            var start = marker.Start;
+            while (start > previousEnd && source[start - 1] is ' ' or '\t') start--;
+            if (marker.Number > 0 && marker.Attach && start > 0 && source[start - 1] is not ('\n' or '\r'))
+                markers[index] = marker with { Start = start };
+            previousEnd = markers[index].End;
+        }
         return markers;
     }
 
@@ -150,7 +180,9 @@ public static class CodeAnnotationMarkers
         {
             var number = int.Parse(match.Groups["number"].Value, CultureInfo.InvariantCulture);
             var start = removesComment ? previousEnd : match.Index;
-            markers.Add(new Marker(offset + start, offset + match.Index + match.Length, number));
+            // "# (1)" keeps "# " visible, and the marker reads better after a space than glued to "#".
+            var attach = removesComment || comment[..match.Index].Trim(CommentCharacters.ToCharArray()).Length > 0;
+            markers.Add(new Marker(offset + start, offset + match.Index + match.Length, number, attach));
             previousEnd = match.Index + match.Length;
         }
         if (removesComment && previousEnd < comment.Length)
