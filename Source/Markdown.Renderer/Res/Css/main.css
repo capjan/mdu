@@ -41,6 +41,12 @@
     --image-frame: #c7c7cc;
     --header-divider: #e7e8ec;
     --hover-background: rgb(0 0 0 / 4%);
+    /* Quiet controls: tool buttons rest in the secondary tone and turn bright when they are open or current, so the
+       header does not compete with the content. Aliases, so dark mode and custom palettes follow on their own. */
+    --control-rest: var(--text-secondary);
+    --control-current: var(--text-primary);
+    --control-current-fill: color-mix(in srgb, var(--text-primary) 10%, var(--page-background));
+    --control-disabled: color-mix(in srgb, var(--text-primary) 30%, transparent);
     --link: #06c;
     --nav-hover: #eef5fc;
     --nav-hover-text: #1d1d1f;
@@ -239,8 +245,23 @@
     }
 }
 
+/* With "Increase contrast" in the system, tool buttons keep the primary tone. */
+@media (prefers-contrast: more) {
+    :root {
+        --control-rest: var(--text-primary);
+    }
+}
+
 * {
     box-sizing: border-box;
+}
+
+/* Set for two frames while the theme changes, so every color switches at once (theme.js). */
+.is-switching-theme,
+.is-switching-theme *,
+.is-switching-theme *::before,
+.is-switching-theme *::after {
+    transition: none !important;
 }
 
 body {
@@ -373,8 +394,18 @@ body:has(.top-navigation.is-empty)::before {
     border: 0;
     border-radius: 999px;
     background: transparent;
-    color: var(--text-primary);
+    color: var(--control-rest);
     cursor: pointer;
+}
+
+.navigation-toggle:hover {
+    color: var(--link);
+}
+
+/* Only the overlay menu on narrow screens counts as open; on wide screens the button toggles a panel that stays
+   visible, and an open panel does not make its toggle brighter. */
+body:has(.site-layout.sidebar-open) .navigation-toggle {
+    color: var(--control-current);
 }
 
 .navigation-toggle svg {
@@ -402,7 +433,6 @@ body:has(.top-navigation.is-empty)::before {
     border: 1px solid transparent;
     border-radius: 999px;
     background: transparent;
-    color: var(--text-secondary);
     font: inherit;
     font-size: 0.875rem;
     text-align: left;
@@ -421,7 +451,6 @@ body:has(.top-navigation.is-empty)::before {
     border: 1px solid transparent;
     border-radius: 999px;
     background: transparent;
-    color: var(--text-secondary);
     font: inherit;
     font-size: 0.875rem;
     cursor: pointer;
@@ -518,7 +547,6 @@ body:has(.top-navigation.is-empty)::before {
     border: 1px solid transparent;
     border-radius: 999px;
     background: transparent;
-    color: var(--text-primary);
     font: inherit;
     font-size: 0.875rem;
     cursor: pointer;
@@ -549,17 +577,17 @@ body:has(.top-navigation.is-empty)::before {
     border: 1px solid transparent;
     border-radius: 999px;
     background: transparent;
-    color: var(--text-primary);
     font-size: 0.875rem;
     text-decoration: none;
     white-space: nowrap;
 }
 
+/* One color for all round header buttons; the rules above only set their shape. */
 .search-button,
 .media-settings-toggle,
 .theme-toggle,
 .repository-link {
-    color: var(--text-primary);
+    color: var(--control-rest);
     font-weight: 500;
     white-space: nowrap;
 }
@@ -803,12 +831,13 @@ body:has(.site-layout.sidebar-open)::before {
     height: 32px;
     padding: 0.35rem;
     border-radius: 6px;
-    color: var(--text-primary);
-    transition: background-color 120ms ease;
+    color: var(--control-rest);
+    transition: background-color 120ms ease, color 120ms ease;
 }
 
 .panel-toggle:hover {
     background: var(--hover-background);
+    color: var(--control-current);
 }
 
 .panel-toggle .panel-fill {
@@ -1175,8 +1204,7 @@ body:has(.site-layout.sidebar-open)::before {
         display: block;
     }
 
-    .site-layout.has-current-top-section.has-wide-sidebar .site-sidebar .site-nav-item.is-top-navigation-ancestor > .site-nav-row,
-    .site-layout.has-current-top-section.has-wide-sidebar .site-sidebar:has(.site-nav-item.is-outside-top-navigation-section:not(.is-top-navigation-ancestor)) .site-nav-item.top-navigation-entry.is-current-section > .site-nav-row {
+    .site-layout.has-current-top-section.has-wide-sidebar .site-sidebar .site-nav-item.is-top-navigation-ancestor > .site-nav-row {
         display: none;
     }
 
@@ -1188,13 +1216,11 @@ body:has(.site-layout.sidebar-open)::before {
         display: block;
     }
 
+    /* The section's own page leads the list, flush with the tabs, so it is reachable from the sidebar as well. It reads as
+       an entry, not as a heading, because pages outside the tabs may follow below its subpages. */
     .site-layout.has-current-top-section.has-wide-sidebar .site-sidebar .site-nav-item.top-navigation-entry.is-current-section > .site-nav-row > .site-nav-link {
         color: var(--text-secondary);
-        font-size: 0.76rem;
         font-weight: 600;
-        letter-spacing: 0.06em;
-        line-height: calc(0.95rem * 1.45);
-        text-transform: uppercase;
     }
 
     .site-layout.has-current-top-section.has-wide-sidebar .site-sidebar .site-nav-item.top-navigation-entry.is-current-section > .site-nav-row:is(:hover, .is-current-section) > .site-nav-link {
@@ -2323,7 +2349,7 @@ pre code {
     padding: 0;
     border: 0;
     background: transparent;
-    color: var(--text-secondary);
+    color: var(--control-rest);
     cursor: pointer;
     opacity: 0;
     pointer-events: none;
@@ -5036,11 +5062,11 @@ th :is(code, kbd, samp) {
     width: fit-content;
     margin: 8px auto 16px;
     border: 1px solid var(--border);
+    color: var(--control-rest);
 }
 
 .image-gallery-controls button[aria-disabled="true"] {
-    color: var(--text-secondary);
-    opacity: 0.6;
+    color: var(--control-disabled);
     cursor: default;
 }
 
@@ -5291,6 +5317,7 @@ body:has(.image-lightbox[open]) {
 
 .image-gallery-controls button:not([aria-disabled="true"]):hover {
     background: var(--surface-current);
+    color: var(--control-current);
 }
 
 .image-lightbox-tools [data-zoom="fit"] {
