@@ -85,6 +85,17 @@
     --link: #fff;
     --border: rgb(255 255 255 / 30%);
     --surface-current: rgb(255 255 255 / 12%);
+    /* The control tokens are resolved on :root; set them again so the header's tool buttons follow the white text. */
+    --control-rest: var(--text-secondary);
+    --control-current: var(--text-primary);
+    --control-current-fill: var(--surface-current);
+}
+
+@media (prefers-contrast: more) {
+    :root.is-over-hero:has(.hero-full[data-hero-scene="beach"]):not(:has(.site-layout.sidebar-open)) .site-header,
+    :root.is-over-hero:has(.hero-full[data-hero-scene="beach"]):not(:has(.site-layout.sidebar-open)) .top-navigation {
+        --control-rest: var(--text-primary);
+    }
 }
 
 /* A soft shade behind both bars keeps their text readable on a light scene. It fades out without an edge, so it

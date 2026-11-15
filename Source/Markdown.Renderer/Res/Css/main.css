@@ -390,8 +390,13 @@ body:has(.top-navigation.is-empty)::before {
     cursor: pointer;
 }
 
-.navigation-toggle:hover,
-.navigation-toggle[aria-expanded="true"] {
+.navigation-toggle:hover {
+    color: var(--link);
+}
+
+/* Only the overlay menu on narrow screens counts as open; on wide screens the button toggles a panel that stays
+   visible, and an open panel does not make its toggle brighter. */
+body:has(.site-layout.sidebar-open) .navigation-toggle {
     color: var(--control-current);
 }
 
@@ -420,7 +425,6 @@ body:has(.top-navigation.is-empty)::before {
     border: 1px solid transparent;
     border-radius: 999px;
     background: transparent;
-    color: var(--text-secondary);
     font: inherit;
     font-size: 0.875rem;
     text-align: left;
@@ -439,7 +443,6 @@ body:has(.top-navigation.is-empty)::before {
     border: 1px solid transparent;
     border-radius: 999px;
     background: transparent;
-    color: var(--text-secondary);
     font: inherit;
     font-size: 0.875rem;
     cursor: pointer;
@@ -536,7 +539,6 @@ body:has(.top-navigation.is-empty)::before {
     border: 1px solid transparent;
     border-radius: 999px;
     background: transparent;
-    color: var(--control-rest);
     font: inherit;
     font-size: 0.875rem;
     cursor: pointer;
@@ -567,12 +569,12 @@ body:has(.top-navigation.is-empty)::before {
     border: 1px solid transparent;
     border-radius: 999px;
     background: transparent;
-    color: var(--control-rest);
     font-size: 0.875rem;
     text-decoration: none;
     white-space: nowrap;
 }
 
+/* One color for all round header buttons; the rules above only set their shape. */
 .search-button,
 .media-settings-toggle,
 .theme-toggle,
@@ -2342,7 +2344,7 @@ pre code {
     padding: 0;
     border: 0;
     background: transparent;
-    color: var(--text-secondary);
+    color: var(--control-rest);
     cursor: pointer;
     opacity: 0;
     pointer-events: none;
@@ -5055,6 +5057,7 @@ th :is(code, kbd, samp) {
     width: fit-content;
     margin: 8px auto 16px;
     border: 1px solid var(--border);
+    color: var(--control-rest);
 }
 
 .image-gallery-controls button[aria-disabled="true"] {
@@ -5309,6 +5312,7 @@ body:has(.image-lightbox[open]) {
 
 .image-gallery-controls button:not([aria-disabled="true"]):hover {
     background: var(--surface-current);
+    color: var(--control-current);
 }
 
 .image-lightbox-tools [data-zoom="fit"] {
