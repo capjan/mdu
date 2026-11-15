@@ -42,6 +42,7 @@ navigation:
 | `MDU029` | `AnnotationWithoutEntry` | Warning | Every marker of an annotated code block has an entry in the list after it. | [Annotations](../../Features/CodeBlocks.md#annotations) |
 | `MDU030` | `AnnotationEntryUnused` | Warning | Every entry of an annotation list has a marker in the code. | [Annotations](../../Features/CodeBlocks.md#turn-annotations-off) |
 | `MDU031` | `InvalidCodeAnnotate` | Error | `content.code.annotate` in the front matter and `annotate=` on a code block accept `true` or `false`. | [Annotations](../../Features/CodeBlocks.md#turn-annotations-off) |
+| `MDU032` | `BrokenAssetLink` | Error | Links and images on the public host of the configured asset server point to an image that exists and is not in the trash. A server that cannot be reached gives a warning. | [assets](../assets.md#check-image-links) |
 
 ## MDU001: HeadingRequired
 
@@ -140,6 +141,12 @@ This warning points to an entry of an annotation list that no marker in the code
 ## MDU031: InvalidCodeAnnotate
 
 `content.code.annotate` in the front matter and `annotate=` after a code block's language take `true` or `false`. Other values are ignored, so this error points to them.
+
+## MDU032: BrokenAssetLink
+
+When `mdu.yml` names an [asset server](../assets.md), lint checks every link and image on its public host with the server's public check endpoint, up to 100 links per request and without a token. It reports a link as an error when its image is unknown, deleted for good, or in the trash, where readers would get an error instead of the image. Restore the image or change the link.
+
+If the server cannot be reached or refuses the check, lint reports one warning on `mdu.yml` and the exit code stays unchanged. `mdu lint --offline` skips the check, for example on a train or in a build without network.
 
 ## Informational output
 

@@ -22,7 +22,7 @@ site:
 
 ## The whole file at a glance
 
-The file has three scopes, one for each question you might ask. You will rarely need all of it.
+The file has four scopes, one for each question you might ask. You will rarely need all of it.
 
 ```yaml title="docs/mdu.yml"
 site:                 # How does the published site present itself?
@@ -52,6 +52,11 @@ diagrams:             # How large may a diagram get?
   limits:
     elements: 3000
     links: 6000
+
+assets:               # Where do the images live?
+  server: https://assets.example.com
+  public: https://img.example.com
+  project: docs
 ```
 
 ## Four rules
@@ -105,6 +110,16 @@ Both approaches follow the browser's effective preference, which can come from a
 | --- | --- | --- |
 | `diagrams.limits.elements` | `1000` | Elements up to which a [component diagram](../Features/Diagrams.md#size-limits) is drawn; `0` for no limit |
 | `diagrams.limits.links` | `2000` | Links up to which a component diagram is drawn; `0` for no limit |
+
+### `assets`
+
+| Setting | Default | Effect |
+| --- | --- | --- |
+| `assets.server` | None | Address of the [MDU Asset Server](assets.md) of the site, the host of its web interface and API |
+| `assets.public` | `assets.server` | Address of its public image links, when they use another host |
+| `assets.project` | None | Project that [`mdu assets upload`](assets.md#upload-images) uploads into |
+
+The API token for uploads comes from the `MDU_ASSETS_TOKEN` environment variable, never from `mdu.yml`, so the file can stay in a public repository. `mdu render` and `mdu serve` stop on an address that is not http or https.
 
 ## Settings for one page
 

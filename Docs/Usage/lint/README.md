@@ -19,6 +19,7 @@ The alias `mdu l` runs the same command. See [Paths and file search](../README.m
 | `--pretty` | Group results by file and use paths relative to the lint root. |
 | `--color` | Colorize errors and warnings. |
 | `--format <format>` | `text` (default), `json` for scripts and tools, or `github` for annotations in GitHub Actions. `--pretty` and `--color` apply to `text` only. |
+| `--offline` | Skip checks that need the network, such as image links on the [asset server](../assets.md#check-image-links) ([MDU032](Rules.md#mdu032-brokenassetlink)). |
 
 ## Rules
 

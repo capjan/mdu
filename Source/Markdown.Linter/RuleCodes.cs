@@ -35,4 +35,5 @@ public static class RuleCodes
     public const string AnnotationWithoutEntry = "MDU029";
     public const string AnnotationEntryUnused = "MDU030";
     public const string InvalidCodeAnnotate = "MDU031";
+    public const string BrokenAssetLink = "MDU032";
 }
