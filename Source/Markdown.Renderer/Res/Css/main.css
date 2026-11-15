@@ -1196,8 +1196,7 @@ body:has(.site-layout.sidebar-open)::before {
         display: block;
     }
 
-    .site-layout.has-current-top-section.has-wide-sidebar .site-sidebar .site-nav-item.is-top-navigation-ancestor > .site-nav-row,
-    .site-layout.has-current-top-section.has-wide-sidebar .site-sidebar:has(.site-nav-item.is-outside-top-navigation-section:not(.is-top-navigation-ancestor)) .site-nav-item.top-navigation-entry.is-current-section > .site-nav-row {
+    .site-layout.has-current-top-section.has-wide-sidebar .site-sidebar .site-nav-item.is-top-navigation-ancestor > .site-nav-row {
         display: none;
     }
 
@@ -1209,13 +1208,11 @@ body:has(.site-layout.sidebar-open)::before {
         display: block;
     }
 
+    /* The section's own page leads the list, flush with the tabs, so it is reachable from the sidebar as well. It reads as
+       an entry, not as a heading, because pages outside the tabs may follow below its subpages. */
     .site-layout.has-current-top-section.has-wide-sidebar .site-sidebar .site-nav-item.top-navigation-entry.is-current-section > .site-nav-row > .site-nav-link {
         color: var(--text-secondary);
-        font-size: 0.76rem;
         font-weight: 600;
-        letter-spacing: 0.06em;
-        line-height: calc(0.95rem * 1.45);
-        text-transform: uppercase;
     }
 
     .site-layout.has-current-top-section.has-wide-sidebar .site-sidebar .site-nav-item.top-navigation-entry.is-current-section > .site-nav-row:is(:hover, .is-current-section) > .site-nav-link {
