@@ -256,6 +256,14 @@
     box-sizing: border-box;
 }
 
+/* Set for two frames while the theme changes, so every color switches at once (theme.js). */
+.is-switching-theme,
+.is-switching-theme *,
+.is-switching-theme *::before,
+.is-switching-theme *::after {
+    transition: none !important;
+}
+
 body {
     margin: 0;
     padding: 0;
