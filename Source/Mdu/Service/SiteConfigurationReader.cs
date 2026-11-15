@@ -17,7 +17,8 @@ public static class SiteConfigurationReader
         "site.colors.light.background", "site.colors.light.text", "site.colors.light.primary",
         "site.colors.dark.background", "site.colors.dark.text", "site.colors.dark.primary",
         "content.glossary", "content.icons", "content.tags", "content.code.annotate",
-        "diagrams.limits.elements", "diagrams.limits.links"
+        "diagrams.limits.elements", "diagrams.limits.links",
+        "assets.server", "assets.public", "assets.project"
     ];
 
     // Names of earlier versions, so that an old file gets a precise error instead of silently losing its settings.
@@ -43,7 +44,12 @@ public static class SiteConfigurationReader
 
         var settings = ReadSettings(root, out var conflicts);
         if (DescribeRenamedSettings(settings) is { } renamed) throw new InvalidOperationException(renamed);
-        if (includeHtmlSettings) Validate(settings, conflicts);
+        if (includeHtmlSettings)
+        {
+            Validate(settings, conflicts);
+            // Render and serve do not use the asset server, but a wrong address should not wait for the next upload.
+            ReadAssets(settings);
+        }
         var configuration = new SiteConfiguration
         {
             SiteName = ReadScalar(settings, "site.name") ?? "Documentation",
@@ -73,6 +79,48 @@ public static class SiteConfigurationReader
         }
         configuration.FaviconDark ??= configuration.FaviconLight;
         return configuration;
+    }
+
+    /// <summary>
+    /// Reads the <c>assets</c> section, or returns null when the site has no asset server. Only this section is read, so
+    /// errors in unrelated settings do not stop uploads or the link check.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">An asset setting is not a valid value.</exception>
+    public static Assets.AssetsSettings? ReadAssets(string rootPath)
+    {
+        var path = Path.Combine(rootPath, "mdu.yml");
+        if (!File.Exists(path)) return null;
+        var stream = new YamlStream();
+        stream.Load(new StringReader(File.ReadAllText(path)));
+        return stream.Documents.FirstOrDefault()?.RootNode is YamlMappingNode root ? ReadAssets(ReadSettings(root, out _)) : null;
+    }
+
+    private static Assets.AssetsSettings? ReadAssets(Dictionary<string, YamlNode> settings)
+    {
+        var server = ReadScalar(settings, "assets.server");
+        var publicBase = ReadScalar(settings, "assets.public");
+        var project = ReadScalar(settings, "assets.project");
+        if (server is null)
+        {
+            if (publicBase is not null || project is not null)
+                throw new InvalidOperationException("The 'assets' settings in mdu.yml need 'assets.server', the address of the asset server.");
+            return null;
+        }
+
+        var serverUri = ReadBaseUrl("assets.server", server);
+        var publicUri = publicBase is null ? serverUri : ReadBaseUrl("assets.public", publicBase);
+        if (project is not null && string.IsNullOrWhiteSpace(project))
+            throw new InvalidOperationException("The 'assets.project' setting in mdu.yml must be the short name of a project.");
+        return new Assets.AssetsSettings(serverUri, publicUri, project?.Trim());
+
+        static Uri ReadBaseUrl(string name, string value)
+        {
+            if (!Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") ||
+                !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))
+                throw new InvalidOperationException($"The '{name}' setting in mdu.yml must be an http or https address, such as https://assets.example.com.");
+            // A trailing slash makes relative API paths land below the base path.
+            return uri.AbsolutePath.EndsWith('/') ? uri : new Uri(uri + "/");
+        }
     }
 
     public static string? ResolveGlossaryPath(string rootPath, SiteConfiguration configuration)

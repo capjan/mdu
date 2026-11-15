@@ -33,6 +33,9 @@ registrations.AddScoped<PdfCommand>();
 registrations.AddScoped<ServeCommand>();
 registrations.AddScoped<PageCommand>();
 registrations.AddScoped<TagsCommand>();
+registrations.AddSingleton(_ => new HttpClient { Timeout = TimeSpan.FromSeconds(60) });
+registrations.AddScoped<Mdu.Service.Assets.AssetServerClient>();
+registrations.AddScoped<AssetsCommand>();
 
 using var services = registrations.BuildServiceProvider();
 
@@ -68,13 +71,19 @@ var lintFormat = new Option<string>("--format")
 lintFormat.AcceptOnlyFromAmong("text", "json", "github");
 lintCommand.Options.Add(lintPretty);
 lintCommand.Options.Add(lintColor);
+var lintOffline = new Option<bool>("--offline")
+{
+    Description = "Skip checks that need the network, such as image links on the asset server (MDU032)."
+};
 lintCommand.Options.Add(lintFormat);
+lintCommand.Options.Add(lintOffline);
 lintCommand.SetAction(parseResult =>
     services.GetRequiredService<LintCommand>().Execute(
         GetVisitorSettings(parseResult, lintPath, lintPattern, lintHidden),
         parseResult.GetValue(lintPretty),
         parseResult.GetValue(lintColor),
-        Enum.Parse<LintFormat>(parseResult.GetValue(lintFormat) ?? "text", ignoreCase: true)));
+        Enum.Parse<LintFormat>(parseResult.GetValue(lintFormat) ?? "text", ignoreCase: true),
+        parseResult.GetValue(lintOffline)));
 rootCommand.Subcommands.Add(lintCommand);
 
 var checkSiteCommand = new Command("check-site", "Checks local links, assets and anchors in a static HTML site.");
@@ -252,6 +261,39 @@ pageLinksCommand.SetAction(parseResult =>
         parseResult.GetValue(pageLinksHidden)));
 pageCommand.Subcommands.Add(pageLinksCommand);
 rootCommand.Subcommands.Add(pageCommand);
+
+var assetsCommand = new Command("assets", "Works with the MDU Asset Server of the site (assets in mdu.yml).");
+var assetsUploadCommand = new Command("upload", "Uploads images and prints one Markdown snippet per image.");
+var assetsUploadFiles = new Argument<string[]>("files")
+{
+    Description = "Image files, or - to read one image from standard input.",
+    Arity = ArgumentArity.OneOrMore
+};
+var assetsUploadProject = new Option<string?>("--project") { Description = "Project to upload into. Defaults to assets.project in mdu.yml." };
+var assetsUploadTags = new Option<string[]>("--tag") { Description = "Tag for the uploaded images; repeat for several.", AllowMultipleArgumentsPerToken = false };
+var assetsUploadAlt = new Option<string?>("--alt") { Description = "Alt text. Defaults to a text made from the file name." };
+var assetsUploadName = new Option<string?>("--name") { Description = "File name for standard input, or for a single file." };
+var assetsUploadFormat = new Option<string>("--format")
+{
+    Description = "What to print per image: markdown, url, or html.",
+    DefaultValueFactory = _ => "markdown"
+};
+assetsUploadFormat.AcceptOnlyFromAmong(AssetsCommand.Formats);
+var assetsUploadRoot = new Option<string?>("--root") { Description = "Documentation folder with mdu.yml. Defaults to ./docs." };
+assetsUploadCommand.Arguments.Add(assetsUploadFiles);
+foreach (var option in new Option[] { assetsUploadProject, assetsUploadTags, assetsUploadAlt, assetsUploadName, assetsUploadFormat, assetsUploadRoot })
+    assetsUploadCommand.Options.Add(option);
+assetsUploadCommand.SetAction(parseResult =>
+    services.GetRequiredService<AssetsCommand>().Upload(
+        parseResult.GetValue(assetsUploadRoot),
+        parseResult.GetValue(assetsUploadFiles) ?? [],
+        parseResult.GetValue(assetsUploadProject),
+        parseResult.GetValue(assetsUploadTags) ?? [],
+        parseResult.GetValue(assetsUploadAlt),
+        parseResult.GetValue(assetsUploadName),
+        parseResult.GetValue(assetsUploadFormat) ?? "markdown"));
+assetsCommand.Subcommands.Add(assetsUploadCommand);
+rootCommand.Subcommands.Add(assetsCommand);
 
 return rootCommand.Parse(args).Invoke();
 

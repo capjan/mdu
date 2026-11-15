@@ -72,6 +72,7 @@ Once the pages stand, give the site your name, logo, and colors with an optional
 | [page move](page.md#move-pages-and-folders) | `mdu page move <source> <target>` | Move a page or folder and update every link to it. Alias: `page mv` |
 | [page links](page.md#find-links-to-a-file) | `mdu page links <file>` | List the links that point to a file |
 | [check-site](check-site.md) | `mdu check-site <directory> [--dynamic-fragments <file>]` | Check local links, assets, and anchors in a rendered site |
+| [assets upload](assets.md#upload-images) | `mdu assets upload <file>…` | Upload images to the [MDU Asset Server](assets.md) and print their snippets |
 
 ## Paths and file search
 

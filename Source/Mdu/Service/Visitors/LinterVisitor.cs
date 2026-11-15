@@ -22,6 +22,10 @@ public class LinterVisitor: IVisitor<MarkdownFile>
     private readonly List<MarkdownFile> _pages = new();
     private IReadOnlyList<MarkdownFile> _allPages = Array.Empty<MarkdownFile>();
     private readonly HashSet<string> _linkedPages = new(PathComparer);
+    private readonly List<(string FilePath, int LineNumber, string Url)> _webLinks = new();
+
+    /// <summary>Links and images with an http or https address, for checks against an asset server (MDU032).</summary>
+    public IReadOnlyList<(string FilePath, int LineNumber, string Url)> WebLinks => _webLinks;
     private string _rootPath = Directory.GetCurrentDirectory();
 
     private static StringComparer PathComparer => OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
@@ -289,6 +293,10 @@ public class LinterVisitor: IVisitor<MarkdownFile>
         var linksOfFile = markdownAnalysis.Links;
         foreach (var link in linksOfFile)
         {
+            if (link.Destination.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                link.Destination.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                _webLinks.Add((markdownFilePath, link.LineNumber, link.Destination));
+
             if (entity.NavigationVisible && !link.IsImageLink && TryResolvePageLink(entity, link.Destination, out var targetPath))
                 _linkedPages.Add(targetPath);
 
