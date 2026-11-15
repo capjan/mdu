@@ -39,6 +39,18 @@ Every focusable element in the rendered site shows keyboard focus the same way, 
 - Never remove an outline without a visible replacement, and never style `:focus` where `:focus-visible` is meant. The one exception is the image viewer's stage (`.image-lightbox-stage`): it is not in the tab order and only takes focus when the viewer opens by pointer or is clicked, where browsers would otherwise draw a ring around the whole window. Opening by keyboard focuses the close button instead.
 - Check a new or changed control by tabbing to it with the keyboard in a served page, not by reading the CSS alone.
 
+## Quiet controls
+
+Tool buttons are quiet so the header does not compete with the content, as the navigation already does: they rest in `--control-rest`, which is `--text-secondary`.
+
+- Tool buttons are the header's icon buttons: menu, panel toggles, search as an icon, theme, media settings and repository link. Anything that changes a view rather than being the content counts too.
+- A tool button that is open, such as the mobile menu with `aria-expanded="true"`, or that marks where the reader is, uses `--control-current`. A neutral background behind it uses `--control-current-fill`.
+- Hover keeps its own signal: `--link` for the round header buttons, `--hover-background` plus `--control-current` for the square panel toggles.
+- A temporarily unavailable control uses `--control-disabled` (30 % of the primary tone), clearly below the rest tone.
+- Content stays bright: links in the text, cards, open menus and their entries, and dialog buttons. The current tab and page keep `--text-primary`.
+- `prefers-contrast: more` sets `--control-rest` back to the primary tone; keep that override when adding tokens.
+- The rule and its contrast values are in the MDU design system under "Steuerelemente".
+
 ## Working in this repository
 
 - Restore and build with `dotnet restore Mdu.sln` and `dotnet build Mdu.sln`.

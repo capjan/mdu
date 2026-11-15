@@ -41,6 +41,12 @@
     --image-frame: #c7c7cc;
     --header-divider: #e7e8ec;
     --hover-background: rgb(0 0 0 / 4%);
+    /* Quiet controls: tool buttons rest in the secondary tone and turn bright when they are open or current, so the
+       header does not compete with the content. Aliases, so dark mode and custom palettes follow on their own. */
+    --control-rest: var(--text-secondary);
+    --control-current: var(--text-primary);
+    --control-current-fill: var(--surface-current);
+    --control-disabled: color-mix(in srgb, var(--text-primary) 30%, transparent);
     --link: #06c;
     --nav-hover: #eef5fc;
     --nav-hover-text: #1d1d1f;
@@ -239,6 +245,13 @@
     }
 }
 
+/* With "Increase contrast" in the system, tool buttons keep the primary tone. */
+@media (prefers-contrast: more) {
+    :root {
+        --control-rest: var(--text-primary);
+    }
+}
+
 * {
     box-sizing: border-box;
 }
@@ -373,8 +386,13 @@ body:has(.top-navigation.is-empty)::before {
     border: 0;
     border-radius: 999px;
     background: transparent;
-    color: var(--text-primary);
+    color: var(--control-rest);
     cursor: pointer;
+}
+
+.navigation-toggle:hover,
+.navigation-toggle[aria-expanded="true"] {
+    color: var(--control-current);
 }
 
 .navigation-toggle svg {
@@ -518,7 +536,7 @@ body:has(.top-navigation.is-empty)::before {
     border: 1px solid transparent;
     border-radius: 999px;
     background: transparent;
-    color: var(--text-primary);
+    color: var(--control-rest);
     font: inherit;
     font-size: 0.875rem;
     cursor: pointer;
@@ -549,7 +567,7 @@ body:has(.top-navigation.is-empty)::before {
     border: 1px solid transparent;
     border-radius: 999px;
     background: transparent;
-    color: var(--text-primary);
+    color: var(--control-rest);
     font-size: 0.875rem;
     text-decoration: none;
     white-space: nowrap;
@@ -559,7 +577,7 @@ body:has(.top-navigation.is-empty)::before {
 .media-settings-toggle,
 .theme-toggle,
 .repository-link {
-    color: var(--text-primary);
+    color: var(--control-rest);
     font-weight: 500;
     white-space: nowrap;
 }
@@ -803,12 +821,13 @@ body:has(.site-layout.sidebar-open)::before {
     height: 32px;
     padding: 0.35rem;
     border-radius: 6px;
-    color: var(--text-primary);
-    transition: background-color 120ms ease;
+    color: var(--control-rest);
+    transition: background-color 120ms ease, color 120ms ease;
 }
 
 .panel-toggle:hover {
     background: var(--hover-background);
+    color: var(--control-current);
 }
 
 .panel-toggle .panel-fill {
@@ -5039,8 +5058,7 @@ th :is(code, kbd, samp) {
 }
 
 .image-gallery-controls button[aria-disabled="true"] {
-    color: var(--text-secondary);
-    opacity: 0.6;
+    color: var(--control-disabled);
     cursor: default;
 }
 
