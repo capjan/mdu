@@ -45,7 +45,7 @@
        header does not compete with the content. Aliases, so dark mode and custom palettes follow on their own. */
     --control-rest: var(--text-secondary);
     --control-current: var(--text-primary);
-    --control-current-fill: var(--surface-current);
+    --control-current-fill: color-mix(in srgb, var(--text-primary) 10%, var(--page-background));
     --control-disabled: color-mix(in srgb, var(--text-primary) 30%, transparent);
     --link: #06c;
     --nav-hover: #eef5fc;
