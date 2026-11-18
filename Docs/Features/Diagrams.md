@@ -426,89 +426,89 @@ Use an MDU `isometric` code block to show platforms, the systems on them, and ho
 
 ~~~markdown title="Markdown"
 ```isometric
-accTitle: Majordomo platform
+accTitle: AI Data Platform
 
-zone install "Installation" "Chauffeur · OpenTofu · Ansible" tone teal at 0,0
-  admin     "Admin"     icon material-account-cog
-  chauffeur "Chauffeur" icon material-bus
+zone install "Installation" "Deployer · OpenTofu · Ansible" tone teal at 0,0
+  admin    "Admin"    icon material-account-cog
+  deployer "Deployer" icon material-rocket-launch
 end
 
 zone cloud "Cloud Data Plane" "Control Plane · Compute · protected derivatives" tone blue at 1,0 cols 3
-  majordomo "Majordomo"    icon material-bank shape large
-  ids       "Identities"   icon material-account-group
-  gpu       "GPU Worker"   icon material-chip
-  store     "Object Store" icon material-lock tone teal
-  vectors   "Vector Index" icon material-view-grid tone purple
+  control_plane "Control Plane" icon material-hub shape large
+  ids           "Identities"    icon material-account-group
+  gpu           "GPU Worker"    icon material-chip
+  store         "Object Store"  icon material-lock tone teal
+  vectors       "Vector Index"  icon material-view-grid tone purple
 end
 
 zone onprem "Corporate Network" "Original sources stay authoritative" tone purple at 0,1
-  files      "Files"      icon material-folder
-  sql        "SQL"        icon material-database
-  gitlab     "GitLab"     icon material-gitlab
-  wiki       "Wiki"       icon material-book-open-variant
-  hr         "HR System"  icon material-account-tie
-  sharepoint "SharePoint" icon material-microsoft-sharepoint
+  files      "Files"       icon material-folder
+  sql        "SQL"         icon material-database
+  gitlab     "GitLab"      icon material-gitlab
+  wiki       "Wiki"        icon material-book-open-variant
+  hr         "HR System"   icon material-account-tie
+  sharepoint "SharePoint"  icon material-microsoft-sharepoint
 end
 
 gateway "Ingestion Gateway" icon material-filter tone teal at 1,1
 user    "User" icon material-chat shape disc tone blue at 2,1
 
 phase Installation
-  chauffeur ==> majordomo : Deployment
+  deployer ==> control_plane : Deployment
 phase Identities and compute
-  majordomo -.-> ids
-  majordomo --> gpu
+  control_plane -.-> ids
+  control_plane --> gpu
 phase Connect sources
   files, sql, gitlab, wiki, hr, sharepoint -.-> gateway
 phase Synchronization
   gateway --> store : Diff synchronization
   gateway --> vectors
 phase Query
-  user -.-> majordomo : mTLS + identity
+  user -.-> control_plane : mTLS + identity
   gpu -.-> user : Answer
 ```
 ~~~
 
 ```isometric
-accTitle: Majordomo platform
+accTitle: AI Data Platform
 
-zone install "Installation" "Chauffeur · OpenTofu · Ansible" tone teal at 0,0
-  admin     "Admin"     icon material-account-cog
-  chauffeur "Chauffeur" icon material-bus
+zone install "Installation" "Deployer · OpenTofu · Ansible" tone teal at 0,0
+  admin    "Admin"    icon material-account-cog
+  deployer "Deployer" icon material-rocket-launch
 end
 
 zone cloud "Cloud Data Plane" "Control Plane · Compute · protected derivatives" tone blue at 1,0 cols 3
-  majordomo "Majordomo"    icon material-bank shape large
-  ids       "Identities"   icon material-account-group
-  gpu       "GPU Worker"   icon material-chip
-  store     "Object Store" icon material-lock tone teal
-  vectors   "Vector Index" icon material-view-grid tone purple
+  control_plane "Control Plane" icon material-hub shape large
+  ids           "Identities"    icon material-account-group
+  gpu           "GPU Worker"    icon material-chip
+  store         "Object Store"  icon material-lock tone teal
+  vectors       "Vector Index"  icon material-view-grid tone purple
 end
 
 zone onprem "Corporate Network" "Original sources stay authoritative" tone purple at 0,1
-  files      "Files"      icon material-folder
-  sql        "SQL"        icon material-database
-  gitlab     "GitLab"     icon material-gitlab
-  wiki       "Wiki"       icon material-book-open-variant
-  hr         "HR System"  icon material-account-tie
-  sharepoint "SharePoint" icon material-microsoft-sharepoint
+  files      "Files"       icon material-folder
+  sql        "SQL"         icon material-database
+  gitlab     "GitLab"      icon material-gitlab
+  wiki       "Wiki"        icon material-book-open-variant
+  hr         "HR System"   icon material-account-tie
+  sharepoint "SharePoint"  icon material-microsoft-sharepoint
 end
 
 gateway "Ingestion Gateway" icon material-filter tone teal at 1,1
 user    "User" icon material-chat shape disc tone blue at 2,1
 
 phase Installation
-  chauffeur ==> majordomo : Deployment
+  deployer ==> control_plane : Deployment
 phase Identities and compute
-  majordomo -.-> ids
-  majordomo --> gpu
+  control_plane -.-> ids
+  control_plane --> gpu
 phase Connect sources
   files, sql, gitlab, wiki, hr, sharepoint -.-> gateway
 phase Synchronization
   gateway --> store : Diff synchronization
   gateway --> vectors
 phase Query
-  user -.-> majordomo : mTLS + identity
+  user -.-> control_plane : mTLS + identity
   gpu -.-> user : Answer
 ```
 
